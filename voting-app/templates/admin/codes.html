@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Voting Codes — {{ election.name }}{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Codes: {{ election.name }}</h1>
+    <a href="{{ url_for('admin_dashboard') }}">Back</a>
+</div>
+
+<div class="container-wide">
+    <div class="admin-nav">
+        <a href="{{ url_for('admin_election_setup', election_id=election.id) }}">Offices &amp; Candidates</a>
+        <a href="{{ url_for('admin_codes', election_id=election.id) }}" class="active">Codes</a>
+        <a href="{{ url_for('admin_election_manage', election_id=election.id) }}">Manage</a>
+    </div>
+
+    <!-- Code status -->
+    <div class="card">
+        <div class="card-header">Code Status</div>
+        <div class="stat-grid">
+            <div class="stat-box">
+                <div class="number">{{ total_codes }}</div>
+                <div class="label">Total Codes</div>
+            </div>
+            <div class="stat-box">
+                <div class="number">{{ used_codes }}</div>
+                <div class="label">Used</div>
+            </div>
+            <div class="stat-box">
+                <div class="number">{{ total_codes - used_codes }}</div>
+                <div class="label">Available</div>
+            </div>
+        </div>
+
+        {% if total_codes > 0 %}
+        <form method="POST" class="inline-form" style="margin-top: 12px;"
+              action="{{ url_for('admin_codes_delete', election_id=election.id) }}"
+              onsubmit="return confirm('Delete ALL codes? This cannot be undone.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger btn-small">Delete All Codes</button>
+        </form>
+        {% endif %}
+    </div>
+
+    {% if total_codes == 0 %}
+    <!-- Generate codes -->
+    <div class="card">
+        <div class="card-header">Generate Codes</div>
+        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
+            Generate enough codes for all brothers across all rounds.
+            Each brother needs a fresh code per round.
+            Split the printed slips into separate stacks for each round.
+        </p>
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="count">Number of Codes</label>
+                <input type="number" id="count" name="count" value="{{ default_count }}" min="1" max="999">
+                {% if member_count > 0 %}
+                <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                    Based on {{ member_count }} members &times; {{ election.max_rounds }} rounds + spares
+                </p>
+                {% endif %}
+            </div>
+            <button type="submit" class="btn btn-gold">Generate Codes</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Show generated codes (immediately after generation) -->
+    {% if generated_codes %}
+    <div class="card">
+        <div class="card-header">Generated Codes (save or print now!)</div>
+        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
+            These are shown only once. Use the Code Slips PDF to print them.
+        </p>
+        <div style="columns: 3; column-gap: 16px; font-family: monospace; font-size: 16px;">
+            {% for code in generated_codes %}
+            <div style="break-inside: avoid; padding: 4px 0;">{{ code }}</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="margin-top: 16px;">
+        <a href="{{ url_for('admin_election_manage', election_id=election.id) }}" class="btn btn-primary">
+            Next: Manage Election
+        </a>
+    </div>
+</div>
+{% endblock %}

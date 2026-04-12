@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Display — Office Bearer Election{% endblock %}
+{% block body_class %}display-body{% endblock %}
+
+{% block head %}
+<meta http-equiv="refresh" content="5">
+{% endblock %}
+
+{% block content %}
+<div class="display-waiting">
+    <h1 style="color: var(--navy); font-size: 48px; margin-bottom: 16px;">{{ congregation_name }}</h1>
+    <h2 style="color: var(--gold); font-size: 32px; margin-bottom: 32px;">Office Bearer Election</h2>
+    <p style="font-size: 22px; color: #666;">The election has not yet started. Please wait for instructions from the chairman.</p>
+    {% if wifi_ssid %}
+    <div style="margin-top: 40px; padding: 24px; background: var(--grey-light); border-radius: 12px; display: inline-block;">
+        <p style="font-size: 20px; color: var(--navy); margin-bottom: 8px;"><strong>WiFi Network:</strong> {{ wifi_ssid }}</p>
+        {% if wifi_password %}
+        <p style="font-size: 20px; color: var(--navy);"><strong>Password:</strong> {{ wifi_password }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

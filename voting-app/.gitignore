@@ -1,0 +1,37 @@
+# Database
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/.secret_key
+data/.codes_*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated PDFs (keep templates, not outputs)
+*.pdf
+
+# Environment
+.env
+
+# Seed script output
+backups/
+logs/

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Live Results — {{ election.name }}{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>{{ election.name }}</h1>
+    <div class="subtitle">
+        {% if election.current_round > 1 %}Round {{ election.current_round }} — {% endif %}
+        <span id="voting-status" style="margin-left: 8px; font-weight: 700; color: {{ 'var(--green)' if election.voting_open else 'var(--red)' }};">
+            {{ "OPEN" if election.voting_open else "CLOSED" }}
+        </span>
+    </div>
+</div>
+
+<div class="container">
+    <div style="display: flex; justify-content: center; gap: 24px; margin-bottom: 16px;">
+        <div style="text-align: center;">
+            <span id="vote-count" style="display: block; font-size: 36px; font-weight: 700; color: var(--navy); line-height: 1;">{{ total_ballots }}</span>
+            <span style="font-size: 13px; color: var(--grey-dark);">ballots</span>
+        </div>
+        <div style="text-align: center;">
+            <span id="total-participants" style="display: block; font-size: 36px; font-weight: 700; color: var(--grey-dark); line-height: 1;">{{ participants }}</span>
+            <span style="font-size: 13px; color: var(--grey-dark);">participating</span>
+        </div>
+    </div>
+
+    {% set pct = ((total_ballots / participants * 100) | round | int) if participants > 0 else 0 %}
+    <div style="height: 24px; background: var(--grey); border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 20px;">
+        <div id="progress-fill" style="height: 100%; background: var(--gold); border-radius: 12px; width: {{ pct }}%;"></div>
+        <div id="progress-label" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--navy);">{{ total_ballots }} / {{ participants }} ({{ pct }}%)</div>
+    </div>
+
+    <div id="results-container">
+        {% for office in results %}
+        {% if office.candidates %}
+        <div style="margin-bottom: 20px;">
+            <h3 style="font-size: 16px; color: var(--navy); margin-bottom: 6px; padding-bottom: 4px; border-bottom: 2px solid var(--gold);">{{ office.office_name }}</h3>
+            {% for cand in office.candidates %}
+            <div class="phone-cand-row">
+                <span style="color: var(--navy);">
+                    {{ cand.name }}
+                    {% if cand.elected and not election.voting_open %}
+                    <span style="color: var(--green); font-weight: 700;">ELECTED</span>
+                    {% endif %}
+                </span>
+                {% if election.show_results %}
+                <span style="font-weight: 700; color: var(--navy);">{{ cand.total }}</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% if election.show_results %}
+            {% set possible = total_ballots * office.max_selections %}
+            {% set blank = possible - office.votes_cast %}
+            {% if possible > 0 and blank > 0 %}
+            <div class="phone-cand-row" style="opacity: 0.5;">
+                <span style="font-style: italic;">Blank votes</span>
+                <span style="font-weight: 700;">{{ blank }}</span>
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <div style="text-align: center; margin-top: 24px;">
+        <a href="{{ url_for('voter_enter_code') }}" class="btn btn-outline">Back to Voting</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    function update() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/display-data', true);
+        xhr.onload = function() {
+            if (xhr.status !== 200) return;
+            var data = JSON.parse(xhr.responseText);
+            if (!data.active) return;
+
+            document.getElementById('vote-count').textContent = data.total_ballots || 0;
+            document.getElementById('total-participants').textContent = data.participants || 0;
+
+            var parts = data.participants || 0;
+            var tb = data.total_ballots || 0;
+            var pct = parts > 0 ? Math.round(tb / parts * 100) : 0;
+            document.getElementById('progress-fill').style.width = pct + '%';
+            document.getElementById('progress-label').textContent = tb + ' / ' + parts + ' (' + pct + '%)';
+
+            var status = document.getElementById('voting-status');
+            status.textContent = data.voting_open ? 'OPEN' : 'CLOSED';
+            status.style.color = data.voting_open ? 'var(--green)' : 'var(--red)';
+
+            var showCounts = data.show_results;
+            var closed = !data.voting_open;
+            var container = document.getElementById('results-container');
+
+            if (data.results && (showCounts || closed)) {
+                var html = '';
+                data.results.forEach(function(office) {
+                    if (!office.candidates || office.candidates.length === 0) return;
+                    html += '<div style="margin-bottom:20px">';
+                    html += '<h3 style="font-size:16px;color:var(--navy);margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid var(--gold)">' + esc(office.office_name) + '</h3>';
+                    office.candidates.forEach(function(cand) {
+                        html += '<div class="phone-cand-row">';
+                        html += '<span style="color:var(--navy)">' + esc(cand.name);
+                        if (cand.elected && closed) html += ' <span style="color:var(--green);font-weight:700">ELECTED</span>';
+                        html += '</span>';
+                        if (showCounts) html += '<span style="font-weight:700;color:var(--navy)">' + cand.total + '</span>';
+                        html += '</div>';
+                    });
+                    if (showCounts) {
+                        var possible = tb * (office.max_selections || 1);
+                        var vc = office.votes_cast || 0;
+                        var blank = possible - vc;
+                        if (possible > 0 && blank > 0) {
+                            html += '<div class="phone-cand-row" style="opacity:0.5">';
+                            html += '<span style="font-style:italic">Blank votes</span>';
+                            html += '<span style="font-weight:700">' + blank + '</span>';
+                            html += '</div>';
+                        }
+                    }
+                    html += '</div>';
+                });
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = '';
+            }
+        };
+        xhr.send();
+    }
+    function esc(t) {
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(t));
+        return d.innerHTML;
+    }
+    setInterval(update, 2000);
+})();
+</script>
+{% endblock %}

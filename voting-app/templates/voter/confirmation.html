@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Vote Recorded — Office Bearer Election{% endblock %}
+
+{% block head %}
+<meta http-equiv="refresh" content="3;url={{ url_for('voter_enter_code') }}">
+{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>Office Bearer Election</h1>
+</div>
+
+<div class="container">
+    <div class="confirmation">
+        <div class="checkmark" aria-hidden="true">&#10003;</div>
+        <h2>Vote Recorded</h2>
+        <p style="color: #666; margin-bottom: 24px; font-size: 18px;">
+            Thank you. Your vote has been recorded anonymously.
+        </p>
+        <a href="{{ url_for('voter_enter_code') }}" class="btn btn-primary">
+            Next Voter
+        </a>
+        <a href="{{ url_for('display_phone') }}" class="btn btn-outline" style="margin-top: 12px;">
+            View Live Results
+        </a>
+        <p style="font-size: 16px; color: #999; margin-top: 16px;">
+            This page will redirect automatically in 3 seconds.
+        </p>
+    </div>
+</div>
+{% endblock %}

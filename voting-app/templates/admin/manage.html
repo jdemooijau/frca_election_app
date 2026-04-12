@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+{% block title %}Manage — {{ election.name }}{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Manage: {{ election.name }}</h1>
+    <a href="{{ url_for('admin_dashboard') }}">Back</a>
+</div>
+
+<div class="container-wide">
+    <div class="admin-nav">
+        <a href="{{ url_for('admin_election_setup', election_id=election.id) }}">Offices &amp; Candidates</a>
+        <a href="{{ url_for('admin_codes', election_id=election.id) }}">Codes</a>
+        <a href="{{ url_for('admin_election_manage', election_id=election.id) }}" class="active">Manage</a>
+    </div>
+
+    <!-- Status -->
+    <div class="stat-grid">
+        <div class="stat-box">
+            <div class="number">{{ election.current_round }}</div>
+            <div class="label">Current Round</div>
+        </div>
+        <div class="stat-box">
+            <div class="number">{{ used_codes }}</div>
+            <div class="label">Digital Votes</div>
+        </div>
+        <div class="stat-box">
+            <div class="number">{{ paper_ballot_count }}</div>
+            <div class="label">Paper Ballots</div>
+        </div>
+        {% if postal_voter_count > 0 %}
+        <div class="stat-box">
+            <div class="number">{{ postal_voter_count }}</div>
+            <div class="label">Postal Votes</div>
+        </div>
+        {% endif %}
+        <div class="stat-box">
+            {% if election.voting_open %}
+                <div class="number" style="color: var(--green);">Open</div>
+            {% else %}
+                <div class="number" style="color: var(--red);">Closed</div>
+            {% endif %}
+            <div class="label">Voting Status</div>
+        </div>
+    </div>
+
+    <!-- Voting method breakdown -->
+    {% set total_ballots = used_codes + paper_ballot_count + postal_voter_count %}
+    {% if total_ballots > 0 and not election.voting_open %}
+    <div class="card">
+        <div class="card-header">Voting Method Breakdown</div>
+        <table style="font-size: 16px;">
+            <tr>
+                <td style="padding: 6px 16px 6px 0;">Digital (codes used)</td>
+                <td style="padding: 6px 16px; text-align: right; font-weight: 700;">{{ used_codes }}</td>
+                <td style="padding: 6px 0; text-align: right; color: #666;">
+                    {{ "%.0f"|format(used_codes / total_ballots * 100) }}%
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 6px 16px 6px 0;">Paper ballots</td>
+                <td style="padding: 6px 16px; text-align: right; font-weight: 700;">{{ paper_ballot_count }}</td>
+                <td style="padding: 6px 0; text-align: right; color: #666;">
+                    {{ "%.0f"|format(paper_ballot_count / total_ballots * 100) }}%
+                </td>
+            </tr>
+            {% if postal_voter_count > 0 %}
+            <tr>
+                <td style="padding: 6px 16px 6px 0;">Postal votes</td>
+                <td style="padding: 6px 16px; text-align: right; font-weight: 700;">{{ postal_voter_count }}</td>
+                <td style="padding: 6px 0; text-align: right; color: #666;">
+                    {{ "%.0f"|format(postal_voter_count / total_ballots * 100) }}%
+                </td>
+            </tr>
+            {% endif %}
+            <tr style="border-top: 2px solid var(--navy);">
+                <td style="padding: 6px 16px 6px 0; font-weight: 700;">Total ballots</td>
+                <td style="padding: 6px 16px; text-align: right; font-weight: 700;">{{ total_ballots }}</td>
+                <td style="padding: 6px 0; text-align: right; font-weight: 700;">100%</td>
+            </tr>
+            {% if participants > 0 %}
+            <tr>
+                <td style="padding: 6px 16px 6px 0; color: #666;">Participation rate</td>
+                <td colspan="2" style="padding: 6px 0; text-align: right; font-weight: 700;">
+                    {{ total_ballots }} of {{ participants }} brothers ({{ "%.0f"|format(total_ballots / participants * 100) }}%)
+                </td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Preparation -->
+    <div class="card">
+        <div class="card-header">Preparation</div>
+        <div class="btn-row" style="flex-wrap: wrap;">
+            <a href="{{ url_for('admin_attendance_pdf') }}" class="btn btn-outline btn-small">
+                Attendance Register PDF
+            </a>
+            <a href="{{ url_for('admin_counter_sheet_pdf', election_id=election.id) }}" class="btn btn-outline btn-small">
+                Counter Sheet PDF
+            </a>
+            <a href="{{ url_for('admin_postal_votes', election_id=election.id) }}" class="btn btn-outline btn-small">
+                Postal Votes (Round 1)
+            </a>
+            <a href="{{ url_for('admin_postal_tally', election_id=election.id) }}" class="btn btn-outline btn-small">
+                Postal Tally Helper
+            </a>
+            {% if total_codes > 0 %}
+            <a href="{{ url_for('admin_dual_sided_ballots_pdf', election_id=election.id) }}" class="btn btn-gold btn-small">
+                Dual-Sided Ballots PDF
+            </a>
+            <a href="{{ url_for('admin_printer_pack_zip', election_id=election.id) }}" class="btn btn-outline btn-small"
+               title="ZIP with separate front/back PDFs, counter sheet, and attendance register for professional printing">
+                Printer Pack ZIP
+            </a>
+            {% endif %}
+        </div>
+        {% if total_codes > 0 %}
+        <details style="margin-top: 8px;">
+            <summary style="cursor: pointer; font-size: 13px; color: var(--grey-dark);">
+                More formats (individual PDFs)
+            </summary>
+            <div class="btn-row" style="margin-top: 8px;">
+                <a href="{{ url_for('admin_codes_pdf', election_id=election.id) }}"
+                   class="btn btn-outline btn-small">Code Slips PDF</a>
+                {% for r in range(1, election.max_rounds + 1) %}
+                <a href="{{ url_for('admin_paper_ballot_pdf', election_id=election.id, round_number=r) }}"
+                   class="btn btn-outline btn-small">Paper Ballot PDF (Round {{ r }})</a>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+    </div>
+
+    <!-- Projector Display Flow -->
+    {% set phase = election.display_phase or 1 %}
+    <div class="card">
+        <div class="card-header">Projector Display</div>
+
+        <!-- Phase indicator -->
+        <div style="display: flex; align-items: center; gap: 0; margin-bottom: 16px;">
+            {% set phases = [("1", "Welcome"), ("2", "Election Rules"), ("3", "Voting")] %}
+            {% for num, label in phases %}
+            <div style="flex: 1; text-align: center; padding: 10px 0; font-size: 14px; font-weight: 600;
+                        {{ 'background: var(--navy); color: var(--white);' if phase == num|int else 'background: var(--grey-light); color: #999;' }}
+                        {{ 'border-radius: 8px 0 0 8px;' if loop.first else '' }}
+                        {{ 'border-radius: 0 8px 8px 0;' if loop.last else '' }}">
+                {{ num }}. {{ label }}
+                {% if phase == num|int %} &bull;{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Phase description -->
+        {% if phase == 1 %}
+        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
+            Projector shows the congregation name, election details, and WiFi info.
+            Advance to the next phase when the secretary is ready to read the election rules.
+        </p>
+        {% elif phase == 2 %}
+        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
+            Projector shows the candidate list and articles 4, 6, and 12 for the secretary to read (Article 5).
+            Advance to the next phase to open voting.
+        </p>
+        {% elif phase == 3 %}
+        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
+            Projector shows the live voting display with ballot counts and results.
+        </p>
+        {% endif %}
+
+        <!-- Navigation buttons -->
+        <div style="display: flex; gap: 12px; align-items: center;">
+            {% if phase > 1 %}
+            <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="direction" value="prev">
+                <button type="submit" class="btn btn-outline btn-small">&larr; Back</button>
+            </form>
+            {% endif %}
+
+            {% if phase < 3 %}
+            <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="direction" value="next">
+                {% if phase == 1 %}
+                <button type="submit" class="btn btn-gold btn-small">Next: Election Rules &rarr;</button>
+                {% elif phase == 2 %}
+                <button type="submit" class="btn btn-success btn-small"
+                        onclick="return confirm('This will open voting for round {{ election.current_round }}. Proceed?');">
+                    Next: Open Voting &rarr;
+                </button>
+                {% endif %}
+            </form>
+            {% endif %}
+
+            <a href="{{ url_for('display') }}" target="_blank"
+               class="btn btn-outline btn-small" style="margin-left: auto;">
+                Open Display
+            </a>
+        </div>
+
+        <p style="font-family: monospace; font-size: 13px; color: #999; margin-top: 8px;">
+            {{ request.url_root }}display
+        </p>
+    </div>
+
+    <!-- Voting Controls (only in phase 3) -->
+    {% if phase == 3 %}
+    <div class="card">
+        <div class="card-header">Voting Controls</div>
+        <div class="btn-row" style="flex-wrap: wrap;">
+            <form method="POST" action="{{ url_for('admin_toggle_voting', election_id=election.id) }}" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if election.voting_open %}
+                    <button type="submit" class="btn btn-danger btn-small"
+                            onclick="return confirm('Close voting for round {{ election.current_round }}?');">
+                        Close Voting
+                    </button>
+                {% else %}
+                    <button type="submit" class="btn btn-success btn-small">Open Voting</button>
+                {% endif %}
+            </form>
+
+            <form method="POST" action="{{ url_for('admin_toggle_results', election_id=election.id) }}" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if election.show_results %}
+                    <button type="submit" class="btn btn-outline btn-small">Hide Results on Projector</button>
+                {% else %}
+                    <button type="submit" class="btn btn-gold btn-small">Show Results on Projector</button>
+                {% endif %}
+            </form>
+
+            <a href="{{ url_for('admin_paper_votes', election_id=election.id) }}" class="btn btn-outline btn-small">
+                Enter Paper Votes
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Participants & Paper Ballot Count (Article 6 input) -->
+    <div class="card">
+        <div class="card-header">Participants (Article 4 &amp; 6)</div>
+        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
+            Enter the number of brothers who signed the attendance register, and the total paper ballots received.
+            These are needed for threshold calculations.
+        </p>
+        <form method="POST" action="{{ url_for('admin_set_participants', election_id=election.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: end;">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <label for="participants">Brothers Present</label>
+                    <input type="number" id="participants" name="participants"
+                           value="{{ in_person_participants }}" min="0" style="text-align: center;">
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <label for="paper_ballot_count">Paper Ballots Received</label>
+                    <input type="number" id="paper_ballot_count" name="paper_ballot_count"
+                           value="{{ paper_ballot_count }}" min="0" style="text-align: center;">
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary btn-small">Save</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Results per office with Article 6 thresholds -->
+    {% for item in results %}
+    <div class="card">
+        <div class="card-header">
+            {{ item.office.name }}
+            ({{ (item.office.vacancies or item.office.max_selections) }}
+            {% if (item.office.vacancies or item.office.max_selections) == 1 %}vacancy{% else %}vacancies{% endif %},
+            select {{ item.office.max_selections }})
+        </div>
+
+        {% set office_id = item.office.id %}
+        {% if office_id in thresholds %}
+        {% set t = thresholds[office_id] %}
+        <div style="background: #F5F5F5; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 14px;">
+            <p><strong>Participants:</strong> {{ t.participants }}
+               {% if postal_voter_count > 0 %}({{ in_person_participants }} in-person + {{ postal_voter_count }} postal){% endif %}
+               &nbsp;|&nbsp; <strong>Valid ballots cast:</strong> {{ t.valid_votes_cast }}
+               ({{ used_codes }} digital + {{ paper_ballot_count }} paper{% if postal_voter_count > 0 %} + {{ postal_voter_count }} postal{% endif %})</p>
+            <p style="margin-top: 6px;">
+                <strong>Article 6a:</strong>
+                {{ t.valid_votes_cast }} / {{ t.vacancies }} / 2 = {{ "%.2f"|format(t.threshold_6a) }}
+                — candidate must receive <strong>more than {{ "%.2f"|format(t.threshold_6a) }}</strong> votes
+            </p>
+            <p style="margin-top: 4px;">
+                <strong>Article 6b:</strong>
+                {{ t.participants }} &times; 2/5 = {{ "%.1f"|format(t.participants * 2 / 5) }}
+                &rarr; rounded up to <strong>{{ t.threshold_6b }}</strong>
+                — candidate must receive <strong>at least {{ t.threshold_6b }}</strong> votes
+            </p>
+        </div>
+        {% elif participants == 0 %}
+        <p style="color: #999; font-style: italic; margin-bottom: 12px;">
+            Enter the number of participants above to calculate Article 6 thresholds.
+        </p>
+        {% endif %}
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Candidate</th>
+                        <th style="text-align: center;">Digital</th>
+                        <th style="text-align: center;">Paper</th>
+                        {% if postal_voter_count > 0 %}
+                        <th style="text-align: center;">Postal</th>
+                        {% endif %}
+                        <th style="text-align: center;">Total</th>
+                        {% if office_id in thresholds %}
+                        <th style="text-align: center;">Art. 6a</th>
+                        <th style="text-align: center;">Art. 6b</th>
+                        <th style="text-align: center;">Elected</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cand in item.candidates %}
+                    {% if cand.active %}
+                    <tr>
+                        <td>
+                            {{ cand.name }}
+                            {% if cand.retiring_office_bearer %}
+                            <span style="font-size: 12px; color: #999;">(R)</span>
+                            {% endif %}
+                            {% if cand.relieved %}
+                            <span style="font-size: 12px; color: var(--red);">(relieved)</span>
+                            {% endif %}
+                        </td>
+                        <td class="votes">{{ cand.digital }}</td>
+                        <td class="votes">{{ cand.paper }}</td>
+                        {% if postal_voter_count > 0 %}
+                        <td class="votes">{{ cand.postal }}</td>
+                        {% endif %}
+                        <td class="votes" style="font-size: 22px;">{{ cand.total }}</td>
+                        {% if office_id in thresholds %}
+                        <td style="text-align: center;">
+                            {% if cand.passes_6a %}<span style="color: var(--green); font-weight: 700;">✓</span>
+                            {% else %}<span style="color: var(--red); font-weight: 700;">✗</span>{% endif %}
+                        </td>
+                        <td style="text-align: center;">
+                            {% if cand.passes_6b %}<span style="color: var(--green); font-weight: 700;">✓</span>
+                            {% else %}<span style="color: var(--red); font-weight: 700;">✗</span>{% endif %}
+                        </td>
+                        <td style="text-align: center;">
+                            {% if cand.meets_threshold %}
+                            <span style="color: var(--green); font-weight: 700;">ELECTED</span>
+                            {% else %}
+                            <span style="color: #999;">—</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Next round -->
+    {% if not election.voting_open and election.current_round < election.max_rounds %}
+    <div class="card">
+        <div class="card-header">Start Next Round (Article 7)</div>
+        <p style="margin-bottom: 12px;">
+            Select the candidates to carry forward to round {{ election.current_round + 1 }}.
+            Article 7: if insufficient candidates are elected, reduce the slate to twice the
+            remaining vacancies by eliminating the lowest-polling candidates.
+        </p>
+        <form method="POST" action="{{ url_for('admin_next_round', election_id=election.id) }}"
+              onsubmit="return confirm('Start round {{ election.current_round + 1 }}? This cannot be undone.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% for item in results %}
+            <h3 style="margin: 12px 0 8px;">{{ item.office.name }}</h3>
+            {% for cand in item.candidates %}
+            {% if cand.active %}
+            <label class="checkbox-label" style="margin-bottom: 6px;">
+                <input type="checkbox" name="carry_forward" value="{{ cand.id }}"
+                       {% if cand.meets_threshold|default(false) %}disabled{% endif %}>
+                {{ cand.name }} ({{ cand.total }} votes)
+                {% if cand.meets_threshold|default(false) %}
+                <span style="color: var(--green); font-size: 14px;"> — ELECTED</span>
+                {% endif %}
+            </label>
+            {% endif %}
+            {% endfor %}
+            {% endfor %}
+            <button type="submit" class="btn btn-gold" style="margin-top: 16px;">
+                Start Round {{ election.current_round + 1 }}
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Exports -->
+    <div class="card">
+        <div class="card-header">Reports &amp; Exports</div>
+        <div class="btn-row" style="flex-wrap: wrap;">
+            <a href="{{ url_for('admin_minutes_docx', election_id=election.id) }}" class="btn btn-gold btn-small">
+                Election Minutes (DOCX)
+            </a>
+        </div>
+    </div>
+
+    <!-- Advanced Actions (hidden by default) -->
+    <details style="margin-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; color: var(--grey-dark); padding: 12px 0;">
+            Advanced Actions (reset)
+        </summary>
+
+        <div class="card" style="border-color: var(--red); margin-top: 8px;">
+            <div class="card-header" style="border-color: var(--red); color: var(--red);">Soft Reset — Redo Round {{ election.current_round }}</div>
+            <p style="font-size: 14px; margin-bottom: 12px;">
+                Clears all votes for round {{ election.current_round }} and restores all codes.
+                Postal votes, attendance register, and election setup are kept.
+                <strong>This cannot be undone.</strong>
+            </p>
+            <form method="POST" action="{{ url_for('admin_soft_reset', election_id=election.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="soft_confirm">Type RESET to confirm</label>
+                    <input type="text" id="soft_confirm" name="confirm_text" autocomplete="off"
+                           placeholder="Type RESET" style="max-width: 200px;">
+                </div>
+                <div class="form-group">
+                    <label for="soft_password">Admin password</label>
+                    <input type="password" id="soft_password" name="password" autocomplete="off"
+                           placeholder="Re-enter password" style="max-width: 200px;">
+                </div>
+                <button type="submit" class="btn btn-danger btn-small">Soft Reset Round {{ election.current_round }}</button>
+            </form>
+        </div>
+
+        <div class="card" style="border-color: var(--red); margin-top: 12px;">
+            <div class="card-header" style="border-color: var(--red); color: var(--red);">Hard Reset — Start Entire Election Over</div>
+            <p style="font-size: 14px; margin-bottom: 12px;">
+                Clears <strong>all votes, all codes, all postal votes</strong> across all rounds.
+                Resets to round 1. You will need to regenerate codes and reprint slips.
+                <strong>This cannot be undone.</strong>
+            </p>
+            <form method="POST" action="{{ url_for('admin_hard_reset', election_id=election.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="hard_confirm">Type HARD RESET to confirm</label>
+                    <input type="text" id="hard_confirm" name="confirm_text" autocomplete="off"
+                           placeholder="Type HARD RESET" style="max-width: 200px;">
+                </div>
+                <div class="form-group">
+                    <label for="hard_password">Admin password</label>
+                    <input type="password" id="hard_password" name="password" autocomplete="off"
+                           placeholder="Re-enter password" style="max-width: 200px;">
+                </div>
+                <button type="submit" class="btn btn-danger btn-small">Hard Reset Entire Election</button>
+            </form>
+        </div>
+    </details>
+
+
+    <p style="font-size: 12px; color: #999; margin-top: 24px; text-align: center;">
+        Results are generated by this software as-is. The council is responsible for verifying correctness.
+    </p>
+</div>
+{% endblock %}

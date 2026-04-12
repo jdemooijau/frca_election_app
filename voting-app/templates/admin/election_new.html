@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}New Election — Office Bearer Election{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>New Election</h1>
+    <a href="{{ url_for('admin_dashboard') }}">Back</a>
+</div>
+
+<div class="container">
+    <form method="POST" style="margin-top: 16px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-group">
+            <label for="name">Election Name</label>
+            <input type="text" id="name" name="name" required
+                   placeholder="e.g. Office Bearer Election"
+                   autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="election_date">Election Date</label>
+            <input type="text" id="election_date" name="election_date"
+                   placeholder="e.g. 20 October 2026"
+                   autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="max_rounds">Maximum Rounds</label>
+            <input type="number" id="max_rounds" name="max_rounds"
+                   value="2" min="1" max="5">
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                Codes will be pre-generated for each round. Typically 2 rounds.
+            </p>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Create Election</button>
+    </form>
+</div>
+{% endblock %}
+
