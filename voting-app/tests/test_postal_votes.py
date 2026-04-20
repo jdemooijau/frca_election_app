@@ -15,7 +15,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import (
     app, init_db, migrate_db, get_db, hash_code,
     calculate_thresholds, check_candidate_elected,
-    rate_limit_store
 )
 
 
@@ -29,15 +28,12 @@ def client():
     original_db_path = app_module.DB_PATH
     app_module.DB_PATH = db_path
 
-    rate_limit_store.clear()
-
     with app.test_client() as client:
         with app.app_context():
             init_db()
             migrate_db()
         yield client
 
-    rate_limit_store.clear()
     app_module.DB_PATH = original_db_path
     os.close(db_fd)
     os.unlink(db_path)

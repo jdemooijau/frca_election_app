@@ -81,7 +81,6 @@ Set these up in the app before the dry run.
 |----------|-------------|-----------------|
 | Invalid code | Type `XXXXXX` | "Invalid code" error message |
 | Code used twice | Re-enter a used code | "This code has already been used" error |
-| Too many attempts | Enter 6 wrong codes rapidly | "Too many attempts" — rate limited |
 | Phone shared | One brother votes, hands phone to next | Fresh code entry page |
 | Voting closed | Enter code when voting is closed | "Voting is not currently open" |
 | App restarted | Close and reopen the app | All data preserved |

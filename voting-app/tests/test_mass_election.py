@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import (
     app, init_db, migrate_db, get_db, hash_code,
     calculate_thresholds, check_candidate_elected,
-    rate_limit_store, DEFAULT_ADMIN_PASSWORD
+    DEFAULT_ADMIN_PASSWORD
 )
 
 
@@ -36,8 +36,6 @@ class MassTestRunner:
         self._original_db = app_module.DB_PATH
         app_module.DB_PATH = self.db_path
 
-        rate_limit_store.clear()
-
         self.client = app.test_client()
         with app.app_context():
             init_db()
@@ -45,7 +43,6 @@ class MassTestRunner:
 
     def teardown(self):
         import app as app_module
-        rate_limit_store.clear()
         app_module.DB_PATH = self._original_db
         if self.db_fd:
             os.close(self.db_fd)
@@ -114,7 +111,6 @@ class MassTestRunner:
 
     def cast_vote(self, code, office_selections, confirm_partial=False):
         """Cast a vote. office_selections = {office_id: [candidate_ids]}"""
-        rate_limit_store.clear()
         self.client.post("/vote", data={"code": code})
         data = {}
         for office_id, cand_ids in office_selections.items():
@@ -220,7 +216,6 @@ class MassTestRunner:
         self.check(voter_idx == 80, f"Cast {voter_idx} digital votes")
 
         # Verify a used code is rejected
-        rate_limit_store.clear()
         resp = self.client.post("/vote", data={"code": codes[0]}, follow_redirects=True)
         self.check(b"already been used" in resp.data, "Used code rejected")
 
@@ -435,7 +430,6 @@ class MassTestRunner:
     def scenario_6_code_security(self):
         print("\n=== Scenario 6: Code Security ===")
         self.fresh()
-        rate_limit_store.clear()
 
         self.create_election("Security Test", 1)
         self.add_office(1, "Elder", 1, ["Alpha", "Beta"])
@@ -457,15 +451,7 @@ class MassTestRunner:
         resp = self.client.post("/vote", data={"code": code}, follow_redirects=True)
         self.check(b"already been used" in resp.data, "Used code rejected")
 
-        # Rate limiting
-        rate_limit_store.clear()
-        for i in range(5):
-            self.client.post("/vote", data={"code": f"BAD{i:03d}"})
-        resp = self.client.post("/vote", data={"code": "BADXXX"}, follow_redirects=True)
-        self.check(b"Too many attempts" in resp.data, "Rate limit kicks in after 5 attempts")
-
         # Code when voting closed
-        rate_limit_store.clear()
         self.toggle_voting(1)  # close
         code2 = "CLSTST"
         self.inject_code(1, code2)

@@ -198,7 +198,6 @@ The app automatically handles candidate elimination and threshold recalculation.
 |---------|----------|
 | Brother's phone won't load the page | Check WiFi connection; try a different browser |
 | "Invalid code" error | Verify the code is entered correctly (6 characters, case-insensitive) |
-| "Too many attempts" | Wait 60 seconds, then try again |
 | WiFi drops out | Restart the WiFi router; votes already cast are safe |
 | App crashes | Restart the app; all data is preserved in the database |
 | Major failure | **Switch to paper ballots immediately** |

@@ -13,7 +13,7 @@ import pytest
 # Add parent dir to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import app, init_db, get_db, generate_codes, hash_code, CODE_CHARS, CODE_LENGTH, rate_limit_store
+from app import app, init_db, get_db, generate_codes, hash_code, CODE_CHARS, CODE_LENGTH
 
 
 @pytest.fixture
@@ -28,15 +28,11 @@ def client():
     original_db_path = app_module.DB_PATH
     app_module.DB_PATH = db_path
 
-    # Clear rate limiting between tests
-    rate_limit_store.clear()
-
     with app.test_client() as client:
         with app.app_context():
             init_db()
         yield client
 
-    rate_limit_store.clear()
     app_module.DB_PATH = original_db_path
     os.close(db_fd)
     os.unlink(db_path)
@@ -282,28 +278,6 @@ class TestAnonymity:
             fk_cursor = db.execute("PRAGMA foreign_key_list(votes)")
             fk_tables = [row["table"] for row in fk_cursor.fetchall()]
             assert "codes" not in fk_tables
-
-
-# ---------------------------------------------------------------------------
-# Rate limiting tests
-# ---------------------------------------------------------------------------
-
-class TestRateLimiting:
-    def test_rate_limit_blocks_after_max_attempts(self, election_with_codes):
-        """Rate limiting should block after 5 attempts per minute."""
-        client = election_with_codes
-        client.post("/admin/election/1/voting")
-
-        # Clear rate limit store
-        rate_limit_store.clear()
-
-        # Make 5 attempts (all with invalid codes — doesn't matter)
-        for i in range(5):
-            client.post("/vote", data={"code": f"BAD{i:03d}"})
-
-        # 6th attempt should be rate limited
-        resp = client.post("/vote", data={"code": "BADXXX"}, follow_redirects=True)
-        assert b"Too many attempts" in resp.data
 
 
 # ---------------------------------------------------------------------------

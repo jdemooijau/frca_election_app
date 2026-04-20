@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import app, init_db, get_db, set_setting, get_setting, generate_codes, hash_code, rate_limit_store
+from app import app, init_db, get_db, set_setting, get_setting, generate_codes, hash_code
 
 
 @pytest.fixture
@@ -23,14 +23,11 @@ def client():
     original_db_path = app_module.DB_PATH
     app_module.DB_PATH = db_path
 
-    rate_limit_store.clear()
-
     with app.test_client() as client:
         with app.app_context():
             init_db()
         yield client
 
-    rate_limit_store.clear()
     app_module.DB_PATH = original_db_path
     os.close(db_fd)
     os.unlink(db_path)
@@ -261,12 +258,6 @@ def test_demo_mode_accepts_invalid_code_with_notice(demo_election):
 def test_demo_mode_accepts_blank_code_with_notice(demo_election):
     resp = demo_election.post("/vote", data={"code": ""}, follow_redirects=True)
     assert b"Demo mode" in resp.data or b"demo" in resp.data.lower()
-
-
-def test_demo_mode_rate_limiting_disabled(demo_election):
-    for i in range(10):
-        resp = demo_election.post("/vote", data={"code": f"BAD{i:03d}"}, follow_redirects=True)
-    assert b"Too many attempts" not in resp.data
 
 
 def test_production_mode_rejects_invalid_code_strictly(client):

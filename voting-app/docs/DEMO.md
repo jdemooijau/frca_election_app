@@ -15,7 +15,6 @@ the app in action.
 - Displays a bright yellow banner on every page: "DEMO MODE — Practice election with fictional candidates"
 - Adds a "DEMO" watermark to all generated PDFs
 - Accepts any voting code (even invalid or blank ones) with a non-blocking notice, so council members can try the app without getting stuck on typos
-- Disables rate limiting
 - Offers a special Dual Ballot Handout PDF that shows both paper and online voting options on a single sheet
 - Can be completely reset with one command after the meeting
 
@@ -74,13 +73,12 @@ While the app is in demo mode:
 - Any 6-character code will be accepted (even invalid or unused ones)
 - A blank code will also be accepted
 - The app assigns a fresh code automatically and shows a small notice
-- Rate limiting is disabled
 
 This means council members can play with the app freely without getting stuck
 on typos. A notice on the ballot page explains what happened.
 
 In production mode (demo flag off), code entry is strict and all validation
-and rate limiting rules apply normally.
+rules apply normally.
 
 ## After the meeting
 

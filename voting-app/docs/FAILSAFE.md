@@ -50,12 +50,6 @@ Paper ballots and the attendance register are always physically in the room. The
 3. If the code was already used: the brother must use a paper ballot.
 4. If genuinely invalid: give a paper ballot and investigate later.
 
-### "Too many attempts" message
-
-1. Wait 60 seconds and try again.
-2. Or switch to a different phone.
-3. Or give the brother a paper ballot.
-
 ### Someone voted for the wrong candidate
 
 Votes cannot be undone. This is the same as crossing the wrong box on a paper ballot.

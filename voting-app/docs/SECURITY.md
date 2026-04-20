@@ -37,8 +37,9 @@ The app is designed for a trusted community of brothers voting in a church hall,
 ## How Code Guessing is Prevented
 
 - **Code entropy**: 6 characters from a 28-character set = 482 million possible codes. With ~100 valid codes, the chance of guessing one is ~1 in 4.8 million per attempt.
-- **Rate limiting**: 5 attempts per minute per IP address.
+- **Short exposure window**: The app is only reachable during the election (typically ~30 minutes) on a private WiFi inside the church hall. An attacker would have to be physically present.
 - **Hashing**: Codes are stored as SHA-256 hashes. Even with database access, unused codes cannot be read.
+- **One vote per code**: Even a successful guess yields a single vote — it cannot swing a result.
 
 ## What the Council Can Verify
 
@@ -86,7 +87,7 @@ All forms are protected with CSRF tokens (via Flask-WTF), preventing cross-site 
 |----------|--------|
 | Vote anonymity | Strong — no link between code and vote |
 | Double voting prevention | Strong — atomic code burn |
-| Code guessing prevention | Strong — entropy + rate limiting |
+| Code guessing prevention | Strong — 482M code space, short exposure, single-vote payoff |
 | Tampering detection | Moderate — inspectable database, task team oversight |
 | Independent verification | Moderate — open source, but no third-party auditor |
 | Network security | Basic — unencrypted HTTP on private WiFi |

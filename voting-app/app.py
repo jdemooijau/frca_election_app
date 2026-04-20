@@ -19,7 +19,6 @@ import hashlib
 import time
 from datetime import datetime
 from functools import wraps
-from collections import deque
 
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
@@ -79,17 +78,6 @@ DEFAULT_ADMIN_PASSWORD = "admin"
 # Code character set: uppercase + digits, excluding O/0/I/1/L
 CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 6
-
-# Rate limiting: 5 attempts per minute per IP (in-memory)
-RATE_LIMIT_MAX = 5
-RATE_LIMIT_WINDOW = 60  # seconds
-rate_limit_store = defaultdict(list)  # ip -> [timestamp, ...]
-
-# Diagnostic request log — in-memory ring buffer of voter-route hits.
-# Used from /admin/ip-log to confirm phones get distinct LAN IPs during
-# field-testing the rate limiter. Cleared on restart.
-VOTER_IP_LOG_MAX = 500
-voter_ip_log = deque(maxlen=VOTER_IP_LOG_MAX)  # [(ts, ip, path, ua), ...]
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -450,35 +438,6 @@ def admin_required(f):
     return decorated
 
 
-def check_rate_limit(ip):
-    """Return True if the IP is within rate limits, False if blocked."""
-    now = time.time()
-    # Prune old entries
-    rate_limit_store[ip] = [
-        t for t in rate_limit_store[ip] if now - t < RATE_LIMIT_WINDOW
-    ]
-    if len(rate_limit_store[ip]) >= RATE_LIMIT_MAX:
-        return False
-    rate_limit_store[ip].append(now)
-    return True
-
-
-def log_voter_request():
-    """Append the current request to the diagnostic IP log ring buffer.
-
-    Skips hits whose Referer points at one of our own admin/display pages —
-    those are typically browser sub-resource fetches (e.g. favicon) that got
-    303'd through the catch_all route and would otherwise spam the log.
-    """
-    referrer = request.referrer or ""
-    if referrer and any(
-        seg in referrer for seg in ("/admin", "/display", "/confirmation", "/ip-log")
-    ):
-        return
-    ua = (request.headers.get("User-Agent") or "")[:120]
-    voter_ip_log.append((time.time(), request.remote_addr or "?", request.path, ua))
-
-
 def hash_code(code):
     """Hash a voting code for fast lookup."""
     return hashlib.sha256(code.upper().encode()).hexdigest()
@@ -633,38 +592,6 @@ def admin_dashboard():
         "SELECT * FROM elections ORDER BY created_at DESC"
     ).fetchall()
     return render_template("admin/dashboard.html", elections=elections)
-
-
-@app.route("/admin/ip-log")
-@admin_required
-def admin_ip_log():
-    # Newest first; deque is thread-safe to snapshot via list().
-    entries = list(voter_ip_log)
-    entries.reverse()
-    formatted = [
-        {
-            "when": datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S"),
-            "ip": ip,
-            "path": path,
-            "ua": ua,
-        }
-        for ts, ip, path, ua in entries
-    ]
-    distinct_ips = sorted({e["ip"] for e in formatted})
-    return render_template(
-        "admin/ip_log.html",
-        entries=formatted,
-        distinct_ips=distinct_ips,
-        buffer_max=VOTER_IP_LOG_MAX,
-    )
-
-
-@app.route("/admin/ip-log/clear", methods=["POST"])
-@admin_required
-def admin_ip_log_clear():
-    voter_ip_log.clear()
-    flash("Request log cleared.", "success")
-    return redirect(url_for("admin_ip_log"))
 
 
 @app.route("/admin/election/new", methods=["GET", "POST"])
@@ -1937,7 +1864,6 @@ def api_members_search():
 @app.route("/", methods=["GET"])
 @app.route("/v/<prefill_code>", methods=["GET"])
 def voter_enter_code(prefill_code=None):
-    log_voter_request()
     db = get_db()
     election = db.execute(
         "SELECT * FROM elections WHERE voting_open = 1 ORDER BY id DESC LIMIT 1"
@@ -1949,12 +1875,8 @@ def voter_enter_code(prefill_code=None):
             flash("Voting is not currently open.", "error")
         else:
             code = prefill_code.strip().upper()
-            is_demo = get_setting("is_demo", "0") == "1"
 
-            # Rate limiting (skip in demo mode)
-            if not is_demo and not check_rate_limit(request.remote_addr):
-                flash("Too many attempts. Please wait a minute and try again.", "error")
-            elif len(code) != CODE_LENGTH:
+            if len(code) != CODE_LENGTH:
                 flash("Invalid code.", "error")
             else:
                 code_h = hash_code(code)
@@ -1988,7 +1910,6 @@ def voter_validate_code():
     if request.method == "GET":
         return redirect(url_for("voter_enter_code"))
 
-    log_voter_request()
     db = get_db()
     election = db.execute(
         "SELECT * FROM elections WHERE voting_open = 1 ORDER BY id DESC LIMIT 1"
@@ -1997,15 +1918,6 @@ def voter_validate_code():
     if not election:
         flash("Voting is not currently open.", "error")
         return redirect(url_for("voter_enter_code"))
-
-    is_demo = get_setting("is_demo", "0") == "1"
-
-    # Rate limiting (skip in demo mode)
-    if not is_demo:
-        ip = request.remote_addr
-        if not check_rate_limit(ip):
-            flash("Too many attempts. Please wait a minute and try again.", "error")
-            return redirect(url_for("voter_enter_code"))
 
     code = request.form.get("code", "").strip().upper()
 
@@ -2339,11 +2251,10 @@ def _build_display_data():
     wifi_password = get_setting("wifi_password", "")
     vote_url = get_setting("voting_base_url", "http://192.168.8.100:5000")
 
-    do_not_mark = [
+    paper_guide = [
         {
             "office_name": r["office_name"],
-            "names": r["inactive_names"],
-            "all_inactive": len(r["candidates"]) == 0,
+            "names": [c["name"] for c in r["candidates"]],
         }
         for r in results if r["inactive_names"]
     ]
@@ -2358,7 +2269,7 @@ def _build_display_data():
         postal_voter_count=postal_voter_count,
         valid_votes_cast=used_codes + paper_ballot_count + postal_voter_count,
         results=results,
-        do_not_mark=do_not_mark,
+        paper_guide=paper_guide,
         wifi_ssid=wifi_ssid,
         wifi_password=wifi_password,
         vote_url=vote_url,
@@ -2436,30 +2347,31 @@ def api_display_data():
         "postal_voter_count": postal_voter_count
     }
 
-    # Names printed on the paper ballot but no longer in contention (inactive)
-    # — shown in the Vote-on-Paper instructions when round > 1.
-    do_not_mark = []
+    # Paper-ballot guide shown on the Vote-on-Paper card in round > 1.
+    # Lists the only names voters should mark per office; empty names list
+    # means "no candidates this round — do not mark any {office}".
+    paper_guide = []
     if current_round > 1:
         offices_for_meta = db.execute(
             "SELECT id, name FROM offices WHERE election_id = ? ORDER BY sort_order",
             (election["id"],)
         ).fetchall()
         for office in offices_for_meta:
-            inactive_rows = db.execute(
-                "SELECT name FROM candidates WHERE office_id = ? AND active = 0 ORDER BY surname_sort_key(name)",
+            any_inactive = db.execute(
+                "SELECT 1 FROM candidates WHERE office_id = ? AND active = 0 LIMIT 1",
+                (office["id"],)
+            ).fetchone()
+            if not any_inactive:
+                continue
+            active_rows = db.execute(
+                "SELECT name FROM candidates WHERE office_id = ? AND active = 1 ORDER BY surname_sort_key(name)",
                 (office["id"],)
             ).fetchall()
-            active_count = db.execute(
-                "SELECT COUNT(*) FROM candidates WHERE office_id = ? AND active = 1",
-                (office["id"],)
-            ).fetchone()[0]
-            if inactive_rows:
-                do_not_mark.append({
-                    "office_name": office["name"],
-                    "names": [r["name"] for r in inactive_rows],
-                    "all_inactive": active_count == 0,
-                })
-    data["do_not_mark"] = do_not_mark
+            paper_guide.append({
+                "office_name": office["name"],
+                "names": [r["name"] for r in active_rows],
+            })
+    data["paper_guide"] = paper_guide
 
     # Always compute results for elected status
     if election["show_results"] or not election["voting_open"]:
