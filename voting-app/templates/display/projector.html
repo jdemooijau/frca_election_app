@@ -170,7 +170,7 @@
                 </ol>
                 <div class="do-not-mark" id="do-not-mark"
                      style="{{ '' if paper_guide else 'display:none' }}">
-                    <div class="do-not-mark-title">On the paper ballot, mark only:</div>
+                    <div class="do-not-mark-title">On the paper ballot, select only from:</div>
                     <div class="do-not-mark-body">
                     {% for entry in paper_guide %}
                         <div class="do-not-mark-office">
@@ -425,7 +425,7 @@
             var dnm = document.getElementById('do-not-mark');
             if (dnm) {
                 if (Array.isArray(data.paper_guide) && data.paper_guide.length > 0) {
-                    var body = '<div class="do-not-mark-title">On the paper ballot, mark only:</div>';
+                    var body = '<div class="do-not-mark-title">On the paper ballot, select only from:</div>';
                     body += '<div class="do-not-mark-body">';
                     data.paper_guide.forEach(function(entry) {
                         body += '<div class="do-not-mark-office">';
