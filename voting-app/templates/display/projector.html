@@ -8,14 +8,14 @@
         background: #F5F5F5;
         border-left: 4px solid var(--navy);
         border-radius: 6px;
-        padding: 8px 14px;
-        margin: 4px 0 10px;
-        font-size: 20px;
+        padding: 10px 16px;
+        margin: 4px 0 12px;
+        font-size: 26px;
         color: #333;
         line-height: 1.4;
     }
     .office-thresholds p {
-        margin: 0 0 2px 0;
+        margin: 0 0 4px 0;
     }
     .office-thresholds p:last-child {
         margin-bottom: 0;
@@ -26,12 +26,13 @@
     .rule-check {
         display: inline-block;
         font-weight: 700;
-        width: 1em;
-        text-align: center;
-        margin-left: 6px;
+        font-size: 1.1em;
+        margin-left: 8px;
     }
     .rule-check.pass { color: var(--green); }
-    .rule-check.fail { color: var(--red); opacity: 0.55; }
+    .rule-check.fail { color: var(--red); opacity: 0.65; }
+    .display-candidate { font-size: 24px !important; }
+    .display-candidate .votes { font-size: 26px !important; }
 </style>
 {% endblock %}
 
@@ -142,13 +143,17 @@
                 <h2>For {{ office.office_name }}</h2>
                 {% if election.show_results and valid_votes_cast > 0 and office.vacancies > 0 %}
                 <div class="office-thresholds">
+                    {% set pass6a = office.count_pass_6a >= office.vacancies %}
+                    {% set pass6b = office.count_pass_6b >= office.vacancies %}
                     <p>
-                        <strong>Article 6a:</strong>
+                        <strong>Article 6a</strong>
+                        <span class="rule-check {{ 'pass' if pass6a else 'fail' }}">{{ '✓' if pass6a else '✗' }}</span>:
                         {{ valid_votes_cast }} / {{ office.vacancies }} / 2 = {{ "%.2f"|format(office.threshold_6a) }}
                         — need <strong>more than {{ "%.2f"|format(office.threshold_6a) }}</strong> votes
                     </p>
                     <p>
-                        <strong>Article 6b:</strong>
+                        <strong>Article 6b</strong>
+                        <span class="rule-check {{ 'pass' if pass6b else 'fail' }}">{{ '✓' if pass6b else '✗' }}</span>:
                         {{ participants }} &times; 2/5 = {{ "%.1f"|format(participants * 2 / 5) }}
                         &rarr; rounded up to <strong>{{ office.threshold_6b }}</strong>
                         — need <strong>at least {{ office.threshold_6b }}</strong> votes
@@ -164,13 +169,7 @@
                         {% endif %}
                     </span>
                     {% if election.show_results %}
-                    <span class="votes">
-                        {{ cand.total }}
-                        {% if valid_votes_cast > 0 and office.vacancies > 0 %}
-                        <span class="rule-check {{ 'pass' if cand.passes_6a else 'fail' }}" title="Article 6a">{{ '✓' if cand.passes_6a else '✗' }}</span>
-                        <span class="rule-check {{ 'pass' if cand.passes_6b else 'fail' }}" title="Article 6b">{{ '✓' if cand.passes_6b else '✗' }}</span>
-                        {% endif %}
-                    </span>
+                    <span class="votes">{{ cand.total }}</span>
                     {% endif %}
                 </div>
                 {% endfor %}
@@ -210,13 +209,17 @@
                 <h2>For {{ office.office_name }}</h2>
                 {% if valid_votes_cast > 0 and office.vacancies > 0 %}
                 <div class="office-thresholds">
+                    {% set pass6a = office.count_pass_6a >= office.vacancies %}
+                    {% set pass6b = office.count_pass_6b >= office.vacancies %}
                     <p>
-                        <strong>Article 6a:</strong>
+                        <strong>Article 6a</strong>
+                        <span class="rule-check {{ 'pass' if pass6a else 'fail' }}">{{ '✓' if pass6a else '✗' }}</span>:
                         {{ valid_votes_cast }} / {{ office.vacancies }} / 2 = {{ "%.2f"|format(office.threshold_6a) }}
                         — need <strong>more than {{ "%.2f"|format(office.threshold_6a) }}</strong> votes
                     </p>
                     <p>
-                        <strong>Article 6b:</strong>
+                        <strong>Article 6b</strong>
+                        <span class="rule-check {{ 'pass' if pass6b else 'fail' }}">{{ '✓' if pass6b else '✗' }}</span>:
                         {{ participants }} &times; 2/5 = {{ "%.1f"|format(participants * 2 / 5) }}
                         &rarr; rounded up to <strong>{{ office.threshold_6b }}</strong>
                         — need <strong>at least {{ office.threshold_6b }}</strong> votes
@@ -226,13 +229,7 @@
                 {% for cand in office.candidates %}
                 <div class="display-candidate">
                     <span class="name">Br. {{ cand.name }}</span>
-                    <span class="votes">
-                        {{ cand.total }}
-                        {% if valid_votes_cast > 0 and office.vacancies > 0 %}
-                        <span class="rule-check {{ 'pass' if cand.passes_6a else 'fail' }}" title="Article 6a">{{ '✓' if cand.passes_6a else '✗' }}</span>
-                        <span class="rule-check {{ 'pass' if cand.passes_6b else 'fail' }}" title="Article 6b">{{ '✓' if cand.passes_6b else '✗' }}</span>
-                        {% endif %}
-                    </span>
+                    <span class="votes">{{ cand.total }}</span>
                 </div>
                 {% endfor %}
                 {% set possible = total_ballots * office.max_selections %}
@@ -380,10 +377,18 @@
                     if (showCounts && vvc > 0 && office.vacancies > 0) {
                         var t6a = office.threshold_6a || 0;
                         var t6b = office.threshold_6b || 0;
+                        var pass6a = (office.count_pass_6a || 0) >= office.vacancies;
+                        var pass6b = (office.count_pass_6b || 0) >= office.vacancies;
+                        var tick6a = '<span class="rule-check ' + (pass6a ? 'pass' : 'fail') + '">' +
+                                     (pass6a ? '\u2713' : '\u2717') + '</span>';
+                        var tick6b = '<span class="rule-check ' + (pass6b ? 'pass' : 'fail') + '">' +
+                                     (pass6b ? '\u2713' : '\u2717') + '</span>';
                         html += '<div class="office-thresholds">';
-                        html += '<p><strong>Article 6a:</strong> ' + vvc + ' / ' + office.vacancies + ' / 2 = ' + t6a.toFixed(2) +
+                        html += '<p><strong>Article 6a</strong> ' + tick6a + ': ' +
+                                vvc + ' / ' + office.vacancies + ' / 2 = ' + t6a.toFixed(2) +
                                 ' — need <strong>more than ' + t6a.toFixed(2) + '</strong> votes</p>';
-                        html += '<p><strong>Article 6b:</strong> ' + parts + ' &times; 2/5 = ' + (parts * 2 / 5).toFixed(1) +
+                        html += '<p><strong>Article 6b</strong> ' + tick6b + ': ' +
+                                parts + ' &times; 2/5 = ' + (parts * 2 / 5).toFixed(1) +
                                 ' &rarr; rounded up to <strong>' + t6b + '</strong>' +
                                 ' — need <strong>at least ' + t6b + '</strong> votes</p>';
                         html += '</div>';
@@ -394,14 +399,7 @@
                         if (cand.elected && !data.voting_open) html += ' <span style="color:#27AE60;font-weight:700;margin-left:8px">ELECTED</span>';
                         html += '</span>';
                         if (showCounts) {
-                            html += '<span class="votes">' + cand.total;
-                            if (vvc > 0 && office.vacancies > 0) {
-                                var p6a = cand.passes_6a ? 'pass' : 'fail';
-                                var p6b = cand.passes_6b ? 'pass' : 'fail';
-                                html += ' <span class="rule-check ' + p6a + '">' + (cand.passes_6a ? '\u2713' : '\u2717') + '</span>';
-                                html += ' <span class="rule-check ' + p6b + '">' + (cand.passes_6b ? '\u2713' : '\u2717') + '</span>';
-                            }
-                            html += '</span>';
+                            html += '<span class="votes">' + cand.total + '</span>';
                         }
                         html += '</div>';
                     });

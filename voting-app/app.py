@@ -384,12 +384,56 @@ def calculate_thresholds(vacancies, valid_votes_cast, participants):
 
 def check_candidate_elected(votes, threshold_6a, threshold_6b):
     """
-    Check if a candidate meets BOTH Article 6 conditions.
-    Returns (elected, passes_6a, passes_6b).
+    Check if a candidate meets BOTH Article 6 thresholds.
+    Returns (meets_thresholds, passes_6a, passes_6b).
+
+    NOTE: meets_thresholds alone is NOT sufficient to declare a candidate elected.
+    Per Article 6 ("candidates who receive the MOST votes... provided that ..."),
+    only the top-N candidates by vote count (N = vacancies) among those who pass
+    both thresholds are elected. Use resolve_elected_status() to apply that rule.
     """
     passes_6a = votes > threshold_6a   # strict greater than
     passes_6b = votes >= threshold_6b  # greater than or equal
     return (passes_6a and passes_6b), passes_6a, passes_6b
+
+
+def resolve_elected_status(candidates, vacancies):
+    """
+    Apply Article 6 + 7 to decide which candidates are elected this round.
+
+    Preconditions: each candidate dict has "total", "passes_6a", "passes_6b".
+    Sets "elected" to True only for the top `vacancies` threshold-passers by
+    vote count. Candidates tied on votes at the cutoff are NOT elected (they
+    must face a runoff per Article 7).
+    """
+    for c in candidates:
+        c["elected"] = False
+
+    if vacancies <= 0:
+        return
+
+    passing = [c for c in candidates if c.get("passes_6a") and c.get("passes_6b")]
+    if not passing:
+        return
+
+    passing.sort(key=lambda c: c["total"], reverse=True)
+
+    if len(passing) <= vacancies:
+        for c in passing:
+            c["elected"] = True
+        return
+
+    cutoff_votes = passing[vacancies - 1]["total"]
+    next_votes = passing[vacancies]["total"]
+
+    if cutoff_votes == next_votes:
+        # Tie at the boundary — only elect candidates strictly above the tie
+        for c in passing:
+            if c["total"] > cutoff_votes:
+                c["elected"] = True
+    else:
+        for c in passing[:vacancies]:
+            c["elected"] = True
 
 
 # ---------------------------------------------------------------------------
@@ -1035,12 +1079,13 @@ def admin_election_manage(election_id):
         vacancies = office["vacancies"] or office["max_selections"]
         if participants > 0 and vacancies > 0:
             t6a, t6b = calculate_thresholds(vacancies, valid_votes_cast, participants)
-            # Annotate each candidate with pass/fail
             for cand in item["candidates"]:
-                elected, p6a, p6b = check_candidate_elected(cand["total"], t6a, t6b)
+                _, p6a, p6b = check_candidate_elected(cand["total"], t6a, t6b)
                 cand["passes_6a"] = p6a
                 cand["passes_6b"] = p6b
-                cand["meets_threshold"] = elected
+            resolve_elected_status(item["candidates"], vacancies)
+            for cand in item["candidates"]:
+                cand["meets_threshold"] = cand["elected"]
             thresholds[office["id"]] = {
                 "vacancies": vacancies,
                 "valid_votes_cast": valid_votes_cast,
@@ -2193,21 +2238,24 @@ def _build_display_data():
                 ).fetchone()[0]
 
             total = digital + paper + postal
-            elected = False
             passes_6a = False
             passes_6b = False
             if participants_r > 0 and vacancies > 0:
-                elected, passes_6a, passes_6b = check_candidate_elected(total, t6a, t6b)
+                _, passes_6a, passes_6b = check_candidate_elected(total, t6a, t6b)
 
             candidate_results.append({
                 "name": cand["name"],
                 "total": total,
-                "elected": elected,
+                "elected": False,
                 "passes_6a": passes_6a,
                 "passes_6b": passes_6b,
             })
 
+        resolve_elected_status(candidate_results, vacancies)
+
         votes_cast_for_office = sum(c["total"] for c in candidate_results)
+        count_pass_6a = sum(1 for c in candidate_results if c["passes_6a"])
+        count_pass_6b = sum(1 for c in candidate_results if c["passes_6b"])
 
         results.append({
             "office_name": office["name"],
@@ -2218,6 +2266,8 @@ def _build_display_data():
             "votes_cast": votes_cast_for_office,
             "threshold_6a": t6a,
             "threshold_6b": t6b,
+            "count_pass_6a": count_pass_6a,
+            "count_pass_6b": count_pass_6b,
         })
 
     in_person, paper_ballot_count, used_codes = get_round_counts(election["id"], current_round)
@@ -2359,21 +2409,24 @@ def api_display_data():
                     ).fetchone()[0]
 
                 total = digital + paper + postal
-                elected = False
                 passes_6a = False
                 passes_6b = False
                 if participants_api > 0 and vacancies > 0:
-                    elected, passes_6a, passes_6b = check_candidate_elected(total, t6a, t6b)
+                    _, passes_6a, passes_6b = check_candidate_elected(total, t6a, t6b)
 
                 candidate_results.append({
                     "name": cand["name"],
                     "total": total,
-                    "elected": elected,
+                    "elected": False,
                     "passes_6a": passes_6a,
                     "passes_6b": passes_6b,
                 })
 
+            resolve_elected_status(candidate_results, vacancies)
+
             votes_cast_for_office = sum(c["total"] for c in candidate_results)
+            count_pass_6a = sum(1 for c in candidate_results if c["passes_6a"])
+            count_pass_6b = sum(1 for c in candidate_results if c["passes_6b"])
 
             results.append({
                 "office_name": office["name"],
@@ -2383,6 +2436,8 @@ def api_display_data():
                 "vacancies": vacancies,
                 "threshold_6a": t6a,
                 "threshold_6b": t6b,
+                "count_pass_6a": count_pass_6a,
+                "count_pass_6b": count_pass_6b,
             })
 
         data["results"] = results
@@ -2838,9 +2893,10 @@ def admin_minutes_docx(election_id):
                     ).fetchone()[0]
 
                 total = digital + paper + postal
-                elected = False
+                passes_6a = False
+                passes_6b = False
                 if participants > 0 and vacancies > 0:
-                    elected, _, _ = check_candidate_elected(total, t6a, t6b)
+                    _, passes_6a, passes_6b = check_candidate_elected(total, t6a, t6b)
 
                 cand_list.append({
                     "name": cand["name"],
@@ -2848,8 +2904,12 @@ def admin_minutes_docx(election_id):
                     "paper": paper,
                     "postal": postal,
                     "total": total,
-                    "elected": elected,
+                    "elected": False,
+                    "passes_6a": passes_6a,
+                    "passes_6b": passes_6b,
                 })
+
+            resolve_elected_status(cand_list, vacancies)
 
             offices_list.append({
                 "name": office["name"],
