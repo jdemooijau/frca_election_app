@@ -634,6 +634,32 @@ tr:nth-child(even) {
     width: 100%;
 }
 
+.instructions-options {
+    display: flex;
+    align-items: stretch;
+    gap: 20px;
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.options-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.options-divider span {
+    display: inline-block;
+    background: var(--navy);
+    color: #fff;
+    font-weight: 800;
+    font-size: 32px;
+    padding: 10px 22px;
+    border-radius: 40px;
+    letter-spacing: 3px;
+}
+
 .instruction-card {
     flex: 1;
     background: var(--grey-light);
@@ -677,6 +703,22 @@ tr:nth-child(even) {
 
 .instruction-warning h2 {
     color: var(--red);
+}
+
+.instruction-warning-wide {
+    width: 100%;
+}
+
+.instruction-warning-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+}
+
+.instruction-warning-body .instruction-icon {
+    margin-bottom: 0;
+    flex: 0 0 auto;
 }
 
 .warning-text {

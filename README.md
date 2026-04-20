@@ -26,15 +26,35 @@ Any FRCA congregation can clone this repository, run the setup wizard, and be re
 
 **Prerequisites:** Python 3.11 or later.
 
+First, install dependencies:
+
 ```bash
 cd frca_election_app/voting-app
 pip install -r requirements.txt
-python app.py
 ```
+
+Then start the app using the launcher for your platform:
+
+**Windows (Command Prompt):**
+```cmd
+start.bat
+```
+
+**Windows (PowerShell):**
+```powershell
+.\start.bat
+```
+
+**Linux / macOS:**
+```bash
+./run.sh
+```
+
+The launcher starts the waitress production server on port 5000 and opens the admin page in your browser. Do not run `python app.py` directly — it will print a reminder and exit.
 
 Replace `frca_election_app` with whatever you named the folder when you cloned the repository.
 
-The app starts on `http://localhost:5000`.
+The app runs on `http://localhost:5000`.
 
 - **Admin panel:** `http://localhost:5000/admin`
 - **Voter page:** `http://localhost:5000/`
