@@ -1343,96 +1343,6 @@ def admin_paper_votes(election_id):
     )
 
 
-@app.route("/admin/election/<int:election_id>/next-round-explainer")
-@admin_required
-def admin_next_round_explainer(election_id):
-    """Large-type view for the chairman to show the meeting which names
-    remain to be voted on in the next round, and which printed names on
-    the paper ballot are already elected and must NOT be marked again."""
-    db = get_db()
-    election = db.execute(
-        "SELECT * FROM elections WHERE id = ?", (election_id,)
-    ).fetchone()
-    if not election:
-        abort(404)
-
-    current_round = election["current_round"]
-    offices = db.execute(
-        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
-        (election["id"],)
-    ).fetchall()
-
-    in_person, paper_bc, digital_bc = get_round_counts(election["id"], current_round)
-    postal_vc = (election["postal_voter_count"] or 0) if current_round == 1 else 0
-    participants = in_person + postal_vc
-    valid_votes = digital_bc + paper_bc + postal_vc
-
-    office_blocks = []
-    for office in offices:
-        candidates = db.execute(
-            "SELECT * FROM candidates WHERE office_id = ? AND active = 1 ORDER BY surname_sort_key(name)",
-            (office["id"],)
-        ).fetchall()
-
-        vacancies = office["vacancies"] or office["max_selections"]
-        t6a, t6b = (0, 0)
-        if participants > 0 and vacancies > 0:
-            t6a, t6b = calculate_thresholds(vacancies, valid_votes, participants)
-
-        cand_results = []
-        for cand in candidates:
-            digital = db.execute(
-                "SELECT COUNT(*) FROM votes WHERE candidate_id = ? AND round_number = ? AND election_id = ?",
-                (cand["id"], current_round, election["id"])
-            ).fetchone()[0]
-            paper = db.execute(
-                "SELECT COALESCE(SUM(count), 0) FROM paper_votes WHERE candidate_id = ? AND round_number = ? AND election_id = ?",
-                (cand["id"], current_round, election["id"])
-            ).fetchone()[0]
-            postal = 0
-            if current_round == 1:
-                postal = db.execute(
-                    "SELECT COALESCE(SUM(count), 0) FROM postal_votes WHERE candidate_id = ? AND election_id = ?",
-                    (cand["id"], election["id"])
-                ).fetchone()[0]
-            total = digital + paper + postal
-            p6a = p6b = False
-            if participants > 0 and vacancies > 0:
-                _, p6a, p6b = check_candidate_elected(total, t6a, t6b)
-            cand_results.append({
-                "name": cand["name"],
-                "total": total,
-                "passes_6a": p6a,
-                "passes_6b": p6b,
-                "elected": False,
-            })
-
-        resolve_elected_status(cand_results, vacancies)
-
-        elected_list = [c for c in cand_results if c["elected"]]
-        runoff_list = [c for c in cand_results if not c["elected"]]
-        remaining_vacancies = max(vacancies - len(elected_list), 0)
-
-        office_blocks.append({
-            "name": office["name"],
-            "vacancies": vacancies,
-            "remaining_vacancies": remaining_vacancies,
-            "elected": elected_list,
-            "runoff": runoff_list,
-            "runoff_needed": remaining_vacancies > 0 and len(runoff_list) > 0,
-        })
-
-    next_round_possible = current_round < election["max_rounds"]
-
-    return render_template(
-        "admin/next_round_explainer.html",
-        election=election,
-        office_blocks=office_blocks,
-        next_round_number=current_round + 1,
-        next_round_possible=next_round_possible,
-    )
-
-
 @app.route("/admin/election/<int:election_id>/next-round", methods=["POST"])
 @admin_required
 def admin_next_round(election_id):
@@ -2346,6 +2256,16 @@ def _build_display_data():
             (office["id"],)
         ).fetchall()
 
+        # Inactive candidates for round > 1 — names printed on paper ballots
+        # but no longer in contention. Voters must not mark these.
+        inactive_names = []
+        if current_round > 1:
+            inactive_rows = db.execute(
+                "SELECT name FROM candidates WHERE office_id = ? AND active = 0 ORDER BY surname_sort_key(name)",
+                (office["id"],)
+            ).fetchall()
+            inactive_names = [r["name"] for r in inactive_rows]
+
         vacancies = office["vacancies"] or office["max_selections"]
         if participants_r > 0 and vacancies > 0:
             t6a, t6b = calculate_thresholds(vacancies, valid_votes_r, participants_r)
@@ -2408,6 +2328,7 @@ def _build_display_data():
             "elected_count": elected_count,
             "remaining_vacancies": remaining_vacancies,
             "runoff_needed": runoff_needed,
+            "inactive_names": inactive_names,
         })
 
     in_person, paper_ballot_count, used_codes = get_round_counts(election["id"], current_round)
@@ -2417,6 +2338,11 @@ def _build_display_data():
     wifi_ssid = get_setting("wifi_ssid", "")
     wifi_password = get_setting("wifi_password", "")
     vote_url = get_setting("voting_base_url", "http://192.168.8.100:5000")
+
+    do_not_mark = [
+        {"office_name": r["office_name"], "names": r["inactive_names"]}
+        for r in results if r["inactive_names"]
+    ]
 
     ctx = dict(
         election=election,
@@ -2428,6 +2354,7 @@ def _build_display_data():
         postal_voter_count=postal_voter_count,
         valid_votes_cast=used_codes + paper_ballot_count + postal_voter_count,
         results=results,
+        do_not_mark=do_not_mark,
         wifi_ssid=wifi_ssid,
         wifi_password=wifi_password,
         vote_url=vote_url,
@@ -2504,6 +2431,26 @@ def api_display_data():
         "paper_ballot_count": paper_ballot_count,
         "postal_voter_count": postal_voter_count
     }
+
+    # Names printed on the paper ballot but no longer in contention (inactive)
+    # — shown in the Vote-on-Paper instructions when round > 1.
+    do_not_mark = []
+    if current_round > 1:
+        offices_for_meta = db.execute(
+            "SELECT id, name FROM offices WHERE election_id = ? ORDER BY sort_order",
+            (election["id"],)
+        ).fetchall()
+        for office in offices_for_meta:
+            inactive_rows = db.execute(
+                "SELECT name FROM candidates WHERE office_id = ? AND active = 0 ORDER BY surname_sort_key(name)",
+                (office["id"],)
+            ).fetchall()
+            if inactive_rows:
+                do_not_mark.append({
+                    "office_name": office["name"],
+                    "names": [r["name"] for r in inactive_rows],
+                })
+    data["do_not_mark"] = do_not_mark
 
     # Always compute results for elected status
     if election["show_results"] or not election["voting_open"]:

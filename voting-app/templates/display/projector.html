@@ -56,7 +56,29 @@
         letter-spacing: 0.5px;
     }
     .status-badge.elected { color: var(--green); background: #E8F8EE; }
-    .status-badge.runoff { color: #8A4A00; background: #FFF4E5; }
+    .do-not-mark {
+        margin-top: 14px;
+        padding: 12px 14px;
+        background: #FFF4E5;
+        border-left: 5px solid #E67E22;
+        border-radius: 6px;
+        font-size: 18px;
+        color: #5C3300;
+        line-height: 1.4;
+    }
+    .do-not-mark-title {
+        font-weight: 700;
+        color: #8A4A00;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 6px;
+        font-size: 16px;
+    }
+    .do-not-mark-office {
+        margin-bottom: 4px;
+    }
+    .do-not-mark-office:last-child { margin-bottom: 0; }
+    .do-not-mark-office strong { color: var(--navy); }
 </style>
 {% endblock %}
 
@@ -145,6 +167,18 @@
                     <li>Mark your selections on the <strong>ballot paper</strong></li>
                     <li>Fold the ballot and hand it in for <strong>manual counting</strong></li>
                 </ol>
+                <div class="do-not-mark" id="do-not-mark"
+                     style="{{ '' if do_not_mark else 'display:none' }}">
+                    <div class="do-not-mark-title">Do NOT mark these names this round:</div>
+                    <div class="do-not-mark-body">
+                    {% for entry in do_not_mark %}
+                        <div class="do-not-mark-office">
+                            <strong>{{ entry.office_name }}:</strong>
+                            {% for n in entry.names %}Br. {{ n }}{% if not loop.last %}; {% endif %}{% endfor %}
+                        </div>
+                    {% endfor %}
+                    </div>
+                </div>
             </div>
         </div>
         <div class="instruction-card instruction-warning instruction-warning-wide">
@@ -199,8 +233,6 @@
                         Br. {{ cand.name }}
                         {% if cand.elected and not election.voting_open %}
                         <span class="status-badge elected">ELECTED</span>
-                        {% elif office.runoff_needed and not election.voting_open %}
-                        <span class="status-badge runoff">RUNOFF</span>
                         {% endif %}
                     </span>
                     {% if election.show_results %}
@@ -385,6 +417,24 @@
             status.textContent = data.voting_open ? 'OPEN' : 'CLOSED';
             status.className = 'display-status ' + (data.voting_open ? 'open' : 'closed');
 
+            var dnm = document.getElementById('do-not-mark');
+            if (dnm) {
+                if (Array.isArray(data.do_not_mark) && data.do_not_mark.length > 0) {
+                    var body = '<div class="do-not-mark-title">Do NOT mark these names this round:</div>';
+                    body += '<div class="do-not-mark-body">';
+                    data.do_not_mark.forEach(function(entry) {
+                        body += '<div class="do-not-mark-office"><strong>' + esc(entry.office_name) + ':</strong> ';
+                        body += entry.names.map(function(n) { return 'Br. ' + esc(n); }).join('; ');
+                        body += '</div>';
+                    });
+                    body += '</div>';
+                    dnm.innerHTML = body;
+                    dnm.style.display = '';
+                } else {
+                    dnm.style.display = 'none';
+                }
+            }
+
             var container = document.getElementById('results-container');
             var instrPanel = document.getElementById('instructions-panel');
             var summaryPanel = document.getElementById('summary-panel');
@@ -445,8 +495,6 @@
                         html += '<span class="name">Br. ' + esc(cand.name);
                         if (cand.elected && !data.voting_open) {
                             html += ' <span class="status-badge elected">ELECTED</span>';
-                        } else if (office.runoff_needed && !data.voting_open) {
-                            html += ' <span class="status-badge runoff">RUNOFF</span>';
                         }
                         html += '</span>';
                         if (showCounts) {
