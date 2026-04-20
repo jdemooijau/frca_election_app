@@ -169,16 +169,16 @@
                     <li>Fold the ballot and hand it in for <strong>manual counting</strong></li>
                 </ol>
                 <div class="do-not-mark" id="do-not-mark"
-                     style="{{ '' if do_not_mark else 'display:none' }}">
-                    <div class="do-not-mark-title">Do NOT mark these names this round:</div>
+                     style="{{ '' if paper_guide else 'display:none' }}">
+                    <div class="do-not-mark-title">On the paper ballot, mark only:</div>
                     <div class="do-not-mark-body">
-                    {% for entry in do_not_mark %}
+                    {% for entry in paper_guide %}
                         <div class="do-not-mark-office">
-                            {% if entry.all_inactive %}
-                            <strong>No {{ entry.office_name }}s</strong>
-                            {% else %}
+                            {% if entry.names %}
                             <strong>{{ entry.office_name }}:</strong>
                             {% for n in entry.names %}Br. {{ n }}{% if not loop.last %}; {% endif %}{% endfor %}
+                            {% else %}
+                            <strong>No {{ entry.office_name }}s</strong>
                             {% endif %}
                         </div>
                     {% endfor %}
@@ -424,16 +424,16 @@
 
             var dnm = document.getElementById('do-not-mark');
             if (dnm) {
-                if (Array.isArray(data.do_not_mark) && data.do_not_mark.length > 0) {
-                    var body = '<div class="do-not-mark-title">Do NOT mark these names this round:</div>';
+                if (Array.isArray(data.paper_guide) && data.paper_guide.length > 0) {
+                    var body = '<div class="do-not-mark-title">On the paper ballot, mark only:</div>';
                     body += '<div class="do-not-mark-body">';
-                    data.do_not_mark.forEach(function(entry) {
+                    data.paper_guide.forEach(function(entry) {
                         body += '<div class="do-not-mark-office">';
-                        if (entry.all_inactive) {
-                            body += '<strong>No ' + esc(entry.office_name) + 's</strong>';
-                        } else {
+                        if (entry.names && entry.names.length > 0) {
                             body += '<strong>' + esc(entry.office_name) + ':</strong> ';
                             body += entry.names.map(function(n) { return 'Br. ' + esc(n); }).join('; ');
+                        } else {
+                            body += '<strong>No ' + esc(entry.office_name) + 's</strong>';
                         }
                         body += '</div>';
                     });
