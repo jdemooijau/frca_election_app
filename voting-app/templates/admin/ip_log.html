@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Request Log — Office Bearer Election{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Voter Request Log</h1>
+    <a href="{{ url_for('admin_dashboard') }}">Back</a>
+</div>
+
+<div class="container-wide">
+    <div class="card">
+        <div class="card-header">What this shows</div>
+        <p style="font-size: 14px; color: #666;">
+            Every hit on the voter entry page (<code>/</code>, <code>/v/&lt;code&gt;</code>)
+            and the vote submission endpoint (<code>/vote</code>).
+            Use this to verify that each phone on the venue WiFi shows a
+            <strong>distinct</strong> <code>remote_addr</code>. If every row shows the
+            same IP, the rate limiter will lock the congregation out — see
+            <code>docs/SECURITY.md</code> for the <code>ProxyFix</code> remedy.
+        </p>
+        <p style="font-size: 14px; color: #666;">
+            In-memory buffer, last {{ buffer_max }} entries, cleared on restart.
+        </p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Distinct IPs seen ({{ distinct_ips|length }})</div>
+        {% if distinct_ips %}
+        <ul style="font-family: monospace; margin: 0; padding-left: 20px;">
+            {% for ip in distinct_ips %}
+            <li>{{ ip }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p style="color: #666;">No voter requests recorded yet.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card-header">Entries ({{ entries|length }}, newest first)</div>
+        {% if entries %}
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                    <tr style="border-bottom: 2px solid var(--grey-dark); text-align: left;">
+                        <th style="padding: 6px 8px;">Time</th>
+                        <th style="padding: 6px 8px;">Remote addr</th>
+                        <th style="padding: 6px 8px;">Path</th>
+                        <th style="padding: 6px 8px;">User-Agent</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in entries %}
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 6px 8px; white-space: nowrap; font-family: monospace;">{{ e.when }}</td>
+                        <td style="padding: 6px 8px; font-family: monospace;">{{ e.ip }}</td>
+                        <td style="padding: 6px 8px; font-family: monospace;">{{ e.path }}</td>
+                        <td style="padding: 6px 8px; color: #666;">{{ e.ua }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p style="color: #666;">No voter requests recorded yet.</p>
+        {% endif %}
+    </div>
+
+    <div style="margin-top: 12px;" class="btn-row">
+        <a href="{{ url_for('admin_ip_log') }}" class="btn btn-outline btn-small">Refresh</a>
+        <form method="POST" action="{{ url_for('admin_ip_log_clear') }}" style="display: inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger btn-small">Clear log</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

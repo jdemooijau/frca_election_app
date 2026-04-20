@@ -19,7 +19,7 @@ import hashlib
 import time
 from datetime import datetime
 from functools import wraps
-from collections import defaultdict
+from collections import defaultdict, deque
 
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
@@ -84,6 +84,12 @@ CODE_LENGTH = 6
 RATE_LIMIT_MAX = 5
 RATE_LIMIT_WINDOW = 60  # seconds
 rate_limit_store = defaultdict(list)  # ip -> [timestamp, ...]
+
+# Diagnostic request log — in-memory ring buffer of voter-route hits.
+# Used from /admin/ip-log to confirm phones get distinct LAN IPs during
+# field-testing the rate limiter. Cleared on restart.
+VOTER_IP_LOG_MAX = 500
+voter_ip_log = deque(maxlen=VOTER_IP_LOG_MAX)  # [(ts, ip, path, ua), ...]
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -413,6 +419,12 @@ def check_rate_limit(ip):
     return True
 
 
+def log_voter_request():
+    """Append the current request to the diagnostic IP log ring buffer."""
+    ua = (request.headers.get("User-Agent") or "")[:120]
+    voter_ip_log.append((time.time(), request.remote_addr or "?", request.path, ua))
+
+
 def hash_code(code):
     """Hash a voting code for fast lookup."""
     return hashlib.sha256(code.upper().encode()).hexdigest()
@@ -567,6 +579,38 @@ def admin_dashboard():
         "SELECT * FROM elections ORDER BY created_at DESC"
     ).fetchall()
     return render_template("admin/dashboard.html", elections=elections)
+
+
+@app.route("/admin/ip-log")
+@admin_required
+def admin_ip_log():
+    # Newest first; deque is thread-safe to snapshot via list().
+    entries = list(voter_ip_log)
+    entries.reverse()
+    formatted = [
+        {
+            "when": datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S"),
+            "ip": ip,
+            "path": path,
+            "ua": ua,
+        }
+        for ts, ip, path, ua in entries
+    ]
+    distinct_ips = sorted({e["ip"] for e in formatted})
+    return render_template(
+        "admin/ip_log.html",
+        entries=formatted,
+        distinct_ips=distinct_ips,
+        buffer_max=VOTER_IP_LOG_MAX,
+    )
+
+
+@app.route("/admin/ip-log/clear", methods=["POST"])
+@admin_required
+def admin_ip_log_clear():
+    voter_ip_log.clear()
+    flash("Request log cleared.", "success")
+    return redirect(url_for("admin_ip_log"))
 
 
 @app.route("/admin/election/new", methods=["GET", "POST"])
@@ -1804,6 +1848,7 @@ def api_members_search():
 @app.route("/", methods=["GET"])
 @app.route("/v/<prefill_code>", methods=["GET"])
 def voter_enter_code(prefill_code=None):
+    log_voter_request()
     db = get_db()
     election = db.execute(
         "SELECT * FROM elections WHERE voting_open = 1 ORDER BY id DESC LIMIT 1"
@@ -1854,6 +1899,7 @@ def voter_validate_code():
     if request.method == "GET":
         return redirect(url_for("voter_enter_code"))
 
+    log_voter_request()
     db = get_db()
     election = db.execute(
         "SELECT * FROM elections WHERE voting_open = 1 ORDER BY id DESC LIMIT 1"
@@ -2148,13 +2194,17 @@ def _build_display_data():
 
             total = digital + paper + postal
             elected = False
+            passes_6a = False
+            passes_6b = False
             if participants_r > 0 and vacancies > 0:
-                elected, _, _ = check_candidate_elected(total, t6a, t6b)
+                elected, passes_6a, passes_6b = check_candidate_elected(total, t6a, t6b)
 
             candidate_results.append({
                 "name": cand["name"],
                 "total": total,
-                "elected": elected
+                "elected": elected,
+                "passes_6a": passes_6a,
+                "passes_6b": passes_6b,
             })
 
         votes_cast_for_office = sum(c["total"] for c in candidate_results)
@@ -2310,13 +2360,17 @@ def api_display_data():
 
                 total = digital + paper + postal
                 elected = False
+                passes_6a = False
+                passes_6b = False
                 if participants_api > 0 and vacancies > 0:
-                    elected, _, _ = check_candidate_elected(total, t6a, t6b)
+                    elected, passes_6a, passes_6b = check_candidate_elected(total, t6a, t6b)
 
                 candidate_results.append({
                     "name": cand["name"],
                     "total": total,
-                    "elected": elected
+                    "elected": elected,
+                    "passes_6a": passes_6a,
+                    "passes_6b": passes_6b,
                 })
 
             votes_cast_for_office = sum(c["total"] for c in candidate_results)
@@ -2325,10 +2379,14 @@ def api_display_data():
                 "office_name": office["name"],
                 "candidates": candidate_results,
                 "max_selections": office["max_selections"],
-                "votes_cast": votes_cast_for_office
+                "votes_cast": votes_cast_for_office,
+                "vacancies": vacancies,
+                "threshold_6a": t6a,
+                "threshold_6b": t6b,
             })
 
         data["results"] = results
+        data["valid_votes_cast"] = valid_votes_api
 
     return jsonify(data)
 
