@@ -66,6 +66,25 @@
     .article-block p:last-child {
         margin-bottom: 0;
     }
+    .threshold-panel {
+        background: #F5F5F5;
+        border-left: 4px solid var(--navy);
+        border-radius: 6px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        font-size: 20px;
+        color: #333;
+        line-height: 1.4;
+    }
+    .threshold-panel p {
+        margin: 0 0 4px 0;
+    }
+    .threshold-panel p:last-child {
+        margin-bottom: 0;
+    }
+    .threshold-panel strong {
+        color: var(--navy);
+    }
 </style>
 {% endblock %}
 
@@ -89,6 +108,23 @@
                         — select {{ item.max_selections }}
                     </span>
                 </h3>
+                {% if participants > 0 and item.vacancies > 0 %}
+                <div class="threshold-panel">
+                    {% if valid_votes_cast > 0 %}
+                    <p>
+                        <strong>Article 6a:</strong>
+                        {{ valid_votes_cast }} / {{ item.vacancies }} / 2 = {{ "%.2f"|format(item.threshold_6a) }}
+                        — need <strong>more than {{ "%.2f"|format(item.threshold_6a) }}</strong> votes
+                    </p>
+                    {% endif %}
+                    <p>
+                        <strong>Article 6b:</strong>
+                        {{ participants }} &times; 2/5 = {{ "%.1f"|format(participants * 2 / 5) }}
+                        &rarr; rounded up to <strong>{{ item.threshold_6b }}</strong>
+                        — need <strong>at least {{ item.threshold_6b }}</strong> votes
+                    </p>
+                </div>
+                {% endif %}
                 <ul class="candidate-list">
                     {% for cand in item.candidates %}
                     <li>Br. {{ cand.name }}</li>
