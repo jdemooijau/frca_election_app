@@ -1836,6 +1836,7 @@ def voter_enter_code(prefill_code=None):
                 else:
                     session["code_hash"] = code_h
                     session["election_id"] = election["id"]
+                    session["used_code"] = code
                     session["_clear_stale_flashes"] = True
                     return redirect(url_for("voter_ballot"))
 
@@ -1893,6 +1894,7 @@ def voter_validate_code():
 
     session["code_hash"] = code_h
     session["election_id"] = election["id"]
+    session["used_code"] = code
     return redirect(url_for("voter_ballot"))
 
 
@@ -2081,7 +2083,8 @@ def voter_submit():
 
 @app.route("/confirmation")
 def voter_confirmation():
-    resp = make_response(render_template("voter/confirmation.html"))
+    used_code = session.pop("used_code", None)
+    resp = make_response(render_template("voter/confirmation.html", used_code=used_code))
     return no_cache(resp)
 
 
@@ -2158,9 +2161,13 @@ def _build_display_data():
 
         results.append({
             "office_name": office["name"],
+            "office_id": office["id"],
+            "vacancies": vacancies,
             "candidates": candidate_results,
             "max_selections": office["max_selections"],
-            "votes_cast": votes_cast_for_office
+            "votes_cast": votes_cast_for_office,
+            "threshold_6a": t6a,
+            "threshold_6b": t6b,
         })
 
     in_person, paper_ballot_count, used_codes = get_round_counts(election["id"], current_round)
@@ -2176,8 +2183,10 @@ def _build_display_data():
         used_codes=used_codes,
         total_ballots=total_ballots,
         participants=in_person + postal_voter_count,
+        in_person_participants=in_person,
         paper_ballot_count=paper_ballot_count,
         postal_voter_count=postal_voter_count,
+        valid_votes_cast=used_codes + paper_ballot_count + postal_voter_count,
         results=results,
         wifi_ssid=wifi_ssid,
         wifi_password=wifi_password,
