@@ -464,7 +464,17 @@ def check_rate_limit(ip):
 
 
 def log_voter_request():
-    """Append the current request to the diagnostic IP log ring buffer."""
+    """Append the current request to the diagnostic IP log ring buffer.
+
+    Skips hits whose Referer points at one of our own admin/display pages —
+    those are typically browser sub-resource fetches (e.g. favicon) that got
+    303'd through the catch_all route and would otherwise spam the log.
+    """
+    referrer = request.referrer or ""
+    if referrer and any(
+        seg in referrer for seg in ("/admin", "/display", "/confirmation", "/ip-log")
+    ):
+        return
     ua = (request.headers.get("User-Agent") or "")[:120]
     voter_ip_log.append((time.time(), request.remote_addr or "?", request.path, ua))
 
@@ -1365,15 +1375,48 @@ def admin_next_round(election_id):
         "SELECT * FROM offices WHERE election_id = ?", (election_id,)
     ).fetchall()
 
+    # Participants/votes for the round being closed — needed to compute
+    # how many candidates were elected per office, so we can reduce vacancies.
+    in_person_prev, paper_prev, digital_prev = get_round_counts(election_id, current_round)
+    postal_prev = (election["postal_voter_count"] or 0) if current_round == 1 else 0
+    participants_prev = in_person_prev + postal_prev
+    valid_votes_prev = digital_prev + paper_prev + postal_prev
+
     for office in offices:
         candidates = db.execute(
-            "SELECT * FROM candidates WHERE office_id = ?", (office["id"],)
+            "SELECT * FROM candidates WHERE office_id = ? AND active = 1",
+            (office["id"],)
         ).fetchall()
 
-        # Count how many candidates from this office are carried forward
-        carried_forward_count = sum(
-            1 for c in candidates if c["id"] in carry_set
-        )
+        current_vacancies = office["vacancies"] or office["max_selections"]
+
+        # Count candidates elected in the round being closed
+        elected_this_round = 0
+        if participants_prev > 0 and current_vacancies > 0:
+            t6a, t6b = calculate_thresholds(current_vacancies, valid_votes_prev, participants_prev)
+            cand_summary = []
+            for cand in candidates:
+                digital = db.execute(
+                    "SELECT COUNT(*) FROM votes WHERE candidate_id = ? AND round_number = ? AND election_id = ?",
+                    (cand["id"], current_round, election_id)
+                ).fetchone()[0]
+                paper = db.execute(
+                    "SELECT COALESCE(SUM(count), 0) FROM paper_votes WHERE candidate_id = ? AND round_number = ? AND election_id = ?",
+                    (cand["id"], current_round, election_id)
+                ).fetchone()[0]
+                postal = 0
+                if current_round == 1:
+                    postal = db.execute(
+                        "SELECT COALESCE(SUM(count), 0) FROM postal_votes WHERE candidate_id = ? AND election_id = ?",
+                        (cand["id"], election_id)
+                    ).fetchone()[0]
+                total = digital + paper + postal
+                _, p6a, p6b = check_candidate_elected(total, t6a, t6b)
+                cand_summary.append({"total": total, "passes_6a": p6a, "passes_6b": p6b, "elected": False})
+            resolve_elected_status(cand_summary, current_vacancies)
+            elected_this_round = sum(1 for c in cand_summary if c["elected"])
+
+        carried_forward_count = sum(1 for c in candidates if c["id"] in carry_set)
 
         # Deactivate all
         db.execute(
@@ -1381,13 +1424,14 @@ def admin_next_round(election_id):
             (office["id"],)
         )
 
-        # Set max_selections for next round = original vacancies, capped by available candidates
-        original_vacancies = office["vacancies"] or office["max_selections"]
-        remaining = min(original_vacancies, carried_forward_count) if carried_forward_count > 0 else 0
+        # Remaining vacancies = current vacancies minus those filled this round.
+        # max_selections is capped by the number of candidates actually on the next ballot.
+        remaining_vacancies = max(current_vacancies - elected_this_round, 0)
+        new_max_selections = min(remaining_vacancies, carried_forward_count) if carried_forward_count > 0 else 0
 
         db.execute(
             "UPDATE offices SET vacancies = ?, max_selections = ? WHERE id = ?",
-            (remaining, remaining, office["id"])
+            (remaining_vacancies, new_max_selections, office["id"])
         )
 
     # Reactivate carried-forward candidates
@@ -3055,6 +3099,12 @@ def cpd_firefox():
 def cpd_other():
     """Other probes — return 200 OK."""
     return "OK"
+
+
+@app.route("/favicon.ico")
+def favicon():
+    """Return empty 204 so browsers stop falling through to catch_all."""
+    return "", 204
 
 
 @app.route("/<path:path>")
