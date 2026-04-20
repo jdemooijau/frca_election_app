@@ -1343,6 +1343,96 @@ def admin_paper_votes(election_id):
     )
 
 
+@app.route("/admin/election/<int:election_id>/next-round-explainer")
+@admin_required
+def admin_next_round_explainer(election_id):
+    """Large-type view for the chairman to show the meeting which names
+    remain to be voted on in the next round, and which printed names on
+    the paper ballot are already elected and must NOT be marked again."""
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+
+    current_round = election["current_round"]
+    offices = db.execute(
+        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
+        (election["id"],)
+    ).fetchall()
+
+    in_person, paper_bc, digital_bc = get_round_counts(election["id"], current_round)
+    postal_vc = (election["postal_voter_count"] or 0) if current_round == 1 else 0
+    participants = in_person + postal_vc
+    valid_votes = digital_bc + paper_bc + postal_vc
+
+    office_blocks = []
+    for office in offices:
+        candidates = db.execute(
+            "SELECT * FROM candidates WHERE office_id = ? AND active = 1 ORDER BY surname_sort_key(name)",
+            (office["id"],)
+        ).fetchall()
+
+        vacancies = office["vacancies"] or office["max_selections"]
+        t6a, t6b = (0, 0)
+        if participants > 0 and vacancies > 0:
+            t6a, t6b = calculate_thresholds(vacancies, valid_votes, participants)
+
+        cand_results = []
+        for cand in candidates:
+            digital = db.execute(
+                "SELECT COUNT(*) FROM votes WHERE candidate_id = ? AND round_number = ? AND election_id = ?",
+                (cand["id"], current_round, election["id"])
+            ).fetchone()[0]
+            paper = db.execute(
+                "SELECT COALESCE(SUM(count), 0) FROM paper_votes WHERE candidate_id = ? AND round_number = ? AND election_id = ?",
+                (cand["id"], current_round, election["id"])
+            ).fetchone()[0]
+            postal = 0
+            if current_round == 1:
+                postal = db.execute(
+                    "SELECT COALESCE(SUM(count), 0) FROM postal_votes WHERE candidate_id = ? AND election_id = ?",
+                    (cand["id"], election["id"])
+                ).fetchone()[0]
+            total = digital + paper + postal
+            p6a = p6b = False
+            if participants > 0 and vacancies > 0:
+                _, p6a, p6b = check_candidate_elected(total, t6a, t6b)
+            cand_results.append({
+                "name": cand["name"],
+                "total": total,
+                "passes_6a": p6a,
+                "passes_6b": p6b,
+                "elected": False,
+            })
+
+        resolve_elected_status(cand_results, vacancies)
+
+        elected_list = [c for c in cand_results if c["elected"]]
+        runoff_list = [c for c in cand_results if not c["elected"]]
+        remaining_vacancies = max(vacancies - len(elected_list), 0)
+
+        office_blocks.append({
+            "name": office["name"],
+            "vacancies": vacancies,
+            "remaining_vacancies": remaining_vacancies,
+            "elected": elected_list,
+            "runoff": runoff_list,
+            "runoff_needed": remaining_vacancies > 0 and len(runoff_list) > 0,
+        })
+
+    next_round_possible = current_round < election["max_rounds"]
+
+    return render_template(
+        "admin/next_round_explainer.html",
+        election=election,
+        office_blocks=office_blocks,
+        next_round_number=current_round + 1,
+        next_round_possible=next_round_possible,
+    )
+
+
 @app.route("/admin/election/<int:election_id>/next-round", methods=["POST"])
 @admin_required
 def admin_next_round(election_id):
@@ -2300,6 +2390,9 @@ def _build_display_data():
         votes_cast_for_office = sum(c["total"] for c in candidate_results)
         count_pass_6a = sum(1 for c in candidate_results if c["passes_6a"])
         count_pass_6b = sum(1 for c in candidate_results if c["passes_6b"])
+        elected_count = sum(1 for c in candidate_results if c["elected"])
+        remaining_vacancies = max(vacancies - elected_count, 0)
+        runoff_needed = remaining_vacancies > 0 and elected_count < len(candidate_results)
 
         results.append({
             "office_name": office["name"],
@@ -2312,6 +2405,9 @@ def _build_display_data():
             "threshold_6b": t6b,
             "count_pass_6a": count_pass_6a,
             "count_pass_6b": count_pass_6b,
+            "elected_count": elected_count,
+            "remaining_vacancies": remaining_vacancies,
+            "runoff_needed": runoff_needed,
         })
 
     in_person, paper_ballot_count, used_codes = get_round_counts(election["id"], current_round)
@@ -2398,6 +2494,7 @@ def api_display_data():
         "active": True,
         "election_name": election["name"],
         "current_round": current_round,
+        "max_rounds": election["max_rounds"],
         "voting_open": bool(election["voting_open"]),
         "show_results": bool(election["show_results"]),
         "display_phase": election["display_phase"] or 1,
@@ -2471,6 +2568,9 @@ def api_display_data():
             votes_cast_for_office = sum(c["total"] for c in candidate_results)
             count_pass_6a = sum(1 for c in candidate_results if c["passes_6a"])
             count_pass_6b = sum(1 for c in candidate_results if c["passes_6b"])
+            elected_count = sum(1 for c in candidate_results if c["elected"])
+            remaining_vacancies = max(vacancies - elected_count, 0)
+            runoff_needed = remaining_vacancies > 0 and elected_count < len(candidate_results)
 
             results.append({
                 "office_name": office["name"],
@@ -2482,6 +2582,9 @@ def api_display_data():
                 "threshold_6b": t6b,
                 "count_pass_6a": count_pass_6a,
                 "count_pass_6b": count_pass_6b,
+                "elected_count": elected_count,
+                "remaining_vacancies": remaining_vacancies,
+                "runoff_needed": runoff_needed,
             })
 
         data["results"] = results

@@ -368,11 +368,17 @@
     {% if not election.voting_open and election.current_round < election.max_rounds %}
     <div class="card">
         <div class="card-header">Start Next Round (Article 7)</div>
-        <p style="margin-bottom: 12px;">
+        <p style="margin-bottom: 8px;">
             Select the candidates to carry forward to round {{ election.current_round + 1 }}.
             Article 7: if insufficient candidates are elected, reduce the slate to twice the
             remaining vacancies by eliminating the lowest-polling candidates.
         </p>
+        <div style="margin: 0 0 14px;">
+            <a href="{{ url_for('admin_next_round_explainer', election_id=election.id) }}"
+               target="_blank" class="btn btn-outline btn-small">
+                Round {{ election.current_round + 1 }} Explainer (for the meeting)
+            </a>
+        </div>
         <form method="POST" action="{{ url_for('admin_next_round', election_id=election.id) }}"
               onsubmit="return confirm('Start round {{ election.current_round + 1 }}? This cannot be undone.');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

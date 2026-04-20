@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Round {{ next_round_number }} Explainer — {{ election.name }}{% endblock %}
+
+{% block head %}
+<style>
+    .explainer-wrap {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px;
+    }
+    .explainer-intro {
+        font-size: 22px;
+        line-height: 1.5;
+        background: #FFF4E5;
+        border-left: 6px solid #E67E22;
+        border-radius: 6px;
+        padding: 16px 22px;
+        margin-bottom: 24px;
+        color: #5C3300;
+    }
+    .explainer-intro strong { color: #8A4A00; }
+    .office-explainer {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 20px 28px;
+        margin-bottom: 24px;
+    }
+    .office-explainer h2 {
+        font-size: 36px;
+        color: var(--navy);
+        margin: 0 0 4px;
+        border-bottom: 3px solid var(--gold);
+        padding-bottom: 8px;
+    }
+    .vacancy-line {
+        font-size: 22px;
+        color: #555;
+        margin-bottom: 16px;
+    }
+    .vacancy-line .count {
+        color: var(--navy);
+        font-weight: 700;
+    }
+    .section-heading {
+        font-size: 22px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin: 16px 0 8px;
+    }
+    .section-heading.elected { color: var(--green); }
+    .section-heading.runoff  { color: #8A4A00; }
+    .section-hint {
+        font-size: 18px;
+        color: #666;
+        margin-bottom: 10px;
+        font-style: italic;
+    }
+    .name-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    .name-list li {
+        font-size: 26px;
+        padding: 6px 12px;
+        margin-bottom: 4px;
+        border-radius: 6px;
+    }
+    .name-list.elected li {
+        background: #E8F8EE;
+        color: #13532B;
+        text-decoration: line-through;
+    }
+    .name-list.runoff li {
+        background: #FFF8EE;
+        color: #222;
+        font-weight: 600;
+    }
+    .no-runoff {
+        padding: 20px;
+        background: #E8F8EE;
+        border-radius: 6px;
+        color: #13532B;
+        font-size: 20px;
+    }
+    .explainer-actions {
+        margin-top: 24px;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Round {{ next_round_number }} Explainer — {{ election.name }}</h1>
+    <a href="{{ url_for('admin_election_manage', election_id=election.id) }}">Back to Manage</a>
+</div>
+
+<div class="explainer-wrap">
+    {% if not next_round_possible %}
+    <div class="explainer-intro">
+        The maximum number of rounds has been reached — no further voting can be held.
+    </div>
+    {% else %}
+    <div class="explainer-intro">
+        <strong>Round {{ next_round_number }} — instructions for voters</strong><br>
+        Paper ballots list every candidate from the previous round. For each office below,
+        only vote for candidates listed under <strong>VOTE AGAIN</strong>. Candidates under
+        <strong>ALREADY ELECTED</strong> must not be marked again — if they are, those marks
+        are ignored.
+    </div>
+    {% endif %}
+
+    {% for office in office_blocks %}
+    <div class="office-explainer">
+        <h2>For {{ office.name }}</h2>
+
+        {% if office.runoff_needed %}
+        <div class="vacancy-line">
+            <span class="count">{{ office.remaining_vacancies }}</span> of {{ office.vacancies }} vacanc{{ 'y' if office.vacancies == 1 else 'ies' }} still to fill —
+            mark up to <span class="count">{{ office.remaining_vacancies }}</span> name{{ '' if office.remaining_vacancies == 1 else 's' }}.
+        </div>
+        {% else %}
+        <div class="vacancy-line">
+            All {{ office.vacancies }} vacanc{{ 'y is' if office.vacancies == 1 else 'ies are' }} filled.
+        </div>
+        {% endif %}
+
+        {% if office.elected %}
+        <div class="section-heading elected">Already Elected — do NOT mark again</div>
+        <div class="section-hint">Any marks next to these names on the round {{ next_round_number }} ballot will be ignored.</div>
+        <ul class="name-list elected">
+            {% for cand in office.elected %}
+            <li>Br. {{ cand.name }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if office.runoff_needed %}
+        <div class="section-heading runoff">Vote Again — these names only</div>
+        <ul class="name-list runoff">
+            {% for cand in office.runoff %}
+            <li>Br. {{ cand.name }}</li>
+            {% endfor %}
+        </ul>
+        {% elif not office.elected %}
+        <div class="no-runoff">No vote needed for this office — results stand.</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="explainer-actions">
+        <a href="{{ url_for('admin_election_manage', election_id=election.id) }}" class="btn btn-outline">
+            Back to Manage
+        </a>
+    </div>
+</div>
+{% endblock %}
