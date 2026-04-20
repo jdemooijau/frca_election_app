@@ -19,7 +19,7 @@ import hashlib
 import time
 from datetime import datetime
 from functools import wraps
-from collections import defaultdict, deque
+from collections import deque
 
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
@@ -2340,7 +2340,11 @@ def _build_display_data():
     vote_url = get_setting("voting_base_url", "http://192.168.8.100:5000")
 
     do_not_mark = [
-        {"office_name": r["office_name"], "names": r["inactive_names"]}
+        {
+            "office_name": r["office_name"],
+            "names": r["inactive_names"],
+            "all_inactive": len(r["candidates"]) == 0,
+        }
         for r in results if r["inactive_names"]
     ]
 
@@ -2445,10 +2449,15 @@ def api_display_data():
                 "SELECT name FROM candidates WHERE office_id = ? AND active = 0 ORDER BY surname_sort_key(name)",
                 (office["id"],)
             ).fetchall()
+            active_count = db.execute(
+                "SELECT COUNT(*) FROM candidates WHERE office_id = ? AND active = 1",
+                (office["id"],)
+            ).fetchone()[0]
             if inactive_rows:
                 do_not_mark.append({
                     "office_name": office["name"],
                     "names": [r["name"] for r in inactive_rows],
+                    "all_inactive": active_count == 0,
                 })
     data["do_not_mark"] = do_not_mark
 
