@@ -558,7 +558,14 @@ def admin_logout():
 @app.route("/admin/setup", methods=["GET", "POST"])
 @admin_required
 def admin_setup():
-    """First-run setup wizard — congregation config and password change."""
+    """Settings — congregation config; doubles as the first-run wizard.
+
+    On first run (setup_complete != "1") the admin password fields are
+    required. Once setup is complete, the password fields become optional
+    — leaving them blank keeps the existing password.
+    """
+    setup_complete = get_setting("setup_complete", "0") == "1"
+
     if request.method == "POST":
         congregation_name = request.form.get("congregation_name", "").strip()
         congregation_short = request.form.get("congregation_short", "").strip()
@@ -570,28 +577,56 @@ def admin_setup():
 
         if not congregation_name:
             flash("Congregation name is required.", "error")
-            return render_template("admin/setup.html")
+            return _render_setup_form()
 
-        if not new_password or len(new_password) < 6:
-            flash("Please set a new admin password (at least 6 characters).", "error")
-            return render_template("admin/setup.html")
-
-        if new_password != confirm_password:
-            flash("Passwords do not match.", "error")
-            return render_template("admin/setup.html")
+        # Password handling:
+        #   first-run: required and >= 6 chars
+        #   later edits: only validate / update if a new password was typed
+        if setup_complete and not new_password and not confirm_password:
+            password_to_save = None
+        else:
+            if not new_password or len(new_password) < 6:
+                flash(
+                    "Please set a new admin password (at least 6 characters)."
+                    if not setup_complete
+                    else "New password must be at least 6 characters, or leave both fields blank to keep the existing password.",
+                    "error"
+                )
+                return _render_setup_form()
+            if new_password != confirm_password:
+                flash("Passwords do not match.", "error")
+                return _render_setup_form()
+            password_to_save = new_password
 
         set_setting("congregation_name", congregation_name)
         set_setting("congregation_short", congregation_short or congregation_name)
         set_setting("wifi_ssid", wifi_ssid or "ChurchVote")
         set_setting("wifi_password", wifi_password)
         set_setting("voting_base_url", voting_base_url or "http://192.168.8.100:5000")
-        set_setting("admin_password", new_password)
+        if password_to_save is not None:
+            set_setting("admin_password", password_to_save)
         set_setting("setup_complete", "1")
 
-        flash("Setup complete. Welcome.", "success")
+        flash(
+            "Settings saved." if setup_complete else "Setup complete. Welcome.",
+            "success"
+        )
         return redirect(url_for("admin_dashboard"))
 
-    return render_template("admin/setup.html")
+    return _render_setup_form()
+
+
+def _render_setup_form():
+    """Render setup.html with current settings pre-filled."""
+    return render_template(
+        "admin/setup.html",
+        setup_complete=get_setting("setup_complete", "0") == "1",
+        congregation_name=get_setting("congregation_name", ""),
+        congregation_short=get_setting("congregation_short", ""),
+        wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
+        wifi_password=get_setting("wifi_password", ""),
+        voting_base_url=get_setting("voting_base_url", "http://192.168.8.100:5000"),
+    )
 
 
 @app.route("/admin")

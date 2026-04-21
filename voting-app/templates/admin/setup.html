@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Setup — Office Bearer Election{% endblock %}
+{% block title %}{{ 'Settings' if setup_complete else 'Setup' }} — Office Bearer Election{% endblock %}
 
 {% block content %}
 <div class="header">
-    <h1>Congregation Setup</h1>
-    <div class="subtitle">Configure the app for your congregation</div>
+    <h1>{{ 'Settings' if setup_complete else 'Congregation Setup' }}</h1>
+    <div class="subtitle">{{ 'Update app configuration' if setup_complete else 'Configure the app for your congregation' }}</div>
 </div>
 
 <div class="container">
@@ -64,20 +64,27 @@
         </div>
 
         <div class="form-group">
-            <label for="new_password">New Admin Password</label>
-            <input type="password" id="new_password" name="new_password" required
-                   placeholder="At least 6 characters"
+            <label for="new_password">{{ 'Change Admin Password' if setup_complete else 'New Admin Password' }}</label>
+            <input type="password" id="new_password" name="new_password"
+                   {% if not setup_complete %}required{% endif %}
+                   placeholder="{{ 'Leave blank to keep current password' if setup_complete else 'At least 6 characters' }}"
                    autocomplete="new-password">
+            {% if setup_complete %}
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                Leave both password fields blank to keep the current admin password.
+            </p>
+            {% endif %}
         </div>
 
         <div class="form-group">
             <label for="confirm_password">Confirm Password</label>
-            <input type="password" id="confirm_password" name="confirm_password" required
-                   placeholder="Repeat the password"
+            <input type="password" id="confirm_password" name="confirm_password"
+                   {% if not setup_complete %}required{% endif %}
+                   placeholder="{{ 'Repeat the new password' if setup_complete else 'Repeat the password' }}"
                    autocomplete="new-password">
         </div>
 
-        <button type="submit" class="btn btn-primary">Save and Continue</button>
+        <button type="submit" class="btn btn-primary">{{ 'Save Changes' if setup_complete else 'Save and Continue' }}</button>
     </form>
 </div>
 {% endblock %}
