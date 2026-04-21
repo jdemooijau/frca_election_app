@@ -129,9 +129,19 @@
     <span class="display-status closed">CLOSED</span>
 </div>
 
+{% set total_elected = elected_by_office | sum(attribute='names', start=[]) | length %}
+{% set total_vacancies = elected_by_office | sum(attribute='original_vacancies') %}
 <div class="display-main" style="justify-content: flex-start;">
     <h1 class="final-title">Final Results</h1>
-    <div class="final-subtitle">The following brothers have been duly elected</div>
+    <div class="final-subtitle">
+        {% if total_elected == 0 %}
+        No candidate met the required thresholds — no appointments to make
+        {% elif total_elected < total_vacancies %}
+        The following brothers have been duly elected — some vacancies remain unfilled
+        {% else %}
+        The following brothers have been duly elected
+        {% endif %}
+    </div>
 
     <div class="final-offices">
         {% for office in elected_by_office %}
@@ -156,8 +166,14 @@
     </div>
 
     <p class="final-note">
+        {% if total_elected == 0 %}
+        No appointments will be made from this election. The church council
+        will determine next steps in accordance with the Rules for the
+        Election of Office Bearers.
+        {% else %}
         Appointed in accordance with Article 6 of the Rules for the Election of Office Bearers.
-        The church council will formally appoint the elected brothers at its next meeting (Article 8).
+        The church council will formally appoint the elected brother{{ '' if total_elected == 1 else 's' }} at its next meeting (Article 8).
+        {% endif %}
     </p>
 </div>
 {% endblock %}
