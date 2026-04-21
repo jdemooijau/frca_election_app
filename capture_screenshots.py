@@ -173,11 +173,18 @@ def _capture_all():
 
         # 7. Codes tab - generate codes and CAPTURE them from page
         print("7. Code generation")
+        # Codes now auto-generate on first visit to the Codes page when
+        # offices exist — no manual 'Generate' button to click in the
+        # common case. The freshly generated codes still render under
+        # 'Generated Codes' in the same layout.
         page.click('a:has-text("Codes")')
         page.wait_for_load_state("networkidle")
-        page.fill('input[name="count"]', '50')
-        page.click('button:has-text("Generate")')
-        page.wait_for_load_state("networkidle")
+        # If the manual form is showing (e.g. no offices), fill and submit
+        manual = page.locator('input[name="count"]')
+        if manual.count() > 0:
+            manual.fill('50')
+            page.click('button:has-text("Generate")')
+            page.wait_for_load_state("networkidle")
         shot(page, "10_codes_generated")
 
         # Extract plaintext codes from the generated codes section
@@ -191,13 +198,41 @@ def _capture_all():
 
         # 8. Manage tab
         print("8. Manage tab (before voting)")
-        page.click('a:has-text("Manage")')
+        page.click('a:text-is("Manage")')
         page.wait_for_load_state("networkidle")
         shot(page, "11_manage_before_voting")
 
-        # Open voting
-        page.click('button:has-text("Open Voting")')
-        page.wait_for_load_state("networkidle")
+        # Phase 2 (Opening) is the active card on a fresh election. Set
+        # the attendance count, then walk Welcome -> Rules -> Open Voting.
+        page.on("dialog", lambda d: d.accept())
+
+        pi = page.locator('#participants')
+        if pi.count() > 0:
+            pi.fill('35')
+            page.locator('form[action*="/participants"] button:has-text("Save")').first.click()
+            page.wait_for_load_state("networkidle")
+            print("  -> attendance set")
+
+        next_rules = page.locator('button:has-text("Next: Election Rules")')
+        if next_rules.count() > 0:
+            next_rules.click()
+            page.wait_for_load_state("networkidle")
+            print("  -> advanced to Election Rules")
+
+        next_open = page.locator('button:has-text("Next: Open Voting")')
+        if next_open.count() > 0:
+            next_open.click()
+            page.wait_for_load_state("networkidle")
+            print("  -> opened voting")
+        else:
+            # Fallback: open via the Phase 3 form (when display_phase already 3)
+            ov = page.locator('button:has-text("Open Voting")').first
+            if ov.count() > 0:
+                ov.click()
+                page.wait_for_load_state("networkidle")
+                print("  -> opened voting via fallback")
+            else:
+                print("  !! could not find an 'Open Voting' button — voting may not be open")
         shot(page, "12_manage_voting_open")
 
         # 9. Voter enter code (mobile)
@@ -260,7 +295,7 @@ def _capture_all():
         print("13. Manage with votes")
         page.goto(f"{BASE}/admin")
         page.wait_for_load_state("networkidle")
-        page.click('a:has-text("Manage")')
+        page.click('a:text-is("Manage")')
         page.wait_for_load_state("networkidle")
         shot(page, "18_manage_votes_live")
 
@@ -269,17 +304,13 @@ def _capture_all():
         page.click('button:has-text("Close Voting")')
         page.wait_for_load_state("networkidle")
 
-        # Set participants
-        pi = page.locator('#participants')
-        if pi.count() > 0:
-            pi.fill('35')
-            page.locator('button:has-text("Save")').first.click()
-            page.wait_for_load_state("networkidle")
-
         shot(page, "19_manage_results_closed")
 
-        # Show results on projector
-        show_btn = page.locator('button:has-text("Show Results on Projector")')
+        # Show results on projector — pick the visible button (Phase 4 is
+        # active after Close Voting; Phase 3 is collapsed and hidden).
+        show_btn = page.locator(
+            'button:visible:has-text("Show Results on Projector")'
+        ).first
         if show_btn.count() > 0:
             show_btn.click()
             page.wait_for_load_state("networkidle")
