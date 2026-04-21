@@ -640,8 +640,17 @@
         </div>
     </div>
 
+    <!-- Persistent diagnostic links — visible regardless of which phase is open -->
+    <div style="margin: 20px 0 8px; padding: 10px 14px; background: var(--grey-light); border-radius: 6px; font-size: 13px;">
+        <strong>Diagnostics:</strong>
+        <a href="{{ url_for('admin_voter_log', election_id=election.id) }}" style="margin-left: 8px;">
+            Voter audit log
+        </a>
+        <span style="color: #999; margin-left: 8px;">— every voter-route hit with its result</span>
+    </div>
+
     <!-- Advanced Actions (hidden by default) -->
-    <details style="margin: 24px 0 16px;">
+    <details style="margin: 8px 0 16px;">
         <summary style="cursor: pointer; font-weight: 600; color: var(--grey-dark); padding: 12px 0;">
             Advanced Actions (reset)
         </summary>

@@ -1956,15 +1956,10 @@ def admin_wipe_database():
 # ---------------------------------------------------------------------------
 
 DEMO_SETTINGS = {
-    "congregation_name": "Free Reformed Church of Darling Downs",
-    "congregation_short": "FRC Darling Downs",
-    "wifi_ssid": "ChurchVote",
-    "wifi_password": "",
-    # voting_base_url intentionally NOT in DEMO_SETTINGS — the chairman
-    # configures it for their venue and we must not overwrite it on a
-    # 'Load Demo' click.
+    # Load-demo must not touch the chairman's congregation name, WiFi,
+    # voting_base_url, or admin password. Only the is_demo flag is set
+    # so other code knows we're in demo mode.
     "is_demo": "1",
-    "setup_complete": "1",
 }
 
 ELECTION_DATA_TABLES = [
