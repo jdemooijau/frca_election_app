@@ -89,31 +89,49 @@
     <div class="rules-layout">
         <!-- Left column: Candidate list -->
         <div class="rules-column">
+            {% if election.current_round > 1 %}
+            <h2>Remaining Candidates — Round {{ election.current_round }}</h2>
+            {% else %}
             <h2>Slate / Candidate List</h2>
+            {% endif %}
             {% for item in results %}
             <div class="candidate-office">
                 <h3>{{ item.office_name }}
                     <span style="font-size: 22px; font-weight: 400; color: #666;">
+                        {% if item.max_selections > 0 %}
                         — select {{ item.max_selections }}
+                        {% else %}
+                        — all vacancies filled
+                        {% endif %}
                     </span>
                 </h3>
+                {% if item.candidates %}
                 <ul class="candidate-list">
                     {% for cand in item.candidates %}
                     <li>Br. {{ cand.name }}</li>
                     {% endfor %}
                 </ul>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
 
-        <!-- Right column: Articles 4, 6, 12 -->
+        <!-- Right column: Articles -->
         <div class="rules-column">
             <h2>Election Rules</h2>
 
+            {% if election.current_round > 1 %}
+            <div class="article-block">
+                <h3>Article 7 — Subsequent Rounds</h3>
+                <p>If, after voting, the number of candidates elected is insufficient to fill the vacancies, an additional ballot will be held between those candidates who did not receive a sufficient number of votes.</p>
+                <p>If, in any subsequent ballot, no additional candidate is elected, the number of candidates from which a choice is to be made shall be reduced to twice the number of vacancies remaining to be filled by eliminating those candidates who gained the least votes.</p>
+            </div>
+            {% else %}
             <div class="article-block">
                 <h3>Article 4</h3>
                 <p>At this meeting all male communicant members present must sign the attendance register.</p>
             </div>
+            {% endif %}
 
             <div class="article-block">
                 <h3>Article 6</h3>
