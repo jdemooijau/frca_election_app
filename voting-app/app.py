@@ -769,22 +769,48 @@ def admin_codes(election_id):
 
     generated_codes = None
 
-    if request.method == "POST":
-        count = int(request.form.get("count", 100))
+    # Smart default: (member count + 10) * max_rounds
+    member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+    per_round = member_count + 10 if member_count > 0 else 100
+    default_count = per_round * election["max_rounds"]
 
+    existing_codes_count = db.execute(
+        "SELECT COUNT(*) FROM codes WHERE election_id = ?",
+        (election_id,)
+    ).fetchone()[0]
+
+    if request.method == "POST":
+        # Manual regeneration request (e.g. wrong count, need fresh slips)
+        count = int(request.form.get("count", default_count))
         if count < 1 or count > 999:
             flash("Code count must be between 1 and 999.", "error")
+        elif existing_codes_count > 0:
+            flash(
+                f"Codes already exist ({existing_codes_count} codes). "
+                "Delete them first to regenerate.",
+                "error"
+            )
         else:
-            existing = db.execute(
-                "SELECT COUNT(*) FROM codes WHERE election_id = ?",
-                (election_id,)
-            ).fetchone()[0]
-            if existing > 0:
-                flash(f"Codes already generated ({existing} codes). Delete them first to regenerate.", "error")
-            else:
-                codes = generate_codes(election_id, count)
-                generated_codes = codes
-                flash(f"Generated {len(codes)} voting codes.", "success")
+            generated_codes = generate_codes(election_id, count)
+            flash(f"Generated {len(generated_codes)} voting codes.", "success")
+            existing_codes_count = len(generated_codes)
+    elif existing_codes_count == 0:
+        # Auto-generate on first visit once offices have been set up. The
+        # chairman lands here right after the Offices & Candidates page in
+        # the dashboard flow, so this is the natural moment to mint codes.
+        offices_exist = db.execute(
+            "SELECT 1 FROM offices WHERE election_id = ? LIMIT 1",
+            (election_id,)
+        ).fetchone() is not None
+        if offices_exist:
+            generated_codes = generate_codes(election_id, default_count)
+            flash(
+                f"Auto-generated {len(generated_codes)} voting codes "
+                f"({member_count} members × {election['max_rounds']} rounds + spares). "
+                "Print the code slips next.",
+                "success"
+            )
+            existing_codes_count = len(generated_codes)
 
     # Code stats
     stats = db.execute(
@@ -795,11 +821,6 @@ def admin_codes(election_id):
     ).fetchone()
     total_codes = stats["total"]
     used_codes = stats["used"] or 0
-
-    # Smart default: (member count + 10) * max_rounds
-    member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
-    per_round = member_count + 10 if member_count > 0 else 100
-    default_count = per_round * election["max_rounds"]
 
     return render_template(
         "admin/codes.html",

@@ -43,13 +43,13 @@
     </div>
 
     {% if total_codes == 0 %}
-    <!-- Generate codes -->
+    <!-- Generate codes — only reached if auto-generation couldn't run (no offices set up yet) -->
     <div class="card">
         <div class="card-header">Generate Codes</div>
         <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
-            Generate enough codes for all brothers across all rounds.
-            Each brother needs a fresh code per round.
-            Split the printed slips into separate stacks for each round.
+            No codes yet. Codes are normally created automatically the first
+            time you visit this page after setting up offices. Use the form
+            below to generate manually.
         </p>
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
