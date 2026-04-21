@@ -158,8 +158,8 @@
             </span>
         </div>
         {% set remaining = participants - total_ballots %}
-        <div class="display-vote-waiting" id="waiting-container" style="{{ 'display:none' if remaining <= 0 else '' }}">
-            <span class="big-number" id="waiting-count" style="color: {{ 'var(--green)' if remaining <= 0 else 'var(--red)' }};">{{ remaining if remaining > 0 else 0 }}</span>
+        <div class="display-vote-waiting" id="waiting-container">
+            <span class="big-number" id="waiting-count" style="color: {{ 'var(--green)' if remaining <= 0 else 'var(--red)' }};">{{ '✓' if remaining <= 0 else remaining }}</span>
             <span class="big-label" id="waiting-label">{{ 'all votes in' if remaining <= 0 else 'still to vote' }}</span>
         </div>
         <div class="display-vote-progress">
@@ -454,13 +454,12 @@
                     wc.textContent = remaining;
                     wc.style.color = 'var(--red)';
                     wl.textContent = 'still to vote';
-                    wcont.style.display = '';
                 } else {
-                    wc.textContent = '0';
+                    wc.textContent = '✓';
                     wc.style.color = 'var(--green)';
                     wl.textContent = 'all votes in';
-                    wcont.style.display = '';
                 }
+                wcont.style.display = '';
             }
 
             var rb = document.getElementById('round-badge');
