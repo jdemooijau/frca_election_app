@@ -1069,10 +1069,17 @@ def admin_set_display_phase(election_id):
         flash(f"Voting opened for round {election['current_round']}. Projector now showing voting display.", "success")
     else:
         # Going back from phase 3 does NOT close voting — that's a separate action
-        db.execute(
-            "UPDATE elections SET display_phase = ? WHERE id = ?",
-            (new_phase, election_id)
-        )
+        if new_phase == 4:
+            # Always start Final Results on the clean summary view
+            db.execute(
+                "UPDATE elections SET display_phase = 4, show_results = 0 WHERE id = ?",
+                (election_id,)
+            )
+        else:
+            db.execute(
+                "UPDATE elections SET display_phase = ? WHERE id = ?",
+                (new_phase, election_id)
+            )
         db.commit()
         phase_names = {1: "Welcome", 2: "Election Rules", 3: "Voting", 4: "Final Results"}
         flash(f"Projector display: {phase_names[new_phase]}", "success")
@@ -2345,7 +2352,44 @@ def voter_validate_code():
                         "Form submit while voting closed")
         return redirect(url_for("voter_enter_code"))
 
+    is_demo = get_setting("is_demo", "0") == "1"
+
+    def _assign_fresh_demo_code(reason):
+        # Retry loop: concurrent requests may race on the same first unused code.
+        # Each attempt: select a candidate, then atomically claim it with
+        # UPDATE … WHERE used = 0.  If rowcount == 0 someone else grabbed it
+        # first — loop and try the next available code.
+        for _ in range(20):
+            row = db.execute(
+                "SELECT id, code_hash FROM codes WHERE election_id = ? AND used = 0 "
+                "ORDER BY id LIMIT 1",
+                (election["id"],),
+            ).fetchone()
+            if not row:
+                flash("All demo codes have been used.", "error")
+                log_voter_audit(eid, code or None, "rejected_demo_pool_empty",
+                                reason, round_number=rnd)
+                return redirect(url_for("voter_enter_code"))
+            result = db.execute(
+                "UPDATE codes SET used = 1 WHERE id = ? AND used = 0",
+                (row["id"],),
+            )
+            db.commit()
+            if result.rowcount == 0:
+                continue  # Lost the race — try the next available code
+            session["code_hash"] = row["code_hash"]
+            session["election_id"] = election["id"]
+            session["used_code"] = f"(demo-{row['id']})"
+            session["demo_pre_burned"] = True
+            log_voter_audit(eid, f"(demo-{row['id']})", "code_accepted",
+                            f"Demo auto-assign ({reason})", round_number=rnd)
+            return redirect(url_for("voter_ballot"))
+        flash("All demo codes have been used.", "error")
+        return redirect(url_for("voter_enter_code"))
+
     if not code or len(code) != CODE_LENGTH:
+        if is_demo:
+            return _assign_fresh_demo_code("invalid format")
         flash("Please enter a valid 6-character code.", "error")
         log_voter_audit(eid, code or None, "rejected_invalid_format",
                         f"Form submit length {len(code)}", round_number=rnd)
@@ -2358,12 +2402,16 @@ def voter_validate_code():
     ).fetchone()
 
     if not code_row:
+        if is_demo:
+            return _assign_fresh_demo_code("unknown code")
         flash("Invalid code. Please check and try again.", "error")
         log_voter_audit(eid, code, "rejected_unknown_code",
                         "Form submit code not in DB", round_number=rnd)
         return redirect(url_for("voter_enter_code"))
 
     if code_row["used"]:
+        if is_demo:
+            return _assign_fresh_demo_code("already used")
         flash("This code has already been used.", "error")
         log_voter_audit(eid, code, "rejected_already_used",
                         "Form submit code already burned", round_number=rnd)
@@ -2402,11 +2450,18 @@ def voter_ballot():
         flash("Voting is no longer open.", "error")
         return redirect(url_for("voter_enter_code"))
 
-    # Double check code is still valid
-    code_row = db.execute(
-        "SELECT * FROM codes WHERE code_hash = ? AND used = 0",
-        (code_h,)
-    ).fetchone()
+    # Double check code is still valid.
+    # Demo pre-burned codes are already used=1, so skip that constraint.
+    if session.get("demo_pre_burned"):
+        code_row = db.execute(
+            "SELECT * FROM codes WHERE code_hash = ?",
+            (code_h,)
+        ).fetchone()
+    else:
+        code_row = db.execute(
+            "SELECT * FROM codes WHERE code_hash = ? AND used = 0",
+            (code_h,)
+        ).fetchone()
     if not code_row:
         session.pop("code_hash", None)
         session.pop("election_id", None)
@@ -2526,24 +2581,26 @@ def voter_submit():
 
     # Atomic transaction: burn code + record votes
     try:
-        # Burn the code
-        result = db.execute(
-            "UPDATE codes SET used = 1 WHERE code_hash = ? AND used = 0",
-            (code_h,)
-        )
-        if result.rowcount == 0:
-            # Code was already used (race condition)
-            db.rollback()
-            session.pop("code_hash", None)
-            session.pop("election_id", None)
-            session.pop("used_code", None)
-            flash("This code has already been used.", "error")
-            log_voter_audit(
-                election_id, code_for_log, "rejected_already_used_at_submit",
-                "Submit reached burn step but code was already used (race)",
-                round_number=election["current_round"]
+        # Burn the code — demo codes are pre-burned at assignment, skip re-burn
+        demo_pre_burned = session.pop("demo_pre_burned", False)
+        if not demo_pre_burned:
+            result = db.execute(
+                "UPDATE codes SET used = 1 WHERE code_hash = ? AND used = 0",
+                (code_h,)
             )
-            return redirect(url_for("voter_enter_code"))
+            if result.rowcount == 0:
+                # Code was already used (race condition)
+                db.rollback()
+                session.pop("code_hash", None)
+                session.pop("election_id", None)
+                session.pop("used_code", None)
+                flash("This code has already been used.", "error")
+                log_voter_audit(
+                    election_id, code_for_log, "rejected_already_used_at_submit",
+                    "Submit reached burn step but code was already used (race)",
+                    round_number=election["current_round"]
+                )
+                return redirect(url_for("voter_enter_code"))
 
         # Record votes — NO link to the code
         for cand_id in selected_candidates:
@@ -2793,10 +2850,10 @@ def display():
     elif phase == 2:
         return render_template("display/rules.html", **ctx)
     elif phase == 4:
-        # Explicit chairman-triggered final view
+        if election["show_results"]:
+            return render_template("display/projector.html", **ctx)
         return render_template("display/final.html", **ctx)
     elif ctx.get("election_complete") and not election["voting_open"]:
-        # Auto-detect complete state
         return render_template("display/final.html", **ctx)
     else:
         return render_template("display/projector.html", **ctx)
@@ -2809,6 +2866,8 @@ def display_phone():
         return render_template("display/waiting.html")
     phase = election["display_phase"] or 1
     if phase == 4:
+        if election["show_results"]:
+            return render_template("display/phone.html", **ctx)
         return render_template("display/final.html", **ctx)
     if ctx.get("election_complete") and not election["voting_open"]:
         return render_template("display/final.html", **ctx)

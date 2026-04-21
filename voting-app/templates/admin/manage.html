@@ -626,7 +626,17 @@
                     <button type="submit" class="btn btn-gold primary-cta">Show Final Results on Projector</button>
                 </form>
                 {% else %}
-                <span style="color: #555; font-size: 14px;">Projector and phone showing Final Results.</span>
+                <span style="color: #555; font-size: 14px;">
+                    Projector showing: <strong>{% if election.show_results %}Vote Details{% else %}Final Summary{% endif %}</strong>
+                </span>
+                <form method="POST" action="{{ url_for('admin_toggle_results', election_id=election.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if election.show_results %}
+                    <button type="submit" class="btn btn-outline btn-small">Show Final Summary</button>
+                    {% else %}
+                    <button type="submit" class="btn btn-gold btn-small">Show Vote Details</button>
+                    {% endif %}
+                </form>
                 <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="target" value="3">

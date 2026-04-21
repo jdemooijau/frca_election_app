@@ -47,9 +47,10 @@ DEMO_SETTINGS = {
     "congregation_short": "FRC Darling Downs",
     "wifi_ssid": "ChurchVote",
     "wifi_password": "",
-    "voting_base_url": "http://192.168.8.100:5000",
+    "voting_base_url": "http://church.vote",
     "is_demo": "1",
     "setup_complete": "1",
+    "admin_password": "admin",
 }
 
 ELECTION_DATA_TABLES = [
@@ -329,23 +330,13 @@ def main():
     logger.info(f"  Code slips PDF: {code_slips_path}")
     logger.info(f"  Paper ballot PDF: {ballot_path}")
 
-    # Set participant count for round 1
-    conn.execute(
-        "INSERT OR REPLACE INTO round_counts "
-        "(election_id, round_number, participants, paper_ballot_count, digital_ballot_count) "
-        "VALUES (?, 1, ?, 0, 0)",
-        (election_id, code_count),
-    )
+    # Keep elections.participants for PDF generation, but leave round_counts
+    # unset — the load test admin flow sets the real attendance figure.
     conn.execute(
         "UPDATE elections SET participants = ? WHERE id = ?",
         (code_count, election_id),
     )
     conn.commit()
-    logger.info(f"  Set participants: {code_count}")
-
-    # Open round 1 voting
-    _open_round1_voting(conn, election_id)
-    logger.info("  Opened round 1 voting")
 
     conn.close()
 
@@ -357,10 +348,11 @@ def main():
         print(f"  [OK] Backup: {backup_path}")
     print(f"  [OK] Election: {election_name}")
     print(f"  [OK] Offices: Elder (3 vacancies, 6 candidates), Deacon (2 vacancies, 4 candidates)")
+    print(f"  [OK] Admin password reset to: admin")
     print(f"  [OK] Voting codes: {len(codes)}")
     print(f"  [OK] Code slips: {code_slips_path}")
     print(f"  [OK] Paper ballot: {ballot_path}")
-    print(f"  [OK] Round 1 voting: OPEN")
+    print(f"  [--] Round 1 voting: PENDING  (load_test will open via admin flow)")
     print()
     print("Start the app with: python app.py")
 

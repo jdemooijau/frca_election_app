@@ -1,29 +1,36 @@
 """
-Load test: simulate voters hitting a running FRCA election server.
+Full election mass test: exercises the complete chairman workflow then simulates
+concurrent digital voters, postal votes, and paper ballot tallies.
 
-Casts votes through the real HTTP flow (/vote -> /ballot -> /submit) so
-results appear live on the /display page.  Requires demo mode enabled.
+Flow:
+  [Admin]  login → enter postal votes → set attendance → display 1→2 (Rules)
+           → display 2→3 (Voting — opens voting automatically)
+  [Voters] N digital voters cast ballots concurrently
+  [Admin]  close voting → set paper ballot count → enter paper vote tallies
+           → print final summary
 
 Usage:
-    # 1. Seed a demo election with enough codes
+    # 1. Seed a demo election (leaves voting closed)
     python scripts/seed_demo.py --codes 100
 
     # 2. Start the server
-    python app.py
+    python -m waitress --host=0.0.0.0 --port=5000 app:app
 
-    # 3. In another terminal, run the load test
-    python scripts/load_test.py                        # 95 voters, 0.2s delay
-    python scripts/load_test.py --voters 100           # 100 voters
-    python scripts/load_test.py --delay 2              # slow — watch /display live
-    python scripts/load_test.py --delay 0              # burst mode (no delay)
-    python scripts/load_test.py --url http://10.0.0.5:5000  # custom server
+    # 3. Run the mass test
+    python scripts/load_test.py                          # defaults
+    python scripts/load_test.py --voters 95 --workers 8 # tune concurrency
+    python scripts/load_test.py --postal 5 --paper 8    # with postal+paper
+    python scripts/load_test.py --url http://10.0.0.5:5000  # remote server
 """
 
 import argparse
+import os
 import random
 import re
 import sys
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import requests
@@ -52,15 +59,12 @@ def extract_ballot(html):
     offices = []
     blocks = re.split(r'<div class="ballot-office">', html)[1:]
     for block in blocks:
-        # Office name
         name_match = re.search(r'<h2 class="ballot-office-title">([^<]+)</h2>', block)
         office_name = name_match.group(1).strip() if name_match else "?"
 
-        # Max selections
-        max_match = re.search(r'Select up to (\d+)', block)
+        max_match = re.search(r'\(select\s+(\d+)\)', block, re.IGNORECASE)
         max_sel = int(max_match.group(1)) if max_match else 1
 
-        # Candidates: field name, id, display name
         field_ids = re.findall(r'name="(office_\d+)"\s+value="(\d+)"', block)
         names = re.findall(r'class="ballot-option-text">([^<]+)<', block)
 
@@ -76,6 +80,26 @@ def extract_ballot(html):
                 "office_name": office_name,
                 "candidates": candidates,
             })
+    return offices
+
+
+def parse_vote_form_candidates(html, prefix):
+    """Parse candidate IDs, names, and max_selections from a postal/paper admin page.
+
+    Returns list of {office_name, max_selections, candidates: [{id (int), name}]}.
+    """
+    offices = []
+    for card in re.split(r'<div class="card"', html)[1:]:
+        max_match = re.search(r'data-max="(\d+)"', card)
+        max_sel = int(max_match.group(1)) if max_match else 1
+        header = re.search(r'<div class="card-header">([^<]+)</div>', card)
+        office_name = header.group(1).strip() if header else "?"
+        pairs = re.findall(
+            rf'<label for="{prefix}_(\d+)">([^<]+)</label>', card
+        )
+        candidates = [{"id": int(cid), "name": name.strip()} for cid, name in pairs]
+        if candidates:
+            offices.append({"office_name": office_name, "max_selections": max_sel, "candidates": candidates})
     return offices
 
 
@@ -103,20 +127,162 @@ def weighted_sample(items, weights, k):
 
 
 # ---------------------------------------------------------------------------
+# Vote distribution helper (for postal/paper ballots)
+# ---------------------------------------------------------------------------
+
+def simulate_offline_votes(offices, n_voters):
+    """Simulate n_voters casting up to max_selections votes per office.
+
+    Returns {cand_id (int): count}.
+    """
+    counts = {}
+    for office in offices:
+        for c in office["candidates"]:
+            counts[c["id"]] = 0
+    for _ in range(n_voters):
+        for office in offices:
+            cands = office["candidates"]
+            if not cands:
+                continue
+            max_sel = office.get("max_selections", 1)
+            k = min(random.randint(1, max_sel), len(cands))
+            for pick in random.sample(cands, k):
+                counts[pick["id"]] += 1
+    return counts
+
+
+# ---------------------------------------------------------------------------
+# Admin HTTP helpers
+# ---------------------------------------------------------------------------
+
+def _admin_get(session, url):
+    """GET url, return (response, csrf_token)."""
+    resp = session.get(url, timeout=10)
+    return resp, extract_csrf_token(resp.text)
+
+
+def admin_login(session, base_url, password):
+    resp, csrf = _admin_get(session, f"{base_url}/admin/login")
+    if not csrf:
+        raise RuntimeError("No CSRF token on /admin/login")
+    resp = session.post(
+        f"{base_url}/admin/login",
+        data={"csrf_token": csrf, "password": password},
+        allow_redirects=True,
+        timeout=10,
+    )
+    if "Incorrect" in resp.text or "/admin/login" in resp.url:
+        raise RuntimeError("Admin login failed — wrong password?")
+
+
+def get_election_id(session, base_url):
+    resp = session.get(f"{base_url}/admin", allow_redirects=True, timeout=10)
+    match = re.search(r'/admin/election/(\d+)', resp.text)
+    if not match:
+        raise RuntimeError("No election found on admin dashboard — run seed_demo first")
+    return int(match.group(1))
+
+
+def admin_enter_postal_votes(session, base_url, election_id, postal_count):
+    resp, csrf = _admin_get(
+        session, f"{base_url}/admin/election/{election_id}/postal-votes"
+    )
+    offices = parse_vote_form_candidates(resp.text, "postal")
+    if not offices:
+        return False, "Could not parse candidates from postal-votes page"
+
+    vote_counts = simulate_offline_votes(offices, postal_count)
+    form_data = {"csrf_token": csrf, "postal_voter_count": postal_count}
+    for cid, count in vote_counts.items():
+        form_data[f"postal_{cid}"] = count
+
+    resp = session.post(
+        f"{base_url}/admin/election/{election_id}/postal-votes",
+        data=form_data,
+        allow_redirects=True,
+        timeout=10,
+    )
+    return "saved" in resp.text.lower(), ""
+
+
+def admin_set_participants(session, base_url, election_id, participants):
+    _, csrf = _admin_get(
+        session, f"{base_url}/admin/election/{election_id}/manage"
+    )
+    session.post(
+        f"{base_url}/admin/election/{election_id}/participants",
+        data={"csrf_token": csrf, "participants": participants},
+        allow_redirects=True,
+        timeout=10,
+    )
+
+
+def admin_advance_phase(session, base_url, election_id):
+    _, csrf = _admin_get(
+        session, f"{base_url}/admin/election/{election_id}/manage"
+    )
+    session.post(
+        f"{base_url}/admin/election/{election_id}/display-phase",
+        data={"csrf_token": csrf, "direction": "next"},
+        allow_redirects=True,
+        timeout=10,
+    )
+
+
+def admin_close_voting(session, base_url, election_id):
+    _, csrf = _admin_get(
+        session, f"{base_url}/admin/election/{election_id}/manage"
+    )
+    session.post(
+        f"{base_url}/admin/election/{election_id}/voting",
+        data={"csrf_token": csrf},
+        allow_redirects=True,
+        timeout=10,
+    )
+
+
+def admin_enter_paper_votes(session, base_url, election_id, paper_count):
+    # Set the ballot count on the participants endpoint first
+    _, csrf = _admin_get(
+        session, f"{base_url}/admin/election/{election_id}/manage"
+    )
+    session.post(
+        f"{base_url}/admin/election/{election_id}/participants",
+        data={"csrf_token": csrf, "paper_ballot_count": paper_count},
+        allow_redirects=True,
+        timeout=10,
+    )
+
+    # Enter per-candidate tallies
+    resp, csrf = _admin_get(
+        session, f"{base_url}/admin/election/{election_id}/paper-votes"
+    )
+    offices = parse_vote_form_candidates(resp.text, "paper")
+    if not offices:
+        return False, "Could not parse candidates from paper-votes page"
+
+    vote_counts = simulate_offline_votes(offices, paper_count)
+    form_data = {"csrf_token": csrf}
+    for cid, count in vote_counts.items():
+        form_data[f"paper_{cid}"] = count
+
+    resp = session.post(
+        f"{base_url}/admin/election/{election_id}/paper-votes",
+        data=form_data,
+        allow_redirects=True,
+        timeout=10,
+    )
+    return "saved" in resp.text.lower(), ""
+
+
+# ---------------------------------------------------------------------------
 # Voter simulation
 # ---------------------------------------------------------------------------
 
-def simulate_voter(base_url, candidate_weights, blank_rate=0.05):
-    """Run one voter through the full /vote -> /ballot -> /submit flow.
-
-    *candidate_weights* is a shared dict {candidate_id: float} populated
-    on first encounter so that every voter in a run shares the same
-    popularity distribution.
-
-    Returns (success: bool, message: str).
-    """
+def simulate_voter(base_url, candidate_weights, weights_lock, blank_rate=0.05):
+    """Run one voter through the full /vote -> /ballot -> /submit flow."""
     try:
-        return _simulate_voter_inner(base_url, candidate_weights, blank_rate)
+        return _simulate_voter_inner(base_url, candidate_weights, weights_lock, blank_rate)
     except requests.ConnectionError:
         return False, "SERVER_DOWN"
     except requests.Timeout:
@@ -125,16 +291,16 @@ def simulate_voter(base_url, candidate_weights, blank_rate=0.05):
         return False, f"Error: {e}"
 
 
-def _simulate_voter_inner(base_url, candidate_weights, blank_rate):
+def _simulate_voter_inner(base_url, candidate_weights, weights_lock, blank_rate):
     s = requests.Session()
 
-    # 1. GET the enter-code page (pick up session cookie + CSRF token)
+    # 1. GET enter-code page (CSRF + session cookie)
     resp = s.get(f"{base_url}/", timeout=10)
     csrf = extract_csrf_token(resp.text)
     if not csrf:
         return False, "No CSRF on enter-code page"
 
-    # 2. POST /vote with a blank code — demo mode auto-assigns an unused code
+    # 2. POST /vote with blank code — demo mode auto-assigns an unused code
     resp = s.post(
         f"{base_url}/vote",
         data={"csrf_token": csrf, "code": ""},
@@ -154,32 +320,30 @@ def _simulate_voter_inner(base_url, candidate_weights, blank_rate):
     if not offices or not csrf:
         return False, "Could not parse ballot"
 
-    # Assign popularity weights to any candidates we haven't seen yet
-    for office in offices:
-        for cand in office["candidates"]:
-            if cand["id"] not in candidate_weights:
-                candidate_weights[cand["id"]] = random.uniform(0.2, 1.0)
+    # Assign popularity weights to new candidates (thread-safe)
+    with weights_lock:
+        for office in offices:
+            for cand in office["candidates"]:
+                if cand["id"] not in candidate_weights:
+                    candidate_weights[cand["id"]] = random.uniform(0.2, 1.0)
 
     # 4. Build vote selections
     form_data = [("csrf_token", csrf), ("confirm_partial", "1")]
 
     for office in offices:
-        # Small chance of a blank vote for this office
         if random.random() < blank_rate:
             continue
-
         max_sel = office["max"]
         cand_ids = [c["id"] for c in office["candidates"]]
-        weights = [candidate_weights[cid] for cid in cand_ids]
+        with weights_lock:
+            weights = [candidate_weights.get(cid, 0.5) for cid in cand_ids]
 
-        # 85 % of voters use all their selections, 15 % under-select
         count = max_sel if random.random() < 0.85 else random.randint(1, max_sel)
         selected = weighted_sample(cand_ids, weights, count)
-
         for cid in selected:
             form_data.append((office["field"], cid))
 
-    # 5. Submit the ballot
+    # 5. Submit
     resp = s.post(
         f"{base_url}/submit",
         data=form_data,
@@ -199,12 +363,14 @@ BAR_WIDTH = 30
 
 
 def progress_line(current, total, failed, elapsed):
-    """Return a single-line progress string."""
     pct = current / total if total else 0
     filled = int(BAR_WIDTH * pct)
-    bar = "\u2588" * filled + "\u2591" * (BAR_WIDTH - filled)
+    bar = "█" * filled + "░" * (BAR_WIDTH - filled)
     rate = current / elapsed if elapsed > 0 else 0
-    return f"\r  [{current:>{len(str(total))}}/{total}] {bar} {pct:5.1%}  {rate:.1f} v/s  ({failed} failed)"
+    return (
+        f"\r  [{current:>{len(str(total))}}/{total}] {bar} "
+        f"{pct:5.1%}  {rate:.1f} v/s  ({failed} failed)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -234,11 +400,17 @@ def print_results(base_url):
         print()
         for office in results:
             print(f"  --- {office['office_name']} ---")
-            for c in sorted(office.get("candidates", []), key=lambda x: x.get("total", 0), reverse=True):
+            for c in sorted(
+                office.get("candidates", []),
+                key=lambda x: x.get("total", 0),
+                reverse=True,
+            ):
                 mark = " *" if c.get("elected") else ""
-                print(f"    {c['name']:<30s}  {c.get('total', 0):>4} votes{mark}")
+                print(
+                    f"    {c['name']:<30s}  {c.get('total', 0):>4} votes{mark}"
+                )
     else:
-        print("\n  (Results not yet visible — toggle Show Results in admin to see tallies)")
+        print("\n  (Enable 'Show Results' in admin to see tallies)")
 
 
 # ---------------------------------------------------------------------------
@@ -247,19 +419,23 @@ def print_results(base_url):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Load-test an FRCA election server by simulating voters",
+        description="Full election mass test — admin flow + concurrent voters + paper/postal"
     )
     parser.add_argument(
         "--voters", "-n", type=int, default=95,
-        help="Number of voters to simulate (default: 95)",
+        help="Digital voters to simulate (default: 95)",
     )
     parser.add_argument(
-        "--delay", "-d", type=float, default=0.2,
-        help="Seconds between votes — 0 for burst mode (default: 0.2)",
+        "--workers", "-w", type=int, default=8,
+        help="Concurrent voter threads (default: 8)",
     )
     parser.add_argument(
-        "--url", "-u", default="http://localhost:5000",
-        help="Base URL of the running server (default: http://localhost:5000)",
+        "--postal", type=int, default=5,
+        help="Postal voters to simulate (default: 5)",
+    )
+    parser.add_argument(
+        "--paper", type=int, default=8,
+        help="Paper ballot count (default: 8)",
     )
     parser.add_argument(
         "--blank-rate", "-b", type=float, default=0.05,
@@ -269,6 +445,15 @@ def main():
         "--seed", "-s", type=int, default=None,
         help="Random seed for reproducible vote distributions",
     )
+    parser.add_argument(
+        "--url", "-u", default="http://localhost:5000",
+        help="Base URL of the running server (default: http://localhost:5000)",
+    )
+    parser.add_argument(
+        "--admin-password",
+        default=os.environ.get("FRCA_ADMIN_PASSWORD", "admin"),
+        help="Admin password (env: FRCA_ADMIN_PASSWORD, default: admin)",
+    )
     args = parser.parse_args()
 
     if args.seed is not None:
@@ -276,116 +461,156 @@ def main():
 
     base_url = args.url.rstrip("/")
 
-    # --- Pre-flight checks ---------------------------------------------------
-
-    print(f"\n  Server : {base_url}")
+    # --- Server reachability check -------------------------------------------
+    print(f"\n  Server  : {base_url}")
     try:
-        resp = requests.get(f"{base_url}/", timeout=5)
+        requests.get(f"{base_url}/", timeout=5)
     except requests.ConnectionError:
-        print(f"  ERROR  : Cannot connect to {base_url}")
-        print("           Start the server first:  python app.py")
+        print(f"  ERROR   : Cannot connect to {base_url}")
+        print("            Start the server first:  python app.py")
         sys.exit(1)
 
-    # Check demo mode via the enter-code page (it shows "Demo mode:" hint)
-    is_demo = 'demo mode' in resp.text.lower() or 'pattern="[A-Za-z0-9]{0,6}"' in resp.text
-    if not is_demo:
-        print("  ERROR  : Server is NOT in demo mode.")
-        print("           This script requires demo mode (blank codes are auto-assigned).")
-        print("           Seed a demo first:  python scripts/seed_demo.py --codes 100")
+    # =========================================================================
+    # PHASE 1 — Admin setup
+    # =========================================================================
+    print("\n  ┌─ Admin setup ──────────────────────────────────────────────┐")
+
+    admin_session = requests.Session()
+    print("  │  Logging in as admin...")
+    try:
+        admin_login(admin_session, base_url, args.admin_password)
+    except RuntimeError as e:
+        print(f"  │  ERROR: {e}")
         sys.exit(1)
 
-    # Check voting is open
-    if "Voting is not currently open" in resp.text:
-        print("  ERROR  : Voting is not open. Open voting from the admin panel first.")
+    election_id = get_election_id(admin_session, base_url)
+    print(f"  │  Election ID  : {election_id}")
+
+    if args.postal > 0:
+        print(f"  │  Postal votes : {args.postal} voters → entering tallies...")
+        ok, msg = admin_enter_postal_votes(
+            admin_session, base_url, election_id, args.postal
+        )
+        status = "saved" if ok else f"WARNING — {msg}"
+        print(f"  │                 {status}")
+
+    in_person = args.voters + args.paper
+    print(f"  │  Attendance   : {in_person} ({args.voters} digital + {args.paper} paper + {args.postal} postal)")
+    admin_set_participants(admin_session, base_url, election_id, in_person)
+
+    print("  │  Display      : Welcome → Election Rules  (phase 1→2)")
+    admin_advance_phase(admin_session, base_url, election_id)
+
+    print("  │  Display      : Election Rules → Voting   (phase 2→3, opens voting)")
+    admin_advance_phase(admin_session, base_url, election_id)
+
+    # Verify
+    try:
+        data = requests.get(f"{base_url}/api/display-data", timeout=5).json()
+    except Exception:
+        data = {}
+    if not data.get("voting_open"):
+        print("  │  ERROR: voting did not open — check server logs")
         sys.exit(1)
+    print(f"  │  Voting       : OPEN  (display phase {data.get('display_phase')})")
+    print("  └────────────────────────────────────────────────────────────┘")
 
-    print(f"  Mode   : DEMO")
-    print(f"  Voters : {args.voters}")
-    print(f"  Delay  : {args.delay}s between votes")
-    print(f"  Blank  : {args.blank_rate * 100:.0f}% chance per office")
-    if args.seed is not None:
-        print(f"  Seed   : {args.seed}")
+    # =========================================================================
+    # PHASE 2 — Digital voting (concurrent)
+    # =========================================================================
+    print(
+        f"\n  ┌─ Digital voting: {args.voters} voters, {args.workers} workers ─────────────────────┐"
+    )
 
-    # --- Cast votes -----------------------------------------------------------
-
-    candidate_weights = {}  # shared across all voters, populated lazily
-    success_count = 0
-    fail_count = 0
-    total = args.voters
-
-    print()
+    candidate_weights = {}
+    weights_lock = threading.Lock()
+    counter = [0, 0]  # [success, fail]
+    aborted = [False]
     start = time.time()
 
-    for i in range(1, total + 1):
-        if i > 1 and args.delay > 0:
-            time.sleep(args.delay)
-
-        ok, msg = simulate_voter(base_url, candidate_weights, args.blank_rate)
-        if ok:
-            success_count += 1
-        else:
-            fail_count += 1
-            if msg == "OUT_OF_CODES":
-                elapsed = time.time() - start
-                sys.stdout.write(progress_line(i, total, fail_count, elapsed))
-                print(f"\n\n  Ran out of demo codes after {success_count} votes.")
-                print("  Generate more:  python scripts/seed_demo.py --codes <N>")
-                break
-            if msg == "SERVER_DOWN":
-                elapsed = time.time() - start
-                sys.stdout.write(progress_line(i, total, fail_count, elapsed))
-                print(f"\n\n  Server stopped responding after {success_count} votes.")
-                print("  The server may have crashed — check its console output.")
-                break
-            if msg == "NOT_DEMO_MODE":
-                elapsed = time.time() - start
-                sys.stdout.write(progress_line(i, total, fail_count, elapsed))
-                print("\n\n  Server is not in demo mode — blank codes are rejected.")
-                print("  Seed a demo first:  python scripts/seed_demo.py --codes 100")
-                break
-
-        elapsed = time.time() - start
-        sys.stdout.write(progress_line(i, total, fail_count, elapsed))
-        sys.stdout.flush()
+    futures_list = []
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        futures_list = [
+            executor.submit(
+                simulate_voter, base_url, candidate_weights, weights_lock, args.blank_rate
+            )
+            for _ in range(args.voters)
+        ]
+        for future in as_completed(futures_list):
+            ok, msg = future.result()
+            if ok:
+                counter[0] += 1
+            else:
+                counter[1] += 1
+                if msg == "OUT_OF_CODES":
+                    print(f"\n  │  Ran out of demo codes after {counter[0]} votes.")
+                    aborted[0] = True
+                    break
+                if msg == "SERVER_DOWN":
+                    print(f"\n  │  Server went down after {counter[0]} votes.")
+                    aborted[0] = True
+                    break
+            elapsed = time.time() - start
+            sys.stdout.write(
+                "  │  " + progress_line(sum(counter), args.voters, counter[1], elapsed)
+            )
+            sys.stdout.flush()
 
     elapsed = time.time() - start
+    print(f"\n  │  Done in {elapsed:.1f}s  —  {counter[0]} OK / {counter[1]} failed  ({counter[0]/elapsed:.1f} v/s)")
+    print("  └────────────────────────────────────────────────────────────┘")
 
-    # --- Summary --------------------------------------------------------------
+    # =========================================================================
+    # PHASE 3 — Admin close + paper votes
+    # =========================================================================
+    print("\n  ┌─ Admin close ──────────────────────────────────────────────┐")
 
-    print(f"\n\n  Done in {elapsed:.1f}s")
-    print(f"  Success : {success_count}")
-    print(f"  Failed  : {fail_count}")
-    if elapsed > 0:
-        print(f"  Rate    : {success_count / elapsed:.1f} votes/sec")
+    print("  │  Closing voting...")
+    admin_close_voting(admin_session, base_url, election_id)
 
-    # Show candidate weight distribution used for this run
+    if args.paper > 0:
+        print(f"  │  Paper votes  : {args.paper} ballots → entering tallies...")
+        ok, msg = admin_enter_paper_votes(
+            admin_session, base_url, election_id, args.paper
+        )
+        status = "saved" if ok else f"WARNING — {msg}"
+        print(f"  │                 {status}")
+
+    print("  └────────────────────────────────────────────────────────────┘")
+
+    # =========================================================================
+    # Final summary
+    # =========================================================================
+    print_results(base_url)
+
+    # Candidate popularity weights
     if candidate_weights:
         print("\n  Popularity weights used this run:")
-        # We need the ballot structure to map IDs to names — do one more fetch
+        id_to_name = {}
         try:
             s = requests.Session()
             resp = s.get(f"{base_url}/", timeout=5)
             csrf = extract_csrf_token(resp.text)
             if csrf:
-                resp = s.get(f"{base_url}/ballot", timeout=5)
+                resp = s.post(
+                    f"{base_url}/vote",
+                    data={"csrf_token": csrf, "code": ""},
+                    allow_redirects=True,
+                    timeout=5,
+                )
                 offices = extract_ballot(resp.text)
-                id_to_name = {}
-                for office in offices:
-                    for c in office["candidates"]:
-                        id_to_name[c["id"]] = c["name"]
-                # If we couldn't get names from a ballot, just skip the names
-                if not id_to_name:
-                    raise ValueError("no names")
+                id_to_name = {
+                    c["id"]: c["name"]
+                    for o in offices for c in o["candidates"]
+                }
         except Exception:
-            id_to_name = {}
+            pass
 
         for cid, w in sorted(candidate_weights.items(), key=lambda x: -x[1]):
             name = id_to_name.get(cid, f"Candidate {cid}")
-            bar = "\u2588" * int(w * 20)
+            bar = "█" * int(w * 20)
             print(f"    {name:<30s}  {w:.2f}  {bar}")
 
-    # Show final tallies from the display API
-    print_results(base_url)
     print(f"\n  View live: {base_url}/display\n")
 
 
