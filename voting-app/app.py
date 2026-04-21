@@ -233,6 +233,22 @@ def _init_db_on(db):
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS voter_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            election_id INTEGER,
+            round_number INTEGER,
+            ip TEXT,
+            user_agent TEXT,
+            path TEXT,
+            code TEXT,
+            result TEXT NOT NULL,
+            detail TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_voter_audit_election ON voter_audit_log(election_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_voter_audit_code ON voter_audit_log(code);
     """)
 
     # Insert default settings if not present
@@ -455,6 +471,33 @@ def admin_required(f):
 def hash_code(code):
     """Hash a voting code for fast lookup."""
     return hashlib.sha256(code.upper().encode()).hexdigest()
+
+
+def log_voter_audit(election_id, code, result, detail=None, round_number=None):
+    """Append a row to voter_audit_log. Safe to call from any voter route.
+
+    code is the plaintext voting code (or None if not applicable). It is
+    stored as-is for the chairman audit view — codes are short-lived and
+    only the admin can read this table. Failures are swallowed because
+    audit logging must not break a vote.
+    """
+    try:
+        db = get_db()
+        ip = request.remote_addr if request else None
+        user_agent = (request.headers.get("User-Agent") or "")[:200] if request else None
+        path = request.path if request else None
+        db.execute(
+            "INSERT INTO voter_audit_log "
+            "(election_id, round_number, ip, user_agent, path, code, result, detail) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (election_id, round_number, ip, user_agent, path, code, result, detail)
+        )
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 def generate_codes(election_id, count):
@@ -1623,6 +1666,73 @@ def admin_next_round(election_id):
     return redirect(url_for("admin_election_manage", election_id=election_id))
 
 
+@app.route("/admin/election/<int:election_id>/voter-log")
+@admin_required
+def admin_voter_log(election_id):
+    """Audit log of every voter-route interaction for diagnostic review.
+
+    Filters on the query string:
+      ?result=rejected_already_used  → only rows with that result
+      ?code=ABC123                   → only rows for this code (case-insensitive)
+      ?limit=200                     → row cap (default 500, max 5000)
+    """
+    db = get_db()
+    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+    if not election:
+        abort(404)
+
+    result_filter = request.args.get("result", "").strip()
+    code_filter = request.args.get("code", "").strip().upper()
+    try:
+        limit = max(1, min(int(request.args.get("limit", 500)), 5000))
+    except ValueError:
+        limit = 500
+
+    where = ["election_id = ?"]
+    params = [election_id]
+    if result_filter:
+        where.append("result = ?")
+        params.append(result_filter)
+    if code_filter:
+        where.append("UPPER(code) = ?")
+        params.append(code_filter)
+    sql = (
+        "SELECT id, ts, round_number, ip, user_agent, path, code, result, detail "
+        "FROM voter_audit_log WHERE " + " AND ".join(where)
+        + " ORDER BY id DESC LIMIT ?"
+    )
+    params.append(limit)
+    rows = db.execute(sql, params).fetchall()
+
+    # Distinct result values for the filter dropdown
+    distinct_results = [r["result"] for r in db.execute(
+        "SELECT DISTINCT result FROM voter_audit_log "
+        "WHERE election_id = ? ORDER BY result",
+        (election_id,)
+    ).fetchall()]
+
+    # Same-code repeats — flag any code that produced more than one
+    # 'code_accepted' or 'vote_submitted'
+    repeat_offenders = db.execute(
+        "SELECT code, COUNT(*) AS n FROM voter_audit_log "
+        "WHERE election_id = ? AND code IS NOT NULL "
+        "AND result IN ('code_accepted', 'vote_submitted') "
+        "GROUP BY code HAVING n > 1 ORDER BY n DESC",
+        (election_id,)
+    ).fetchall()
+
+    return render_template(
+        "admin/voter_log.html",
+        election=election,
+        rows=rows,
+        result_filter=result_filter,
+        code_filter=code_filter,
+        limit=limit,
+        distinct_results=distinct_results,
+        repeat_offenders=repeat_offenders,
+    )
+
+
 @app.route("/admin/election/<int:election_id>/rollback-last-vote", methods=["POST"])
 @admin_required
 def admin_rollback_last_vote(election_id):
@@ -2167,30 +2277,40 @@ def voter_enter_code(prefill_code=None):
 
     # QR scan with code: validate immediately and skip to ballot
     if prefill_code:
+        code = prefill_code.strip().upper()
+        eid = election["id"] if election else None
+        rnd = election["current_round"] if election else None
         if not election:
             flash("Voting is not currently open.", "error")
+            log_voter_audit(eid, code, "rejected_voting_closed",
+                            "QR scan while voting closed", round_number=rnd)
+        elif len(code) != CODE_LENGTH:
+            flash("Invalid code.", "error")
+            log_voter_audit(eid, code, "rejected_invalid_format",
+                            f"QR code length {len(code)}", round_number=rnd)
         else:
-            code = prefill_code.strip().upper()
+            code_h = hash_code(code)
+            code_row = db.execute(
+                "SELECT * FROM codes WHERE code_hash = ? AND election_id = ?",
+                (code_h, election["id"])
+            ).fetchone()
 
-            if len(code) != CODE_LENGTH:
-                flash("Invalid code.", "error")
+            if not code_row:
+                flash("Invalid code. Please check and try again.", "error")
+                log_voter_audit(eid, code, "rejected_unknown_code",
+                                "QR scan code not in DB", round_number=rnd)
+            elif code_row["used"]:
+                flash("This code has already been used.", "error")
+                log_voter_audit(eid, code, "rejected_already_used",
+                                "QR scan code already burned", round_number=rnd)
             else:
-                code_h = hash_code(code)
-                code_row = db.execute(
-                    "SELECT * FROM codes WHERE code_hash = ? AND election_id = ?",
-                    (code_h, election["id"])
-                ).fetchone()
-
-                if not code_row:
-                    flash("Invalid code. Please check and try again.", "error")
-                elif code_row["used"]:
-                    flash("This code has already been used.", "error")
-                else:
-                    session["code_hash"] = code_h
-                    session["election_id"] = election["id"]
-                    session["used_code"] = code
-                    session["_clear_stale_flashes"] = True
-                    return redirect(url_for("voter_ballot"))
+                session["code_hash"] = code_h
+                session["election_id"] = election["id"]
+                session["used_code"] = code
+                session["_clear_stale_flashes"] = True
+                log_voter_audit(eid, code, "code_accepted",
+                                "QR scan accepted", round_number=rnd)
+                return redirect(url_for("voter_ballot"))
 
         # Validation failed — fall through to enter_code page (no prefill)
         prefill_code = None
@@ -2211,14 +2331,21 @@ def voter_validate_code():
         "SELECT * FROM elections WHERE voting_open = 1 ORDER BY id DESC LIMIT 1"
     ).fetchone()
 
+    code_raw = request.form.get("code", "")
+    code = code_raw.strip().upper()
+    eid = election["id"] if election else None
+    rnd = election["current_round"] if election else None
+
     if not election:
         flash("Voting is not currently open.", "error")
+        log_voter_audit(None, code or None, "rejected_voting_closed",
+                        "Form submit while voting closed")
         return redirect(url_for("voter_enter_code"))
-
-    code = request.form.get("code", "").strip().upper()
 
     if not code or len(code) != CODE_LENGTH:
         flash("Please enter a valid 6-character code.", "error")
+        log_voter_audit(eid, code or None, "rejected_invalid_format",
+                        f"Form submit length {len(code)}", round_number=rnd)
         return redirect(url_for("voter_enter_code"))
 
     code_h = hash_code(code)
@@ -2229,15 +2356,21 @@ def voter_validate_code():
 
     if not code_row:
         flash("Invalid code. Please check and try again.", "error")
+        log_voter_audit(eid, code, "rejected_unknown_code",
+                        "Form submit code not in DB", round_number=rnd)
         return redirect(url_for("voter_enter_code"))
 
     if code_row["used"]:
         flash("This code has already been used.", "error")
+        log_voter_audit(eid, code, "rejected_already_used",
+                        "Form submit code already burned", round_number=rnd)
         return redirect(url_for("voter_enter_code"))
 
     session["code_hash"] = code_h
     session["election_id"] = election["id"]
     session["used_code"] = code
+    log_voter_audit(eid, code, "code_accepted", "Form submit accepted",
+                    round_number=rnd)
     return redirect(url_for("voter_ballot"))
 
 
@@ -2386,6 +2519,8 @@ def voter_submit():
         ))
         return no_cache(resp)
 
+    code_for_log = session.get("used_code")
+
     # Atomic transaction: burn code + record votes
     try:
         # Burn the code
@@ -2398,7 +2533,13 @@ def voter_submit():
             db.rollback()
             session.pop("code_hash", None)
             session.pop("election_id", None)
+            session.pop("used_code", None)
             flash("This code has already been used.", "error")
+            log_voter_audit(
+                election_id, code_for_log, "rejected_already_used_at_submit",
+                "Submit reached burn step but code was already used (race)",
+                round_number=election["current_round"]
+            )
             return redirect(url_for("voter_enter_code"))
 
         # Record votes — NO link to the code
@@ -2412,9 +2553,19 @@ def voter_submit():
         increment_digital_ballot(election_id, election["current_round"])
 
         db.commit()
-    except Exception:
+        log_voter_audit(
+            election_id, code_for_log, "vote_submitted",
+            f"Recorded {len(selected_candidates)} candidate selection(s)",
+            round_number=election["current_round"]
+        )
+    except Exception as ex:
         db.rollback()
         flash("An error occurred. Please try again.", "error")
+        log_voter_audit(
+            election_id, code_for_log, "submit_error",
+            f"Exception during burn/insert: {type(ex).__name__}",
+            round_number=election["current_round"]
+        )
         return redirect(url_for("voter_enter_code"))
 
     # Clear session — no trace of the code

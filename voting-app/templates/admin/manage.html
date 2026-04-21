@@ -429,6 +429,12 @@
                 </div>
             </details>
             {% endif %}
+
+            <p style="font-size: 13px; margin-top: 10px;">
+                <a href="{{ url_for('admin_voter_log', election_id=election.id) }}" style="color: #666;">
+                    View voter audit log &rarr;
+                </a>
+            </p>
         </div>
     </div>
 
