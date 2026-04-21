@@ -837,20 +837,49 @@ def admin_codes(election_id):
 @admin_required
 def admin_codes_delete(election_id):
     db = get_db()
-    # Only allow deleting if no codes have been used
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+
+    # Hard guard 1: never delete once any code has been used
     used_count = db.execute(
         "SELECT COUNT(*) FROM codes WHERE election_id = ? AND used = 1",
         (election_id,)
     ).fetchone()[0]
     if used_count > 0:
-        flash(f"Cannot delete codes — {used_count} codes have already been used.", "error")
-    else:
-        db.execute(
-            "DELETE FROM codes WHERE election_id = ?",
-            (election_id,)
+        flash(
+            f"Cannot delete codes — {used_count} code(s) have already been "
+            "used. Regenerating would invalidate any votes already cast.",
+            "error"
         )
-        db.commit()
-        flash("All codes deleted.", "success")
+        return redirect(url_for("admin_codes", election_id=election_id))
+
+    # Hard guard 2: require typed election name AND admin password.
+    # Codes may already be printed — regenerating without the chairman
+    # knowing would fail the election.
+    typed_name = (request.form.get("confirm_name") or "").strip()
+    typed_password = request.form.get("password") or ""
+    if typed_name != (election["name"] or ""):
+        flash(
+            "Codes not deleted — typed election name did not match. "
+            "Codes may already be on printed slips; regenerating without "
+            "reprinting would fail the election.",
+            "error"
+        )
+        return redirect(url_for("admin_codes", election_id=election_id))
+    if typed_password != get_setting("admin_password"):
+        flash("Codes not deleted — admin password incorrect.", "error")
+        return redirect(url_for("admin_codes", election_id=election_id))
+
+    db.execute("DELETE FROM codes WHERE election_id = ?", (election_id,))
+    db.commit()
+    flash(
+        "All codes deleted. Generate fresh codes and reprint the slips "
+        "before voting opens.",
+        "success"
+    )
     return redirect(url_for("admin_codes", election_id=election_id))
 
 

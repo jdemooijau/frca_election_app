@@ -33,12 +33,46 @@
         </div>
 
         {% if total_codes > 0 %}
-        <form method="POST" class="inline-form" style="margin-top: 12px;"
-              action="{{ url_for('admin_codes_delete', election_id=election.id) }}"
-              onsubmit="return confirm('Delete ALL codes? This cannot be undone.');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-danger btn-small">Delete All Codes</button>
-        </form>
+        <details style="margin-top: 16px;">
+            <summary style="cursor: pointer; color: var(--red); font-weight: 600;">
+                Delete all codes (regenerate)
+            </summary>
+            <div style="margin-top: 12px; padding: 14px 16px; border: 1px solid var(--red); border-radius: 8px; background: #fff7f6;">
+                <p style="font-size: 14px; color: #6B1A12; margin-bottom: 12px;">
+                    <strong>Warning.</strong> Codes may already be on printed slips
+                    or QR-coded handouts. If you regenerate without reprinting,
+                    every printed code will fail at the door on election day.
+                    {% if used_codes > 0 %}
+                    <br><br>
+                    <strong>{{ used_codes }} of these codes have already been used.</strong>
+                    Deleting is blocked while votes exist.
+                    {% endif %}
+                </p>
+                <form method="POST"
+                      action="{{ url_for('admin_codes_delete', election_id=election.id) }}"
+                      onsubmit="return confirm('Delete ALL {{ total_codes }} codes for {{ election.name }}? This cannot be undone — anything already printed becomes invalid.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="form-group">
+                        <label for="confirm_codes_name">Type the election name to confirm: <strong>{{ election.name }}</strong></label>
+                        <input type="text" id="confirm_codes_name" name="confirm_name"
+                               autocomplete="off" placeholder="{{ election.name }}"
+                               style="max-width: 360px;"
+                               {% if used_codes > 0 %}disabled{% endif %}>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm_codes_password">Admin password</label>
+                        <input type="password" id="confirm_codes_password" name="password"
+                               autocomplete="off" placeholder="Re-enter password"
+                               style="max-width: 240px;"
+                               {% if used_codes > 0 %}disabled{% endif %}>
+                    </div>
+                    <button type="submit" class="btn btn-danger btn-small"
+                            {% if used_codes > 0 %}disabled{% endif %}>
+                        Delete All Codes
+                    </button>
+                </form>
+            </div>
+        </details>
         {% endif %}
     </div>
 
