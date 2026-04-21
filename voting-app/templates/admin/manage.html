@@ -289,19 +289,18 @@
                 </a>
             </div>
 
-            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Attendance (Article 4 &amp; 6)</h3>
+            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Attendance (Article 4)</h3>
+            <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
+                Number of brothers who signed the attendance register. Used for the Article 6b threshold.
+                The paper-ballot count is entered later, once they're collected and counted.
+            </p>
             <form method="POST" action="{{ url_for('admin_set_participants', election_id=election.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: end;">
-                    <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <div class="form-group" style="flex: 1; min-width: 200px;">
                         <label for="participants">Brothers Present</label>
                         <input type="number" id="participants" name="participants"
                                value="{{ in_person_participants }}" min="0" style="text-align: center;">
-                    </div>
-                    <div class="form-group" style="flex: 1; min-width: 150px;">
-                        <label for="paper_ballot_count_p2">Paper Ballots Received</label>
-                        <input type="number" id="paper_ballot_count_p2" name="paper_ballot_count"
-                               value="{{ paper_ballot_count }}" min="0" style="text-align: center;">
                     </div>
                     <div class="form-group">
                         <button type="submit" class="btn btn-primary btn-small">Save</button>
@@ -450,12 +449,14 @@
                 another round is needed.
             </p>
 
-            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Paper ballots</h3>
+            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Paper ballots received</h3>
+            <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
+                Total paper ballots collected for round {{ election.current_round }} (counted at the door, before the per-candidate tally).
+            </p>
             <form method="POST" action="{{ url_for('admin_set_participants', election_id=election.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="participants" value="{{ in_person_participants }}">
                 <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: end; margin-bottom: 8px;">
-                    <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <div class="form-group" style="flex: 1; min-width: 200px;">
                         <label for="paper_ballot_count_p4">Paper Ballots Received</label>
                         <input type="number" id="paper_ballot_count_p4" name="paper_ballot_count"
                                value="{{ paper_ballot_count }}" min="0" style="text-align: center;">

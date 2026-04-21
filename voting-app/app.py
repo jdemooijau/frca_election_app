@@ -1232,8 +1232,23 @@ def admin_set_participants(election_id):
     if not election:
         abort(404)
     current_round = election["current_round"]
-    participants = max(0, int(request.form.get("participants", 0)))
-    paper_ballot_count = max(0, int(request.form.get("paper_ballot_count", 0)))
+
+    # Each phase of the manage page posts only the field it owns.
+    # Phase 2 (Opening) sends 'participants' — paper_ballot_count is unknown
+    # until counting time. Phase 4 (Counting) sends 'paper_ballot_count'.
+    # Fall back to the existing value when a field isn't in the form.
+    existing_participants, existing_paper, _ = get_round_counts(election_id, current_round)
+
+    if "participants" in request.form:
+        participants = max(0, int(request.form.get("participants", 0)))
+    else:
+        participants = existing_participants
+
+    if "paper_ballot_count" in request.form:
+        paper_ballot_count = max(0, int(request.form.get("paper_ballot_count", 0)))
+    else:
+        paper_ballot_count = existing_paper
+
     set_round_counts(election_id, current_round, participants, paper_ballot_count)
     flash(f"Round {current_round} — Participants: {participants}, Paper ballots: {paper_ballot_count}.", "success")
     return redirect(url_for("admin_election_manage", election_id=election_id))
