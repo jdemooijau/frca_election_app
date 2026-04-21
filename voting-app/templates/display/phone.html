@@ -4,23 +4,31 @@
 {% block head %}
 <style>
     /* Phone-first layout — keep everything readable down to ~320px */
+    html, body { margin: 0; padding: 0; overflow-x: hidden; }
     body { font-size: 16px; }
-    .phone-wrap {
-        max-width: 480px;
-        margin: 0 auto;
-        padding: 12px;
+    .phone-wrap, .phone-wrap *, .phone-wrap *::before, .phone-wrap *::after {
         box-sizing: border-box;
+    }
+    .phone-wrap {
+        max-width: 100vw;
+        margin: 0 auto;
+        padding: 10px;
+        word-wrap: break-word;
+        overflow-wrap: anywhere;
+    }
+    @media (min-width: 520px) {
+        .phone-wrap { max-width: 480px; padding: 12px; }
     }
     .phone-header {
         background: var(--navy);
         color: #fff;
-        padding: 14px 16px;
+        padding: 12px 14px;
         border-radius: 10px;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         text-align: center;
     }
     .phone-header h1 {
-        font-size: 18px;
+        font-size: 17px;
         margin: 0 0 6px;
         line-height: 1.25;
         overflow-wrap: anywhere;
@@ -46,10 +54,10 @@
         background: #FFEAE8;
         border: 2px solid #C0392B;
         color: #6B1A12;
-        padding: 12px 14px;
+        padding: 10px 12px;
         border-radius: 10px;
-        margin-bottom: 12px;
-        font-size: 14px;
+        margin-bottom: 10px;
+        font-size: 13px;
         line-height: 1.35;
     }
     .anomaly .anomaly-title {
@@ -63,11 +71,12 @@
     }
     .counts {
         display: flex;
-        gap: 12px;
-        margin-bottom: 12px;
+        gap: 8px;
+        margin-bottom: 10px;
     }
     .counts .stat {
-        flex: 1;
+        flex: 1 1 0;
+        min-width: 0;
         text-align: center;
         background: var(--grey-light);
         border-radius: 10px;
@@ -75,7 +84,7 @@
     }
     .counts .stat .num {
         display: block;
-        font-size: 32px;
+        font-size: 28px;
         font-weight: 700;
         line-height: 1;
         color: var(--navy);
