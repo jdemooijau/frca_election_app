@@ -35,14 +35,24 @@ See [CONFIGURATION.md](CONFIGURATION.md) for details.
 3. Use the autocomplete to search and select candidates from the member list.
 4. Repeat for "Deacon".
 
-### 5. Generate Codes and Print
+### 5. Voting codes and printing
 
-1. Go to the **Codes** tab.
-2. Click **Generate Codes for All Rounds** (count defaults to member count + 10).
-3. Download the **Code Slips PDF** and **Paper Ballot PDF** for each round.
-4. Print and cut the code slips. Sort into envelopes labelled "Round 1" and "Round 2".
-5. Print paper ballots for each round.
-6. Print the **Attendance Register** from the Members page.
+1. Go to the **Codes** tab. Codes auto-generate the first time you visit
+   after offices are set up — no manual generation step. The page shows
+   the freshly minted plaintext codes; this is the only time the
+   plaintexts are visible, so print the slips before leaving the page.
+2. Open the **Manage** tab. **Step 1 — Before the meeting** has the
+   **Printer Pack ZIP** (recommended) and individual PDFs under
+   **More formats**: Code Slips, Paper Ballot, Counter Sheet,
+   Dual-Sided Ballots, Dual-Ballot Handout.
+3. Print the Printer Pack contents. The dual-sided ballot has a paper
+   ballot on one side and a unique code-slip QR on the other.
+4. Print the **Attendance Register PDF** from the same Step 1 card.
+
+> **Codes are reused across rounds** — the same code batch covers
+> Round 1, Round 2, etc. Don't regenerate after printing: the
+> regeneration form is gated behind typing the election name and the
+> admin password to prevent accidental invalidation of printed slips.
 
 ### 6. Test the Setup
 
@@ -62,9 +72,16 @@ Follow [SETUP.md](SETUP.md) to test with the router and a few phones.
 
 ### Opening Voting
 
-1. In the admin panel, go to **Manage** for the election.
-2. Click **Open Voting**.
-3. The projector shows "OPEN" and a progress bar.
+1. In the admin panel, go to **Manage** for the election. **Step 2 —
+   Opening the meeting** is the active card.
+2. Enter the **Brothers Present** count from the attendance register
+   and click Save. (The paper-ballot count is entered later, in Step 4.)
+3. Walk the projector display through the three phases by clicking the
+   gold buttons in turn:
+   - **Next: Election Rules →** (secretary reads Articles 4, 6, 12)
+   - **Next: Open Voting →** (opens voting and switches the projector
+     to the live ballot view)
+4. The projector now shows OPEN at the top with a progress bar.
 
 ### During Voting
 
@@ -75,33 +92,49 @@ Follow [SETUP.md](SETUP.md) to test with the router and a few phones.
 
 ### Closing Voting
 
-1. Click **Close Voting** when all brothers have voted.
+1. Click **Close Voting** in Step 3. **Step 4 — Counting & Decide** is
+   now the active card.
 2. Collect paper ballots. Count manually with at least two brothers.
-3. Enter paper vote totals in the admin panel.
+3. Enter the **Paper Ballots Received** total in Step 4 and click Save.
+4. Click **Enter Paper Votes (per candidate)** and enter the per-
+   candidate counts from the counter sheet.
 
 ### Viewing Results
 
-1. The **Manage** page shows full results (digital + paper).
-2. Click **Show Results on Projector** to display results to the congregation.
-3. The consistory with the deacons determines whether the threshold has been met per the congregation's election rules.
+1. Step 4 shows the per-office results table with elected badges,
+   Article 6a/6b ticks, and the office's remaining vacancies.
+2. Click **Show Results on Projector** to reveal totals to the
+   congregation.
+3. The consistory with the deacons determines whether to advance to
+   another round or finalise.
 
-### Second Round
+### Decide what's next
 
-If a second round is needed:
+Step 4's decision panel offers:
 
-1. Select the candidates to carry forward.
-2. Click **Start Round 2**.
-3. Hand out Round 2 code slips and paper ballots.
-4. The chairman announces which candidates are still standing (Round 2 paper ballots list all candidates).
-5. Open voting, vote, close, count, show results — same process.
+- **Start Round N+1** — pick the carry-forward candidates with the
+  checkboxes (already-elected ones are auto-disabled). The same code
+  batch is reused; no re-printing.
+- **Show Final Results** — switches the projector and `/displayphone`
+  views to the Final Results page.
+
+The chairman repeats the Step 2 → Step 3 → Step 4 cycle for each
+subsequent round.
 
 ---
 
 ## After the Election
 
-### Export Results
+### Final results and minutes
 
-Click **Export Results PDF** for a printable record for the consistory with the deacons.
+When every vacancy is filled (or the council decides to stop), **Step 5
+— Final results** is active. From there:
+
+- **Show Final Results on Projector** — switches the projector and
+  phone displays to a clean elected-brothers summary.
+- **Download Election Minutes (DOCX)** — narrative minutes with one
+  section per round, ready for the secretary to fill in placeholders
+  (chairman name, scripture reference, helpers' names, etc.).
 
 ### Archive
 
@@ -125,20 +158,16 @@ Create a new election in the same database, or delete the database file to start
 
 ### Dual-Sided Ballots
 
-The app can generate dual-sided ballots — when printed duplex and cut, each
-card has a paper ballot on one side and a phone voting code on the other.
-This is the recommended format because each brother receives both options
-in a single card and can choose which to use.
+The app can generate dual-sided ballots — when printed duplex and cut,
+each card has a paper ballot on one side and a phone voting code on
+the other. This is the recommended format because each brother
+receives both options in a single card and can choose which to use.
 
-To generate:
+The dual-sided ballot is included in the **Printer Pack ZIP** (Manage
+page → Step 1 → "Printer Pack ZIP"). To get just the dual-sided PDF,
+use **More formats → Dual-Sided Ballots PDF**.
 
-1. Generate codes for the election (Codes page)
-2. Click **"Download Dual-Sided Ballots PDF"**
-3. Print on plain A4 paper with **duplex printing enabled** (long-edge
-   binding)
-4. Cut the printed sheets along the dotted lines
-5. Each card now has a paper ballot on one side and a code slip on the other
-6. Hand one card to each brother at the attendance register on election day
-
-Each brother chooses which side to use (phone or paper) and submits only
-that side.
+Print on plain A4 with **duplex printing enabled** (long-edge binding),
+cut along the dotted lines, then hand one card to each brother at the
+attendance register on election day. Each brother chooses which side
+to use (phone or paper) and submits only that side.

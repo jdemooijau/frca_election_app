@@ -61,7 +61,10 @@ From now on, whenever your laptop connects to this router, it will always receiv
 2. Log in to the admin panel and go to Setup.
 3. Set the **WiFi Network Name** to match your router (e.g. `ChurchVote`).
 4. Set the **WiFi Password** (e.g. `vote2026`).
-5. Set the **Voting Base URL** to `http://192.168.8.100:5000`.
+5. Set the **Voting Base URL**. The app defaults to `http://church.vote`,
+   which only works if you set up the dnsmasq wildcard described later
+   in this document. If you skip the wildcard, use the literal IP
+   instead: `http://192.168.8.100:5000`.
 6. Save.
 
 ### Step 5: Verify from a phone
