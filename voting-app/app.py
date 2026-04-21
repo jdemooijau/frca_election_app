@@ -160,6 +160,7 @@ def _init_db_on(db):
             sort_order INTEGER NOT NULL DEFAULT 0,
             retiring_office_bearer INTEGER NOT NULL DEFAULT 0,
             elected INTEGER NOT NULL DEFAULT 0,
+            elected_round INTEGER,
             relieved INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (office_id) REFERENCES offices(id)
         );
@@ -1103,6 +1104,105 @@ def admin_election_manage(election_id):
                 "threshold_6b": t6b,
             }
 
+    # Phase-driven flow detection for the manage page (see
+    # docs/superpowers/specs/2026-04-21-manage-page-phase-flow-design.md).
+    total_ballots_round = used_codes + paper_ballot_count + postal_voter_count
+    display_phase = election["display_phase"] or 1
+
+    # Aggregate elected brothers across rounds (DB-persisted plus live
+    # this-round) to decide whether the election is complete.
+    offices_for_complete = db.execute(
+        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
+        (election_id,)
+    ).fetchall()
+    election_complete = bool(offices_for_complete)
+    elected_summary_by_office = []
+    for off in offices_for_complete:
+        persisted_names = [
+            r["name"] for r in db.execute(
+                "SELECT name FROM candidates WHERE office_id = ? "
+                "AND elected = 1 AND elected_round IS NOT NULL",
+                (off["id"],)
+            ).fetchall()
+        ]
+        names = list(persisted_names)
+        if (not election["voting_open"]) or display_phase == 4:
+            for item in results:
+                if item["office"]["id"] == off["id"]:
+                    for c in item["candidates"]:
+                        if c.get("elected") and c["name"] not in names:
+                            names.append(c["name"])
+                    break
+        names.sort(key=_surname_sort_key)
+        original = (
+            off["original_vacancies"]
+            if off["original_vacancies"] is not None
+            else (off["vacancies"] or off["max_selections"])
+        )
+        if len(names) < original:
+            election_complete = False
+        elected_summary_by_office.append({
+            "office_name": off["name"],
+            "original_vacancies": original,
+            "names": names,
+            "filled": len(names) >= original,
+        })
+
+    if election_complete or display_phase == 4:
+        active_phase = 5
+    elif election["voting_open"]:
+        active_phase = 3
+    elif total_ballots_round > 0 or election["show_results"]:
+        active_phase = 4
+    elif display_phase in (1, 2):
+        active_phase = 2
+    else:
+        active_phase = 1
+
+    voting_ever_opened = (
+        current_round > 1 or display_phase >= 3 or total_ballots_round > 0
+    )
+    next_round_started = active_phase == 5 or current_round > 1
+
+    phase_done = {
+        1: total_codes > 0,
+        2: voting_ever_opened,
+        3: not election["voting_open"] and total_ballots_round > 0,
+        4: election_complete,
+        5: False,
+    }
+
+    phase_summary = {
+        1: f"{total_codes} codes generated"
+            + (f", {postal_voter_count} postal vote(s) entered" if postal_voter_count > 0 else "")
+            if total_codes > 0
+            else "Print materials, enter postal votes",
+        2: (
+            f"{in_person_participants} brothers present"
+            if voting_ever_opened
+            else "Welcome → Rules → Voting"
+        ),
+        3: (
+            f"Round {current_round} closed — {total_ballots_round} ballots received"
+            if not election["voting_open"] and total_ballots_round > 0
+            else (
+                f"Round {current_round} voting open"
+                if election["voting_open"]
+                else "Voting not yet opened"
+            )
+        ),
+        4: (
+            "Counting and decision"
+            if active_phase == 4
+            else "Activates after voting closes"
+        ),
+        5: (
+            "Election complete"
+            if election_complete
+            else "Activates when all vacancies are filled"
+        ),
+    }
+
     return render_template(
         "admin/manage.html",
         election=election,
@@ -1115,7 +1215,12 @@ def admin_election_manage(election_id):
         postal_voter_count=postal_voter_count,
         valid_votes_cast=valid_votes_cast,
         thresholds=thresholds,
-        current_round=current_round
+        current_round=current_round,
+        active_phase=active_phase,
+        phase_done=phase_done,
+        phase_summary=phase_summary,
+        election_complete=election_complete,
+        elected_summary_by_office=elected_summary_by_office,
     )
 
 
