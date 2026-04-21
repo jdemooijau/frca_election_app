@@ -996,14 +996,13 @@ def admin_election_manage(election_id):
         (election_id,)
     ).fetchone()[0]
 
-    used_codes = db.execute(
-        "SELECT COUNT(*) FROM codes WHERE election_id = ? AND used = 1",
-        (election_id,)
-    ).fetchone()[0]
-
     # Article 6 threshold calculations — per-round counts
     in_person_participants, paper_ballot_count, digital_ballot_count = get_round_counts(election_id, current_round)
     postal_voter_count = (election["postal_voter_count"] or 0) if current_round == 1 else 0
+
+    # used_codes on the manage view = digital votes this round (not cumulative
+    # code burns, which would mix rounds and inflate totals)
+    used_codes = digital_ballot_count
 
     # Postal voters count as participants in round 1 only
     participants = in_person_participants + postal_voter_count
