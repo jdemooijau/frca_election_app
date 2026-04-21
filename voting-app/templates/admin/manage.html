@@ -95,32 +95,37 @@
             {% endif %}
         </table>
 
-        {% set anomaly = participants > 0 and total_ballots > participants %}
-        {% if used_codes > 0 %}
-        <div style="margin-top: 14px; padding: 12px 16px; border-radius: 8px;
-                    {{ 'background: #FFEAE8; border: 2px solid #C0392B;' if anomaly
-                       else 'background: var(--grey-light); border: 1px solid var(--grey);' }}">
-            <div style="font-size: 14px; color: {{ '#6B1A12' if anomaly else '#444' }}; margin-bottom: 8px;">
-                {% if anomaly %}
-                <strong>Ballot anomaly:</strong>
-                a digital vote can be rolled back if it was cast by mistake (e.g. voting was reopened
-                briefly, or a voter voted online and also handed in a paper ballot). The voting code
-                stays burned so the same voter can&#39;t use it again.
-                {% else %}
-                Roll back the most recent digital vote submission for round {{ election.current_round }}.
-                The voting code stays burned so it can&#39;t be reused.
-                {% endif %}
-            </div>
-            <form method="POST" action="{{ url_for('admin_rollback_last_vote', election_id=election.id) }}"
-                  class="inline-form"
-                  onsubmit="return confirm('Roll back the most recent digital vote submission for round {{ election.current_round }}?\n\nThis cannot be undone. The voting code stays burned.');">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-small {{ 'btn-danger' if anomaly else 'btn-outline' }}">
-                    Roll back last digital vote
-                </button>
-            </form>
+    </div>
+    {% endif %}
+
+    {% set total_ballots_current = used_codes + paper_ballot_count + postal_voter_count %}
+    {% set anomaly = participants > 0 and total_ballots_current > participants %}
+    {% if used_codes > 0 or anomaly %}
+    <!-- Vote corrections — always visible when there are digital votes in this round -->
+    <div class="card" {% if anomaly %}style="border: 2px solid #C0392B;"{% endif %}>
+        <div class="card-header" {% if anomaly %}style="color: #C0392B;"{% endif %}>
+            Vote Corrections{% if anomaly %} &mdash; Anomaly detected{% endif %}
+        </div>
+        {% if anomaly %}
+        <div style="padding: 10px 14px; background: #FFEAE8; border-radius: 6px;
+                    color: #6B1A12; font-size: 14px; margin-bottom: 12px;">
+            <strong>{{ total_ballots_current }} ballots received but only {{ participants }} brother{{ '' if participants == 1 else 's' }} participating.</strong>
+            Likely cause: a voter voted online and also handed in a paper ballot,
+            or voting was reopened after closure and an extra vote slipped in.
         </div>
         {% endif %}
+        <p style="font-size: 14px; color: #555; margin-bottom: 10px;">
+            Roll back the most recent digital vote submission for round {{ election.current_round }}.
+            The voting code stays burned so the same voter cannot reuse it.
+        </p>
+        <form method="POST" action="{{ url_for('admin_rollback_last_vote', election_id=election.id) }}"
+              class="inline-form"
+              onsubmit="return confirm('Roll back the most recent digital vote submission for round {{ election.current_round }}?\n\nThis cannot be undone. The voting code stays burned.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-small {{ 'btn-danger' if anomaly else 'btn-outline' }}">
+                Roll back last digital vote
+            </button>
+        </form>
     </div>
     {% endif %}
 
