@@ -896,6 +896,7 @@ def admin_set_display_phase(election_id):
     Phase 1 = Welcome (congregation + election details)
     Phase 2 = Election Rules (candidates list + articles 4, 6, 12)
     Phase 3 = Voting (opens voting automatically on first entry)
+    Phase 4 = Final Results (chairman-triggered end-of-election summary)
     """
     db = get_db()
     election = db.execute(
@@ -906,8 +907,16 @@ def admin_set_display_phase(election_id):
 
     direction = request.form.get("direction", "next")
     current_phase = election["display_phase"] or 1
+    target = request.form.get("target")
 
-    if direction == "next" and current_phase < 3:
+    if target is not None:
+        try:
+            new_phase = int(target)
+        except ValueError:
+            return redirect(url_for("admin_election_manage", election_id=election_id))
+        if new_phase not in (1, 2, 3, 4):
+            return redirect(url_for("admin_election_manage", election_id=election_id))
+    elif direction == "next" and current_phase < 3:
         new_phase = current_phase + 1
     elif direction == "prev" and current_phase > 1:
         new_phase = current_phase - 1
@@ -936,7 +945,7 @@ def admin_set_display_phase(election_id):
             (new_phase, election_id)
         )
         db.commit()
-        phase_names = {1: "Welcome", 2: "Election Rules", 3: "Voting"}
+        phase_names = {1: "Welcome", 2: "Election Rules", 3: "Voting", 4: "Final Results"}
         flash(f"Projector display: {phase_names[new_phase]}", "success")
 
     return redirect(url_for("admin_election_manage", election_id=election_id))
@@ -2294,9 +2303,8 @@ def _build_display_data():
     election_complete = True
     for office in offices:
         persisted = db.execute(
-            "SELECT name, elected_round FROM candidates "
-            "WHERE office_id = ? AND elected = 1 AND elected_round IS NOT NULL "
-            "ORDER BY elected_round, surname_sort_key(name)",
+            "SELECT name FROM candidates "
+            "WHERE office_id = ? AND elected = 1 AND elected_round IS NOT NULL",
             (office["id"],)
         ).fetchall()
         names = [r["name"] for r in persisted]
@@ -2307,6 +2315,8 @@ def _build_display_data():
                     for c in res["candidates"]:
                         if c["elected"] and c["name"] not in names:
                             names.append(c["name"])
+        # Alphabetical order by surname for the final display summary
+        names.sort(key=_surname_sort_key)
         original = (
             office["original_vacancies"]
             if office["original_vacancies"] is not None
@@ -2362,7 +2372,11 @@ def display():
         return render_template("display/welcome.html", **ctx)
     elif phase == 2:
         return render_template("display/rules.html", **ctx)
+    elif phase == 4:
+        # Explicit chairman-triggered final view
+        return render_template("display/final.html", **ctx)
     elif ctx.get("election_complete") and not election["voting_open"]:
+        # Auto-detect complete state
         return render_template("display/final.html", **ctx)
     else:
         return render_template("display/projector.html", **ctx)
@@ -2373,6 +2387,11 @@ def display_phone():
     election, ctx = _build_display_data()
     if not election:
         return render_template("display/waiting.html")
+    phase = election["display_phase"] or 1
+    if phase == 4:
+        return render_template("display/final.html", **ctx)
+    if ctx.get("election_complete") and not election["voting_open"]:
+        return render_template("display/final.html", **ctx)
     return render_template("display/phone.html", **ctx)
 
 
@@ -3099,9 +3118,8 @@ def admin_minutes_docx(election_id):
 
     for office in offices:
         persisted = db.execute(
-            "SELECT name, elected_round FROM candidates "
-            "WHERE office_id = ? AND elected = 1 AND elected_round IS NOT NULL "
-            "ORDER BY elected_round, surname_sort_key(name)",
+            "SELECT name FROM candidates "
+            "WHERE office_id = ? AND elected = 1 AND elected_round IS NOT NULL",
             (office["id"],)
         ).fetchall()
         names_in_order = [r["name"] for r in persisted]
@@ -3109,6 +3127,8 @@ def admin_minutes_docx(election_id):
         for name in final_round_elected_by_office.get(office["name"], []):
             if name not in names_in_order:
                 names_in_order.append(name)
+        # Alphabetical by surname for the final summary
+        names_in_order.sort(key=_surname_sort_key)
         elected_summary.append({
             "office": office["name"],
             "names": names_in_order,

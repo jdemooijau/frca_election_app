@@ -147,7 +147,7 @@
 
         <!-- Phase indicator -->
         <div style="display: flex; align-items: center; gap: 0; margin-bottom: 16px;">
-            {% set phases = [("1", "Welcome"), ("2", "Election Rules"), ("3", "Voting")] %}
+            {% set phases = [("1", "Welcome"), ("2", "Election Rules"), ("3", "Voting"), ("4", "Final Results")] %}
             {% for num, label in phases %}
             <div style="flex: 1; text-align: center; padding: 10px 0; font-size: 14px; font-weight: 600;
                         {{ 'background: var(--navy); color: var(--white);' if phase == num|int else 'background: var(--grey-light); color: #999;' }}
@@ -173,12 +173,18 @@
         {% elif phase == 3 %}
         <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
             Projector shows the live voting display with ballot counts and results.
+            Switch to <strong>Final Results</strong> once the election is complete.
+        </p>
+        {% elif phase == 4 %}
+        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
+            Projector and phone views show the final election result — elected brothers per office.
+            Use <strong>Back to Voting</strong> to return to the live voting display.
         </p>
         {% endif %}
 
         <!-- Navigation buttons -->
         <div style="display: flex; gap: 12px; align-items: center;">
-            {% if phase > 1 %}
+            {% if phase > 1 and phase < 4 %}
             <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="direction" value="prev">
@@ -198,6 +204,22 @@
                     Next: Open Voting &rarr;
                 </button>
                 {% endif %}
+            </form>
+            {% endif %}
+
+            {% if phase == 3 %}
+            <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="target" value="4">
+                <button type="submit" class="btn btn-gold btn-small">Show Final Results &rarr;</button>
+            </form>
+            {% endif %}
+
+            {% if phase == 4 %}
+            <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="target" value="3">
+                <button type="submit" class="btn btn-outline btn-small">&larr; Back to Voting</button>
             </form>
             {% endif %}
 
