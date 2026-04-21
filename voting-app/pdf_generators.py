@@ -1790,8 +1790,13 @@ def generate_minutes_docx(
             else:
                 _para("All vacancies were now filled.")
 
-            # Final result sentence (end-of-voting summary)
-            if elected_summary:
+            # Final result sentence (end-of-voting summary). Skip when
+            # there was only one round — the chairman's declaration above
+            # already lists the same brothers and the repetition reads
+            # awkwardly. Multi-round elections still get the summary so
+            # readers don't have to assemble it from each round's
+            # declaration.
+            if elected_summary and total_rounds > 1:
                 clauses = []
                 for item in elected_summary:
                     if item["names"]:
