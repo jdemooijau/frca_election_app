@@ -2385,8 +2385,13 @@ def _build_display_data():
             (office["id"],)
         ).fetchall()
         names = [r["name"] for r in persisted]
-        # Merge any live-elected names from this round's results if voting is closed
-        if not election["voting_open"]:
+        # Merge any live-elected names from this round's results. We do this
+        # whenever voting is closed OR the chairman has explicitly switched
+        # to phase 4 (final results) — the live count is the truth in both
+        # cases. Skip while voting is open and phase < 4 to avoid "elected"
+        # flickering in mid-vote.
+        phase_now = election["display_phase"] or 1
+        if (not election["voting_open"]) or phase_now == 4:
             for res in results:
                 if res["office_id"] == office["id"]:
                     for c in res["candidates"]:
@@ -2635,7 +2640,8 @@ def api_display_data():
             (office["id"],)
         ).fetchone()[0]
         live_count = 0
-        if not election["voting_open"] and "results" in data:
+        phase_now = election["display_phase"] or 1
+        if ((not election["voting_open"]) or phase_now == 4) and "results" in data:
             for r in data["results"]:
                 if r["office_name"] == office["name"]:
                     for c in r["candidates"]:
