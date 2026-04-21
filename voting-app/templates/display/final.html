@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Final Results — {{ election.name }}{% endblock %}
+{% block body_class %}display-body{% endblock %}
+
+{% block head %}
+<style>
+    .final-title {
+        font-size: 56px;
+        color: var(--navy);
+        margin: 24px 0 8px;
+        text-align: center;
+    }
+    .final-subtitle {
+        font-size: 32px;
+        color: var(--gold);
+        text-align: center;
+        margin-bottom: 40px;
+    }
+    .final-offices {
+        display: flex;
+        justify-content: center;
+        gap: 64px;
+        flex-wrap: wrap;
+        padding: 0 48px;
+    }
+    .final-office {
+        flex: 1 1 440px;
+        max-width: 620px;
+        background: #F7F9FB;
+        border: 2px solid var(--gold);
+        border-radius: 12px;
+        padding: 28px 36px;
+    }
+    .final-office h2 {
+        font-size: 40px;
+        color: var(--navy);
+        margin: 0 0 8px;
+        padding-bottom: 10px;
+        border-bottom: 3px solid var(--gold);
+    }
+    .final-office .vacancy-line {
+        font-size: 22px;
+        color: #555;
+        margin-bottom: 18px;
+    }
+    .final-office ol {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        counter-reset: elected-count;
+    }
+    .final-office li {
+        counter-increment: elected-count;
+        font-size: 32px;
+        color: var(--navy);
+        padding: 10px 0;
+        border-bottom: 1px solid #e5e5e5;
+        display: flex;
+        align-items: baseline;
+    }
+    .final-office li::before {
+        content: counter(elected-count) ".";
+        width: 48px;
+        font-size: 26px;
+        color: #999;
+        font-weight: 600;
+    }
+    .final-office li:last-child {
+        border-bottom: none;
+    }
+    .final-office .none {
+        font-size: 24px;
+        color: #999;
+        font-style: italic;
+        padding: 12px 0;
+    }
+    .final-office.partial {
+        border-color: #E67E22;
+        background: #FFF9F0;
+    }
+    .final-office.partial h2 {
+        border-bottom-color: #E67E22;
+    }
+    .final-note {
+        margin: 40px auto 24px;
+        max-width: 1100px;
+        text-align: center;
+        font-size: 22px;
+        color: #666;
+        line-height: 1.5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="display-topbar">
+    <span class="display-title">{{ election.name }}</span>
+    <span class="display-status closed">CLOSED</span>
+</div>
+
+<div class="display-main" style="justify-content: flex-start;">
+    <h1 class="final-title">Final Results</h1>
+    <div class="final-subtitle">The following brothers have been duly elected</div>
+
+    <div class="final-offices">
+        {% for office in elected_by_office %}
+        <div class="final-office {{ '' if office.filled else 'partial' }}">
+            <h2>For {{ office.office_name }}</h2>
+            <div class="vacancy-line">
+                {{ office.names|length }} of {{ office.original_vacancies }}
+                {% if office.original_vacancies == 1 %}vacancy{% else %}vacancies{% endif %}
+                filled
+            </div>
+            {% if office.names %}
+            <ol>
+                {% for name in office.names %}
+                <li>Br. {{ name }}</li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <div class="none">No candidate met the required thresholds.</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <p class="final-note">
+        Appointed in accordance with Article 6 of the Rules for the Election of Office Bearers.
+        The church council will formally appoint the elected brothers at its next meeting (Article 8).
+    </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    function check() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/display-data', true);
+        xhr.onload = function() {
+            if (xhr.status !== 200) return;
+            try {
+                var data = JSON.parse(xhr.responseText);
+                if (!data.active) return;
+                // Reload if finalization state changed or the chairman moved to a different phase
+                if (!data.election_complete || data.display_phase !== 3 || data.voting_open) {
+                    location.reload();
+                }
+            } catch (e) {}
+        };
+        xhr.send();
+    }
+    setInterval(check, 5000);
+})();
+</script>
+{% endblock %}

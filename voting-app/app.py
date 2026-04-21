@@ -2285,6 +2285,45 @@ def _build_display_data():
         for r in results if r["inactive_names"]
     ]
 
+    # Election-complete summary: elected brothers per office aggregated from
+    # the DB (candidates.elected set at each round close) plus any live
+    # elected from the current round (not yet persisted if admin_next_round
+    # hasn't fired). Election is complete when every office has filled its
+    # original_vacancies.
+    elected_by_office = []
+    election_complete = True
+    for office in offices:
+        persisted = db.execute(
+            "SELECT name, elected_round FROM candidates "
+            "WHERE office_id = ? AND elected = 1 AND elected_round IS NOT NULL "
+            "ORDER BY elected_round, surname_sort_key(name)",
+            (office["id"],)
+        ).fetchall()
+        names = [r["name"] for r in persisted]
+        # Merge any live-elected names from this round's results if voting is closed
+        if not election["voting_open"]:
+            for res in results:
+                if res["office_id"] == office["id"]:
+                    for c in res["candidates"]:
+                        if c["elected"] and c["name"] not in names:
+                            names.append(c["name"])
+        original = (
+            office["original_vacancies"]
+            if office["original_vacancies"] is not None
+            else (office["vacancies"] or office["max_selections"])
+        )
+        elected_by_office.append({
+            "office_name": office["name"],
+            "original_vacancies": original,
+            "names": names,
+            "filled": len(names) >= original,
+        })
+        if len(names) < original:
+            election_complete = False
+    # An election with no offices isn't "complete" — avoid false positives.
+    if not elected_by_office:
+        election_complete = False
+
     ctx = dict(
         election=election,
         used_codes=used_codes,
@@ -2296,6 +2335,8 @@ def _build_display_data():
         valid_votes_cast=used_codes + paper_ballot_count + postal_voter_count,
         results=results,
         paper_guide=paper_guide,
+        elected_by_office=elected_by_office,
+        election_complete=election_complete,
         wifi_ssid=wifi_ssid,
         wifi_password=wifi_password,
         vote_url=vote_url,
@@ -2321,6 +2362,8 @@ def display():
         return render_template("display/welcome.html", **ctx)
     elif phase == 2:
         return render_template("display/rules.html", **ctx)
+    elif ctx.get("election_complete") and not election["voting_open"]:
+        return render_template("display/final.html", **ctx)
     else:
         return render_template("display/projector.html", **ctx)
 
@@ -2483,6 +2526,39 @@ def api_display_data():
 
         data["results"] = results
         data["valid_votes_cast"] = valid_votes_api
+
+    # Election-complete flag (used by the display to auto-switch to final.html)
+    offices_all = db.execute(
+        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
+        (election["id"],)
+    ).fetchall()
+    complete = bool(offices_all)
+    for office in offices_all:
+        persisted_count = db.execute(
+            "SELECT COUNT(*) FROM candidates WHERE office_id = ? AND elected = 1",
+            (office["id"],)
+        ).fetchone()[0]
+        live_count = 0
+        if not election["voting_open"] and "results" in data:
+            for r in data["results"]:
+                if r["office_name"] == office["name"]:
+                    for c in r["candidates"]:
+                        if c["elected"]:
+                            # Only count live ones not already persisted
+                            already_persisted = db.execute(
+                                "SELECT 1 FROM candidates WHERE office_id = ? AND name = ? AND elected = 1",
+                                (office["id"], c["name"])
+                            ).fetchone()
+                            if not already_persisted:
+                                live_count += 1
+        original = (
+            office["original_vacancies"]
+            if office["original_vacancies"] is not None
+            else (office["vacancies"] or office["max_selections"])
+        )
+        if persisted_count + live_count < original:
+            complete = False
+    data["election_complete"] = complete
 
     return jsonify(data)
 

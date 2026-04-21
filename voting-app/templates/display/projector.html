@@ -372,6 +372,11 @@
                 location.reload();
                 return;
             }
+            // Election just finalised — reload so the server serves final.html
+            if (data.election_complete && !data.voting_open) {
+                location.reload();
+                return;
+            }
 
             document.getElementById('vote-count').textContent = data.total_ballots || 0;
             document.getElementById('total-participants').textContent = data.participants || 0;
