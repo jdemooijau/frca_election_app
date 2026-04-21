@@ -469,12 +469,12 @@
                 if (closed) {
                     var runoffOffices = data.results.filter(function(o) { return o.runoff_needed; });
                     if (runoffOffices.length > 0) {
-                        var parts = runoffOffices.map(function(o) {
+                        var runoffSummary = runoffOffices.map(function(o) {
                             var noun = o.remaining_vacancies === 1 ? 'vacancy' : 'vacancies';
                             return esc(o.office_name) + ': ' + o.remaining_vacancies + ' ' + noun + ' remain';
                         }).join('; ');
                         html += '<div class="runoff-banner"><strong>Round ' + (data.current_round + 1) +
-                                ' required</strong> — ' + parts + '</div>';
+                                ' required</strong> — ' + runoffSummary + '</div>';
                     }
                 }
                 html += '<div class="display-offices">';
