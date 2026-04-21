@@ -336,6 +336,7 @@ def _migrate_db_on(db):
         "ALTER TABLE round_counts ADD COLUMN digital_ballot_count INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE codes ADD COLUMN plaintext TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE elections ADD COLUMN display_phase INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE candidates ADD COLUMN elected_round INTEGER",
     ]
     for sql in migrations:
         try:
@@ -1313,8 +1314,8 @@ def admin_next_round(election_id):
 
         current_vacancies = office["vacancies"] or office["max_selections"]
 
-        # Count candidates elected in the round being closed
-        elected_this_round = 0
+        # Identify candidates elected in the round being closed
+        elected_ids = []
         if participants_prev > 0 and current_vacancies > 0:
             t6a, t6b = calculate_thresholds(current_vacancies, valid_votes_prev, participants_prev)
             cand_summary = []
@@ -1335,9 +1336,23 @@ def admin_next_round(election_id):
                     ).fetchone()[0]
                 total = digital + paper + postal
                 _, p6a, p6b = check_candidate_elected(total, t6a, t6b)
-                cand_summary.append({"total": total, "passes_6a": p6a, "passes_6b": p6b, "elected": False})
+                cand_summary.append({
+                    "id": cand["id"], "total": total,
+                    "passes_6a": p6a, "passes_6b": p6b, "elected": False,
+                })
             resolve_elected_status(cand_summary, current_vacancies)
-            elected_this_round = sum(1 for c in cand_summary if c["elected"])
+            elected_ids = [c["id"] for c in cand_summary if c["elected"]]
+
+        elected_this_round = len(elected_ids)
+
+        # Persist the elected brothers so the minutes summary and the final
+        # display can see the full cross-round picture even after candidates
+        # are deactivated for the next round.
+        for cand_id in elected_ids:
+            db.execute(
+                "UPDATE candidates SET elected = 1, elected_round = ? WHERE id = ?",
+                (current_round, cand_id)
+            )
 
         carried_forward_count = sum(1 for c in candidates if c["id"] in carry_set)
 
@@ -1465,8 +1480,10 @@ def admin_hard_reset(election_id):
     # Reactivate all candidates
     offices = db.execute("SELECT id FROM offices WHERE election_id = ?", (election_id,)).fetchall()
     for office in offices:
-        db.execute("UPDATE candidates SET active = 1, elected = 0, relieved = 0 WHERE office_id = ?",
-                   (office["id"],))
+        db.execute(
+            "UPDATE candidates SET active = 1, elected = 0, elected_round = NULL, relieved = 0 WHERE office_id = ?",
+            (office["id"],)
+        )
 
     db.commit()
     flash("Hard reset complete. All votes, codes, and postal votes cleared. Candidates reactivated. Generate new codes before voting.", "success")
@@ -2942,18 +2959,35 @@ def admin_minutes_docx(election_id):
             "offices": offices_list,
         })
 
-    # Build elected summary from the final round
+    # Build elected summary across ALL rounds. Previously-elected brothers
+    # are persisted to candidates.elected / elected_round at each round
+    # close (admin_next_round). The current round is still open, so compute
+    # live for the final round using the current office.vacancies which
+    # represents the remaining seats at the start of this round.
     elected_summary = []
+    final_round_elected_by_office = {}
     if rounds_data:
         last_round = rounds_data[-1]
-        for office in last_round["offices"]:
-            elected_names = [
-                c["name"] for c in office["candidates"] if c["elected"]
-            ]
-            elected_summary.append({
-                "office": office["name"],
-                "names": elected_names,
-            })
+        for office_result in last_round["offices"]:
+            names = [c["name"] for c in office_result["candidates"] if c["elected"]]
+            final_round_elected_by_office[office_result["name"]] = names
+
+    for office in offices:
+        persisted = db.execute(
+            "SELECT name, elected_round FROM candidates "
+            "WHERE office_id = ? AND elected = 1 AND elected_round IS NOT NULL "
+            "ORDER BY elected_round, surname_sort_key(name)",
+            (office["id"],)
+        ).fetchall()
+        names_in_order = [r["name"] for r in persisted]
+        # Merge in anyone elected in the current round but not yet persisted
+        for name in final_round_elected_by_office.get(office["name"], []):
+            if name not in names_in_order:
+                names_in_order.append(name)
+        elected_summary.append({
+            "office": office["name"],
+            "names": names_in_order,
+        })
 
     is_demo = get_setting("is_demo", "0") == "1"
     buf = generate_minutes_docx(
