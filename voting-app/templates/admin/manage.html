@@ -470,9 +470,6 @@
                 <a href="{{ url_for('admin_paper_votes', election_id=election.id) }}" class="btn btn-gold primary-cta">
                     Enter Paper Votes (per candidate)
                 </a>
-                <a href="{{ url_for('admin_counter_sheet_pdf', election_id=election.id) }}" class="btn btn-outline btn-small">
-                    Counter Sheet PDF
-                </a>
                 <form method="POST" action="{{ url_for('admin_toggle_results', election_id=election.id) }}" class="inline-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     {% if election.show_results %}
