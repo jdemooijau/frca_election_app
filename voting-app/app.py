@@ -257,7 +257,7 @@ def _init_db_on(db):
         "congregation_short": "FRC",
         "wifi_ssid": "ChurchVote",
         "wifi_password": "",
-        "voting_base_url": "http://192.168.8.100:5000",
+        "voting_base_url": "http://church.vote",
         "admin_password": DEFAULT_ADMIN_PASSWORD,
         "setup_complete": "0",
         "is_demo": "0",
@@ -569,7 +569,7 @@ def inject_globals():
         "congregation_short": get_setting("congregation_short", "FRC"),
         "wifi_ssid": get_setting("wifi_ssid", "ChurchVote"),
         "wifi_password": get_setting("wifi_password", ""),
-        "voting_base_url": get_setting("voting_base_url", "http://192.168.8.100:5000"),
+        "voting_base_url": get_setting("voting_base_url", "http://church.vote"),
         "is_demo": get_setting("is_demo", "0") == "1",
     }
 
@@ -645,7 +645,7 @@ def admin_setup():
         set_setting("congregation_short", congregation_short or congregation_name)
         set_setting("wifi_ssid", wifi_ssid or "ChurchVote")
         set_setting("wifi_password", wifi_password)
-        set_setting("voting_base_url", voting_base_url or "http://192.168.8.100:5000")
+        set_setting("voting_base_url", voting_base_url or "http://church.vote")
         if password_to_save is not None:
             set_setting("admin_password", password_to_save)
         set_setting("setup_complete", "1")
@@ -668,7 +668,7 @@ def _render_setup_form():
         congregation_short=get_setting("congregation_short", ""),
         wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
         wifi_password=get_setting("wifi_password", ""),
-        voting_base_url=get_setting("voting_base_url", "http://192.168.8.100:5000"),
+        voting_base_url=get_setting("voting_base_url", "http://church.vote"),
     )
 
 
@@ -1960,7 +1960,9 @@ DEMO_SETTINGS = {
     "congregation_short": "FRC Darling Downs",
     "wifi_ssid": "ChurchVote",
     "wifi_password": "",
-    "voting_base_url": "http://192.168.8.100:5000",
+    # voting_base_url intentionally NOT in DEMO_SETTINGS — the chairman
+    # configures it for their venue and we must not overwrite it on a
+    # 'Load Demo' click.
     "is_demo": "1",
     "setup_complete": "1",
 }
@@ -2696,7 +2698,7 @@ def _build_display_data():
 
     wifi_ssid = get_setting("wifi_ssid", "")
     wifi_password = get_setting("wifi_password", "")
-    vote_url = get_setting("voting_base_url", "http://192.168.8.100:5000")
+    vote_url = get_setting("voting_base_url", "http://church.vote")
 
     paper_guide = [
         {
@@ -3027,7 +3029,7 @@ def admin_codes_pdf(election_id):
         short_name=get_setting("congregation_short", "FRC"),
         wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
         wifi_password=get_setting("wifi_password", ""),
-        base_url=get_setting("voting_base_url", "http://192.168.8.100:5000"),
+        base_url=get_setting("voting_base_url", "http://church.vote"),
         is_demo=is_demo,
     )
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
@@ -3150,7 +3152,7 @@ def admin_dual_ballot_pdf(election_id):
         codes=codes[:20],
         wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
         wifi_password=get_setting("wifi_password", ""),
-        base_url=get_setting("voting_base_url", "http://192.168.8.100:5000"),
+        base_url=get_setting("voting_base_url", "http://church.vote"),
     )
 
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
@@ -3206,7 +3208,7 @@ def admin_dual_sided_ballots_pdf(election_id):
         codes=unused_codes,
         wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
         wifi_password=get_setting("wifi_password", ""),
-        base_url=get_setting("voting_base_url", "http://192.168.8.100:5000"),
+        base_url=get_setting("voting_base_url", "http://church.vote"),
         member_count=election["participants"] or 0,
         is_demo=is_demo,
     )
@@ -3272,7 +3274,7 @@ def admin_printer_pack_zip(election_id):
         codes=unused_codes,
         wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
         wifi_password=get_setting("wifi_password", ""),
-        base_url=get_setting("voting_base_url", "http://192.168.8.100:5000"),
+        base_url=get_setting("voting_base_url", "http://church.vote"),
         congregation_name=cong_name,
         members=[dict(m) for m in members],
         election_date=election["election_date"],
