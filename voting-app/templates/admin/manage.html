@@ -82,7 +82,14 @@
             <tr>
                 <td style="padding: 6px 16px 6px 0; color: #666;">Participation rate</td>
                 <td colspan="2" style="padding: 6px 0; text-align: right; font-weight: 700;">
+                    {% if total_ballots > participants %}
+                    <span style="color: var(--red);">
+                        {{ total_ballots }} ballots vs {{ participants }} marked participating
+                        — update participants or check for extra ballots
+                    </span>
+                    {% else %}
                     {{ total_ballots }} of {{ participants }} brothers ({{ "%.0f"|format(total_ballots / participants * 100) }}%)
+                    {% endif %}
                 </td>
             </tr>
             {% endif %}
@@ -365,7 +372,7 @@
     {% endfor %}
 
     <!-- Next round -->
-    {% if not election.voting_open and election.current_round < election.max_rounds %}
+    {% if not election.voting_open %}
     <div class="card">
         <div class="card-header">Start Next Round (Article 7)</div>
         <p style="margin-bottom: 12px;">

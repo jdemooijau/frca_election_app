@@ -200,7 +200,7 @@
         {% if not election.voting_open and results %}
         {# Voting closed — always show elected names #}
         {% set any_runoff = results|selectattr('runoff_needed')|list|length > 0 %}
-        {% if any_runoff and election.current_round < election.max_rounds %}
+        {% if any_runoff %}
         <div class="runoff-banner">
             <strong>Round {{ election.current_round + 1 }} required</strong> —
             {% for office in results if office.runoff_needed %}
@@ -466,7 +466,7 @@
             if (showingResults) {
                 var vvc = data.valid_votes_cast || 0;
                 var html = '';
-                if (closed && data.current_round < data.max_rounds) {
+                if (closed) {
                     var runoffOffices = data.results.filter(function(o) { return o.runoff_needed; });
                     if (runoffOffices.length > 0) {
                         var parts = runoffOffices.map(function(o) {

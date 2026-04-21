@@ -1285,9 +1285,6 @@ def admin_next_round(election_id):
         return redirect(url_for("admin_election_manage", election_id=election_id))
 
     current_round = election["current_round"]
-    if current_round >= election["max_rounds"]:
-        flash(f"Maximum rounds ({election['max_rounds']}) reached.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
 
     # Get selected candidate IDs to carry forward
     carry_forward_ids = request.form.getlist("carry_forward")
