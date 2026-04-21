@@ -1530,6 +1530,18 @@ def generate_minutes_docx(
         run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
         return p
 
+    # -- Helper: join names grammatically ("Brs A, B and C") --
+    def _join_brs(names):
+        names = list(names)
+        if not names:
+            return ""
+        if len(names) == 1:
+            return f"Br {names[0]}"
+        return "Brs " + ", ".join(names[:-1]) + f" and {names[-1]}"
+
+    def _vacancy_phrase(n):
+        return f"{n} vacanc{'y' if n == 1 else 'ies'}"
+
     # =====================================================================
     # TITLE
     # =====================================================================
@@ -1550,7 +1562,10 @@ def generate_minutes_docx(
 
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = subtitle.add_run("Minutes of the Election of Office Bearers")
+    run = subtitle.add_run(
+        "Minutes of the Congregational Meeting "
+        "for the Election of Office Bearers"
+    )
     run.bold = True
     run.font.size = Pt(14)
     run.font.color.rgb = navy
@@ -1569,219 +1584,238 @@ def generate_minutes_docx(
     # =====================================================================
     _heading("1. Opening", level=2)
     _placeholder(
-        "[Chairman\u2019s name] opened the meeting with the reading of "
-        "[scripture reference] and prayer."
+        "[The Chairman, Br [name]] opened the meeting at [time] and "
+        "welcomed all present. The Congregation sang from [hymn]. He "
+        "read from [scripture reference] and led in prayer."
     )
 
     # =====================================================================
-    # 2. READING OF RULES (Article 5)
+    # 2. VOTING - narrative lead-in, then one sub-section per round
     # =====================================================================
-    _heading("2. Reading of Rules (Article 5)", level=2)
-    _para(
-        "The secretary read out the list of candidates drawn up by the "
-        "church council. He also read out articles 4, 6, and 12 of the "
-        "rules for the election of office bearers."
-    )
+    _heading("2. Voting", level=2)
 
-    # Candidate list
     round1 = rounds_data[0] if rounds_data else None
+
+    _para(
+        "The Secretary, Br [name], read out Articles 4, 6 and 12 of the "
+        "Rules for the Election of Office Bearers."
+    )
+
     if round1:
-        for office in round1["offices"]:
+        in_person = round1["in_person"]
+        postal = round1["postal_voter_count"]
+        if postal > 0:
+            _para(
+                f"The Chairman advised that a total of {in_person} male "
+                "communicant members present had signed the attendance "
+                f"register and that {postal} postal vote"
+                f"{'' if postal == 1 else 's'} had been received. "
+                "Brs [name] and [name] were appointed to assist with the "
+                "collection and counting of votes."
+            )
+        else:
+            _para(
+                f"The Chairman advised that a total of {in_person} male "
+                "communicant members present had signed the attendance "
+                "register. Brs [name] and [name] were appointed to assist "
+                "with the collection and counting of votes."
+            )
+
+    total_rounds = len(rounds_data)
+
+    for rd_idx, rd in enumerate(rounds_data):
+        round_num = rd["round_number"]
+        is_last_round = (rd_idx == total_rounds - 1)
+        _heading(f"2.{rd_idx + 1} Round {round_num}", level=3)
+
+        # Narrative introduction to the round
+        office_phrases = [
+            f"the office of {o['name']} ({_vacancy_phrase(o['vacancies'])})"
+            for o in rd["offices"]
+        ]
+        if round_num == 1:
+            if len(office_phrases) == 1:
+                intro = f"Voting was conducted for {office_phrases[0]}."
+            elif len(office_phrases) == 2:
+                intro = (
+                    f"Voting was conducted for {office_phrases[0]} "
+                    f"and {office_phrases[1]}."
+                )
+            else:
+                intro = (
+                    "Voting was conducted for "
+                    + ", ".join(office_phrases[:-1])
+                    + f", and {office_phrases[-1]}."
+                )
+        else:
+            parts = []
+            for o in rd["offices"]:
+                names = [c["name"] for c in o["candidates"]]
+                parts.append(
+                    f"the office of {o['name']} "
+                    f"({_vacancy_phrase(o['vacancies'])} remaining) "
+                    f"between {_join_brs(names)}"
+                )
+            if len(parts) == 1:
+                intro = f"A further ballot was conducted for {parts[0]}."
+            else:
+                intro = (
+                    "A further ballot was conducted for "
+                    + "; and for ".join(parts)
+                    + "."
+                )
+        _para(intro)
+
+        # Brief threshold mention per office
+        for o in rd["offices"]:
+            t6a = o.get("threshold_6a")
+            t6b = o.get("threshold_6b")
+            if t6a is not None and t6b is not None:
+                _para(
+                    f"For the office of {o['name']}, a candidate required "
+                    f"more than {t6a:.2f} votes (Article 6a) and at least "
+                    f"{t6b} votes (Article 6b) to be elected."
+                )
+
+        # Simple 2-column vote table per office
+        for o in rd["offices"]:
             p = doc.add_paragraph()
-            run = p.add_run(f"For {office['name']}")
+            run = p.add_run(o["name"])
             run.bold = True
             run.font.size = Pt(11)
             p.paragraph_format.space_after = Pt(2)
 
-            for cand in office["candidates"]:
-                doc.add_paragraph(
-                    f"Br. {cand['name']}", style="List Bullet"
-                )
+            cands = o["candidates"]
+            if not cands:
+                _placeholder(f"[No candidates stood for {o['name']} this round.]")
+                continue
 
-    # =====================================================================
-    # 3. ATTENDANCE (Article 4)
-    # =====================================================================
-    _heading("3. Attendance (Article 4)", level=2)
-    if round1:
-        in_person = round1["in_person"]
-        postal = round1["postal_voter_count"]
-        total_participants = round1["participants"]
-
-        _para(
-            f"{in_person} brothers signed the attendance register."
-        )
-        if postal > 0:
-            _para(f"{postal} postal voters participated.")
-            _para(
-                f"Total participants: {total_participants} "
-                f"({in_person} in-person + {postal} postal).",
-                bold=True,
-            )
-        else:
-            _para(
-                f"Total participants: {total_participants}.",
-                bold=True,
-            )
-
-    _para(
-        "The secretary satisfied himself as to the accuracy of the number "
-        "of members participating in the election."
-    )
-
-    # =====================================================================
-    # 4. VOTING AND RESULTS — per round
-    # =====================================================================
-    for rd in rounds_data:
-        round_num = rd["round_number"]
-        total_rounds = len(rounds_data)
-
-        if total_rounds == 1:
-            _heading("4. Voting and Results", level=2)
-        else:
-            _heading(f"4.{round_num} Round {round_num}", level=2)
-
-        # Voting method breakdown
-        _para(f"Total ballots cast: {rd['total_ballots']}", bold=True)
-
-        breakdown_items = []
-        if rd["used_codes"] > 0:
-            breakdown_items.append(f"{rd['used_codes']} digital")
-        if rd["paper_ballot_count"] > 0:
-            breakdown_items.append(f"{rd['paper_ballot_count']} paper")
-        if rd["postal_voter_count"] > 0:
-            breakdown_items.append(f"{rd['postal_voter_count']} postal")
-        if breakdown_items:
-            _para("Breakdown: " + ", ".join(breakdown_items) + ".")
-
-        # Results per office
-        for office in rd["offices"]:
-            doc.add_paragraph()
-            p = doc.add_paragraph()
-            run = p.add_run(
-                f"{office['name']} \u2014 {office['vacancies']} "
-                f"{'vacancy' if office['vacancies'] == 1 else 'vacancies'}, "
-                f"select {office['max_selections']}"
-            )
-            run.bold = True
-            run.font.size = Pt(11)
-
-            # Threshold info
-            if office.get("threshold_6a") is not None:
-                t6a = office["threshold_6a"]
-                t6b = office["threshold_6b"]
-                _para(
-                    f"Article 6a threshold: more than {t6a:.2f} votes required. "
-                    f"Article 6b threshold: at least {t6b} votes required."
-                )
-
-            # Results table
-            has_postal = any(
-                c.get("postal", 0) > 0 for c in office["candidates"]
-            )
-
-            if has_postal:
-                headers = ["Candidate", "Digital", "Paper", "Postal", "Total", "Elected"]
-                col_count = 6
-            else:
-                headers = ["Candidate", "Digital", "Paper", "Total", "Elected"]
-                col_count = 5
-
-            table = doc.add_table(
-                rows=1 + len(office["candidates"]),
-                cols=col_count,
-            )
+            table = doc.add_table(rows=1 + len(cands), cols=2)
             table.style = "Table Grid"
             table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-            # Header row
-            for i, hdr in enumerate(headers):
-                cell = table.rows[0].cells[i]
-                cell.text = hdr
-                for paragraph in cell.paragraphs:
-                    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            table.rows[0].cells[0].text = "Candidate"
+            table.rows[0].cells[1].text = "# votes"
+            for paragraph in table.rows[0].cells[1].paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for ci in range(2):
+                for paragraph in table.rows[0].cells[ci].paragraphs:
                     for run in paragraph.runs:
                         run.bold = True
                         run.font.size = Pt(10)
 
-            # Data rows
-            for row_idx, cand in enumerate(office["candidates"]):
+            for row_idx, cand in enumerate(cands):
                 row = table.rows[row_idx + 1]
-                row.cells[0].text = f"Br. {cand['name']}"
-
-                if has_postal:
-                    row.cells[1].text = str(cand["digital"])
-                    row.cells[2].text = str(cand["paper"])
-                    row.cells[3].text = str(cand.get("postal", 0))
-                    row.cells[4].text = str(cand["total"])
-                    elected_col = 5
-                else:
-                    row.cells[1].text = str(cand["digital"])
-                    row.cells[2].text = str(cand["paper"])
-                    row.cells[3].text = str(cand["total"])
-                    elected_col = 4
-
-                elected_text = "Yes" if cand.get("elected") else "No"
-                row.cells[elected_col].text = elected_text
-
-                # Centre numeric cells
-                for ci in range(1, col_count):
+                row.cells[0].text = f"Br {cand['name']}"
+                row.cells[1].text = str(cand["total"])
+                for paragraph in row.cells[1].paragraphs:
+                    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for ci in range(2):
                     for paragraph in row.cells[ci].paragraphs:
-                        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                         for run in paragraph.runs:
                             run.font.size = Pt(10)
-
-                # Bold the elected cell
                 if cand.get("elected"):
-                    for paragraph in row.cells[elected_col].paragraphs:
-                        for run in paragraph.runs:
-                            run.bold = True
+                    for ci in range(2):
+                        for paragraph in row.cells[ci].paragraphs:
+                            for run in paragraph.runs:
+                                run.bold = True
 
-            # Name column font size
-            for row_idx in range(1, len(table.rows)):
-                for paragraph in table.rows[row_idx].cells[0].paragraphs:
-                    for run in paragraph.runs:
-                        run.font.size = Pt(10)
+        # Declaration sentence
+        elected_clauses = []
+        remaining_offices = []
+        for o in rd["offices"]:
+            elected_names = [c["name"] for c in o["candidates"] if c.get("elected")]
+            unfilled = o["vacancies"] - len(elected_names)
+            if elected_names:
+                elected_clauses.append({
+                    "office": o["name"],
+                    "names": elected_names,
+                })
+            if unfilled > 0:
+                remaining_offices.append((o["name"], unfilled))
 
-    # =====================================================================
-    # 5. ELECTED BROTHERS
-    # =====================================================================
-    next_num = 5 if len(rounds_data) <= 1 else 5 + len(rounds_data) - 1
-    _heading(f"{next_num}. Elected Brothers", level=2)
-
-    if elected_summary:
-        for item in elected_summary:
-            p = doc.add_paragraph()
-            run = p.add_run(f"For the office of {item['office']}: ")
-            run.bold = True
-            if item["names"]:
-                p.add_run(", ".join(f"Br. {n}" for n in item["names"]))
+        if elected_clauses:
+            def _clause_text(c):
+                return f"for the office of {c['office']}, {_join_brs(c['names'])}"
+            if len(elected_clauses) == 1:
+                names = elected_clauses[0]["names"]
+                verb = "were" if len(names) > 1 else "was"
+                _para(
+                    f"The Chairman declared that {_join_brs(names)} {verb} "
+                    f"elected for the office of {elected_clauses[0]['office']}."
+                )
             else:
-                run2 = p.add_run("no candidate met the required thresholds.")
-                run2.italic = True
-        _para(
-            "The above brothers were duly elected in accordance with "
-            "Article 6 of the rules for the election of office bearers."
-        )
-    else:
-        _placeholder(
-            "[No candidates met the required thresholds in any round.]"
-        )
+                joined = "; and ".join(_clause_text(c) for c in elected_clauses)
+                _para(
+                    "The Chairman declared that the following brothers "
+                    f"were elected: {joined}."
+                )
+        else:
+            _para(
+                "The Chairman declared that no candidate was elected in "
+                "this round, and a further ballot would be required."
+            )
+
+        # Outcome after this round
+        if is_last_round:
+            if remaining_offices:
+                parts = [
+                    f"{name} ({count} unfilled)"
+                    for name, count in remaining_offices
+                ]
+                _para(
+                    "The election for " + ", ".join(parts) +
+                    " concluded without all vacancies being filled."
+                )
+            else:
+                _para("All vacancies were now filled.")
+
+            # Final result sentence (end-of-voting summary)
+            if elected_summary:
+                clauses = []
+                for item in elected_summary:
+                    if item["names"]:
+                        clauses.append(
+                            f"for the office of {item['office']}, "
+                            f"{_join_brs(item['names'])}"
+                        )
+                if clauses:
+                    p = doc.add_paragraph()
+                    run = p.add_run(
+                        "The final result of the election is: "
+                        + "; and ".join(clauses)
+                        + "."
+                    )
+                    run.bold = True
+        elif remaining_offices:
+            parts = [
+                f"the office of {name} ({count} vacanc{'y' if count == 1 else 'ies'} to fill)"
+                for name, count in remaining_offices
+            ]
+            _para(
+                "A further ballot was required for "
+                + ", ".join(parts) + "."
+            )
 
     # =====================================================================
-    # 6. ARTICLE 12 — Objections
+    # 3. ARTICLE 12 - Objections
     # =====================================================================
-    _heading(f"{next_num + 1}. Objections (Article 12)", level=2)
+    _heading("3. Objections (Article 12)", level=2)
     _placeholder(
-        "[No objections of a formal nature against the procedure at "
-        "the election were lodged. / Record any objections here.]"
+        "The Chairman provided opportunity for any objections to be "
+        "raised, noting that Article 12 of the Rules requires that any "
+        "objections of a formal nature against procedure must be lodged "
+        "at the meeting. [No objections were raised. / Record any "
+        "objections here.]"
     )
 
     # =====================================================================
-    # 7. CLOSING
+    # 4. CLOSING
     # =====================================================================
-    _heading(f"{next_num + 2}. Closing", level=2)
+    _heading("4. Closing", level=2)
     _placeholder(
-        "[Chairman\u2019s name] closed the meeting with thanksgiving."
+        "Br [name] led in prayer, and the Chairman closed the meeting "
+        "at [time]."
     )
 
     # =====================================================================
