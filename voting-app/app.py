@@ -147,6 +147,7 @@ def _init_db_on(db):
             name TEXT NOT NULL,
             max_selections INTEGER NOT NULL DEFAULT 1,
             vacancies INTEGER,
+            original_vacancies INTEGER,
             sort_order INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (election_id) REFERENCES elections(id)
         );
@@ -337,12 +338,23 @@ def _migrate_db_on(db):
         "ALTER TABLE codes ADD COLUMN plaintext TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE elections ADD COLUMN display_phase INTEGER NOT NULL DEFAULT 1",
         "ALTER TABLE candidates ADD COLUMN elected_round INTEGER",
+        "ALTER TABLE offices ADD COLUMN original_vacancies INTEGER",
     ]
     for sql in migrations:
         try:
             db.execute(sql)
         except sqlite3.OperationalError:
             pass  # Column already exists
+
+    # Back-fill original_vacancies from vacancies for rows that never got it.
+    # For elections already advanced past round 1, office.vacancies is already
+    # decremented, so we fall back to max_selections where available — max_selections
+    # decrements too, so this lower bound is no worse than current behaviour for
+    # those rows. Row-level correction happens as new elections are created.
+    db.execute(
+        "UPDATE offices SET original_vacancies = COALESCE(vacancies, max_selections) "
+        "WHERE original_vacancies IS NULL"
+    )
     db.commit()
 
 
@@ -692,8 +704,9 @@ def admin_election_setup(election_id):
             ).fetchone()[0]
 
             cursor = db.execute(
-                "INSERT INTO offices (election_id, name, max_selections, vacancies, sort_order) VALUES (?, ?, ?, ?, ?)",
-                (election_id, office_name, max_selections, vacancies, max_sort + 1)
+                "INSERT INTO offices (election_id, name, max_selections, vacancies, original_vacancies, sort_order) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (election_id, office_name, max_selections, vacancies, vacancies, max_sort + 1)
             )
             office_id = cursor.lastrowid
 
@@ -1630,8 +1643,8 @@ def _create_demo_election(db, candidate_names):
 
     # Elder office — 3 vacancies, 6 candidates, max_selections = 3
     cursor = db.execute(
-        "INSERT INTO offices (election_id, name, max_selections, vacancies, sort_order) "
-        "VALUES (?, 'Elder', 3, 3, 1)",
+        "INSERT INTO offices (election_id, name, max_selections, vacancies, original_vacancies, sort_order) "
+        "VALUES (?, 'Elder', 3, 3, 3, 1)",
         (election_id,),
     )
     elder_office_id = cursor.lastrowid
@@ -1643,8 +1656,8 @@ def _create_demo_election(db, candidate_names):
 
     # Deacon office — 2 vacancies, 4 candidates, max_selections = 2
     cursor = db.execute(
-        "INSERT INTO offices (election_id, name, max_selections, vacancies, sort_order) "
-        "VALUES (?, 'Deacon', 2, 2, 2)",
+        "INSERT INTO offices (election_id, name, max_selections, vacancies, original_vacancies, sort_order) "
+        "VALUES (?, 'Deacon', 2, 2, 2, 2)",
         (election_id,),
     )
     deacon_office_id = cursor.lastrowid
@@ -2869,6 +2882,18 @@ def admin_minutes_docx(election_id):
         (election_id,)
     ).fetchall()
 
+    # Track vacancies remaining per office at the start of each round,
+    # starting from the preserved original_vacancies and decrementing by the
+    # number of brothers whose elected_round matches earlier rounds.
+    office_vacancies_at_round = {
+        office["id"]: (
+            office["original_vacancies"]
+            if office["original_vacancies"] is not None
+            else (office["vacancies"] or office["max_selections"])
+        )
+        for office in offices
+    }
+
     # Build rounds_data with full detail for each round
     rounds_data = []
     for round_num in range(1, election["current_round"] + 1):
@@ -2883,7 +2908,12 @@ def admin_minutes_docx(election_id):
 
         offices_list = []
         for office in offices:
-            vacancies = office["vacancies"] or office["max_selections"]
+            vacancies = office_vacancies_at_round[office["id"]]
+
+            # If this office was already fully decided before this round,
+            # skip it — nothing to report for this round under this office.
+            if vacancies <= 0:
+                continue
 
             candidates = db.execute(
                 "SELECT * FROM candidates WHERE office_id = ? "
@@ -2926,7 +2956,17 @@ def admin_minutes_docx(election_id):
                 if participants > 0 and vacancies > 0:
                     _, passes_6a, passes_6b = check_candidate_elected(total, t6a, t6b)
 
+                # Candidates already elected in a prior round shouldn't appear
+                # on this round's ballot table.
+                already_elected_before = (
+                    cand["elected_round"] is not None
+                    and cand["elected_round"] < round_num
+                )
+                if already_elected_before:
+                    continue
+
                 cand_list.append({
+                    "id": cand["id"],
                     "name": cand["name"],
                     "digital": digital,
                     "paper": paper,
@@ -2939,10 +2979,19 @@ def admin_minutes_docx(election_id):
 
             resolve_elected_status(cand_list, vacancies)
 
+            # Update the running vacancy count for subsequent rounds.
+            elected_this_round = sum(1 for c in cand_list if c["elected"])
+            office_vacancies_at_round[office["id"]] = max(
+                vacancies - elected_this_round, 0
+            )
+
             offices_list.append({
                 "name": office["name"],
                 "vacancies": vacancies,
-                "max_selections": office["max_selections"],
+                # max_selections for the round = vacancies remaining at the
+                # start of the round; historic carry-forward sizes are not
+                # preserved, so this is the best post-hoc reconstruction.
+                "max_selections": vacancies,
                 "threshold_6a": t6a if participants > 0 else None,
                 "threshold_6b": t6b if participants > 0 else None,
                 "candidates": cand_list,
