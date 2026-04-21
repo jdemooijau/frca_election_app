@@ -1,3 +1,6 @@
 .claude/worktrees/
 .superpowers/
 /temp
+/node_modules/
+/screenshots/*.pdf
+/voting-app/data/frca_election.db.*_backup
