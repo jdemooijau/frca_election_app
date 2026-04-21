@@ -1493,12 +1493,18 @@ def admin_paper_votes(election_id):
 
         db.commit()
 
-        # Validate totals against paper ballot count
+        # Validate totals against paper ballot count.
+        # Empty form fields come through as '' which int() rejects — match
+        # the same parsing as the save loop above (digits-only -> int, else 0).
+        def _safe_int(s):
+            s = (s or "").strip()
+            return int(s) if s.isdigit() else 0
+
         _, paper_ballot_count, _ = get_round_counts(election_id, current_round)
         if paper_ballot_count > 0:
             for office in offices:
                 total_votes = sum(
-                    int(request.form.get(f"paper_{c['id']}", 0))
+                    _safe_int(request.form.get(f"paper_{c['id']}", "0"))
                     for c in db.execute(
                         "SELECT * FROM candidates WHERE office_id = ? AND active = 1", (office["id"],)
                     ).fetchall()
