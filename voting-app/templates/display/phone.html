@@ -1,50 +1,221 @@
 {% extends "base.html" %}
 {% block title %}Live Results — {{ election.name }}{% endblock %}
 
-{% block content %}
-<div class="header">
-    <h1>{{ election.name }}</h1>
-    <div class="subtitle">
-        {% if election.current_round > 1 %}Round {{ election.current_round }} — {% endif %}
-        <span id="voting-status" style="margin-left: 8px; font-weight: 700; color: {{ 'var(--green)' if election.voting_open else 'var(--red)' }};">
-            {{ "OPEN" if election.voting_open else "CLOSED" }}
-        </span>
-    </div>
-</div>
+{% block head %}
+<style>
+    /* Phone-first layout — keep everything readable down to ~320px */
+    body { font-size: 16px; }
+    .phone-wrap {
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 12px;
+        box-sizing: border-box;
+    }
+    .phone-header {
+        background: var(--navy);
+        color: #fff;
+        padding: 14px 16px;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        text-align: center;
+    }
+    .phone-header h1 {
+        font-size: 18px;
+        margin: 0 0 6px;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+    }
+    .phone-header .status {
+        font-weight: 700;
+        letter-spacing: 1px;
+        font-size: 14px;
+    }
+    .status.open { color: #7ae29a; }
+    .status.closed { color: #ff8a7a; }
+    .round-pill {
+        display: inline-block;
+        background: var(--gold);
+        color: var(--navy);
+        font-weight: 700;
+        font-size: 13px;
+        padding: 2px 10px;
+        border-radius: 12px;
+        margin-right: 8px;
+    }
+    .anomaly {
+        background: #FFEAE8;
+        border: 2px solid #C0392B;
+        color: #6B1A12;
+        padding: 12px 14px;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        font-size: 14px;
+        line-height: 1.35;
+    }
+    .anomaly .anomaly-title {
+        color: #C0392B;
+        font-weight: 800;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        display: block;
+        margin-bottom: 4px;
+    }
+    .counts {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .counts .stat {
+        flex: 1;
+        text-align: center;
+        background: var(--grey-light);
+        border-radius: 10px;
+        padding: 10px 6px;
+    }
+    .counts .stat .num {
+        display: block;
+        font-size: 32px;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--navy);
+    }
+    .counts .stat.participating .num { color: var(--grey-dark); }
+    .counts .stat .label {
+        font-size: 12px;
+        color: var(--grey-dark);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .progress {
+        height: 22px;
+        background: var(--grey);
+        border-radius: 11px;
+        overflow: hidden;
+        position: relative;
+        margin-bottom: 16px;
+    }
+    .progress-fill {
+        height: 100%;
+        background: var(--gold);
+        border-radius: 11px;
+    }
+    .progress-label {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--navy);
+    }
+    .office-block {
+        background: #fff;
+        border: 1px solid var(--grey);
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+    }
+    .office-block h3 {
+        font-size: 16px;
+        color: var(--navy);
+        margin: 0 0 8px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid var(--gold);
+    }
+    .cand-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #eee;
+        font-size: 15px;
+        min-height: 32px;
+    }
+    .cand-row:last-child { border-bottom: none; }
+    .cand-row .name { color: var(--navy); padding-right: 8px; overflow-wrap: anywhere; }
+    .cand-row .votes { font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+    .elected-tag {
+        display: inline-block;
+        background: #E8F8EE;
+        color: #13532B;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 4px;
+        margin-left: 6px;
+        letter-spacing: 0.5px;
+    }
+    .blank-row { opacity: 0.55; font-style: italic; }
+    .nav-btn {
+        display: block;
+        width: 100%;
+        padding: 14px;
+        background: var(--navy);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 700;
+        text-decoration: none;
+        text-align: center;
+        box-sizing: border-box;
+        margin-top: 16px;
+    }
+</style>
+{% endblock %}
 
-<div class="container">
-    <div style="display: flex; justify-content: center; gap: 24px; margin-bottom: 16px;">
-        <div style="text-align: center;">
-            <span id="vote-count" style="display: block; font-size: 36px; font-weight: 700; color: var(--navy); line-height: 1;">{{ total_ballots }}</span>
-            <span style="font-size: 13px; color: var(--grey-dark);">ballots</span>
+{% block content %}
+<div class="phone-wrap">
+    <div class="phone-header">
+        <h1>{{ election.name }}</h1>
+        <div>
+            {% if election.current_round > 1 %}<span class="round-pill">R{{ election.current_round }}</span>{% endif %}
+            <span class="status {{ 'open' if election.voting_open else 'closed' }}" id="voting-status">
+                {{ "OPEN" if election.voting_open else "CLOSED" }}
+            </span>
         </div>
-        <div style="text-align: center;">
-            <span id="total-participants" style="display: block; font-size: 36px; font-weight: 700; color: var(--grey-dark); line-height: 1;">{{ participants }}</span>
-            <span style="font-size: 13px; color: var(--grey-dark);">participating</span>
+    </div>
+
+    {% if total_ballots > participants and participants > 0 %}
+    <div class="anomaly" id="ballot-anomaly">
+        <span class="anomaly-title">&#9888; Ballot count anomaly</span>
+        {{ total_ballots }} ballots received but only {{ participants }} brother{{ '' if participants == 1 else 's' }} marked as participating. Likely cause: a voter voted online and also submitted paper, or voting was re-opened after closure.
+    </div>
+    {% else %}
+    <div class="anomaly" id="ballot-anomaly" style="display:none;"></div>
+    {% endif %}
+
+    <div class="counts">
+        <div class="stat">
+            <span class="num" id="vote-count">{{ total_ballots }}</span>
+            <span class="label">ballots</span>
+        </div>
+        <div class="stat participating">
+            <span class="num" id="total-participants">{{ participants }}</span>
+            <span class="label">participating</span>
         </div>
     </div>
 
     {% set pct = ((total_ballots / participants * 100) | round | int) if participants > 0 else 0 %}
-    <div style="height: 24px; background: var(--grey); border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 20px;">
-        <div id="progress-fill" style="height: 100%; background: var(--gold); border-radius: 12px; width: {{ pct }}%;"></div>
-        <div id="progress-label" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--navy);">{{ total_ballots }} / {{ participants }} ({{ pct }}%)</div>
+    <div class="progress">
+        <div class="progress-fill" id="progress-fill" style="width: {{ pct if pct <= 100 else 100 }}%;"></div>
+        <div class="progress-label" id="progress-label">{{ total_ballots }} / {{ participants }} ({{ pct }}%)</div>
     </div>
 
     <div id="results-container">
         {% for office in results %}
         {% if office.candidates %}
-        <div style="margin-bottom: 20px;">
-            <h3 style="font-size: 16px; color: var(--navy); margin-bottom: 6px; padding-bottom: 4px; border-bottom: 2px solid var(--gold);">{{ office.office_name }}</h3>
+        <div class="office-block">
+            <h3>{{ office.office_name }}</h3>
             {% for cand in office.candidates %}
-            <div class="phone-cand-row">
-                <span style="color: var(--navy);">
-                    {{ cand.name }}
-                    {% if cand.elected and not election.voting_open %}
-                    <span style="color: var(--green); font-weight: 700;">ELECTED</span>
-                    {% endif %}
+            <div class="cand-row">
+                <span class="name">
+                    {{ cand.name }}{% if cand.elected and not election.voting_open %}<span class="elected-tag">ELECTED</span>{% endif %}
                 </span>
                 {% if election.show_results %}
-                <span style="font-weight: 700; color: var(--navy);">{{ cand.total }}</span>
+                <span class="votes">{{ cand.total }}</span>
                 {% endif %}
             </div>
             {% endfor %}
@@ -52,9 +223,9 @@
             {% set possible = total_ballots * office.max_selections %}
             {% set blank = possible - office.votes_cast %}
             {% if possible > 0 and blank > 0 %}
-            <div class="phone-cand-row" style="opacity: 0.5;">
-                <span style="font-style: italic;">Blank votes</span>
-                <span style="font-weight: 700;">{{ blank }}</span>
+            <div class="cand-row blank-row">
+                <span class="name">Blank votes</span>
+                <span class="votes">{{ blank }}</span>
             </div>
             {% endif %}
             {% endif %}
@@ -63,52 +234,75 @@
         {% endfor %}
     </div>
 
-    <div style="text-align: center; margin-top: 24px;">
-        <a href="{{ url_for('voter_enter_code') }}" class="btn btn-outline">Back to Voting</a>
-    </div>
+    <a href="{{ url_for('voter_enter_code') }}" class="nav-btn">Back to voting</a>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 (function() {
+    function esc(t) {
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(t));
+        return d.innerHTML;
+    }
     function update() {
         var xhr = new XMLHttpRequest();
         xhr.open('GET', '/api/display-data', true);
         xhr.onload = function() {
             if (xhr.status !== 200) return;
-            var data = JSON.parse(xhr.responseText);
+            var data;
+            try { data = JSON.parse(xhr.responseText); } catch (e) { return; }
             if (!data.active) return;
 
-            document.getElementById('vote-count').textContent = data.total_ballots || 0;
-            document.getElementById('total-participants').textContent = data.participants || 0;
+            // Auto-switch to final if the chairman or auto-detect marks the election complete
+            if (data.display_phase === 4 || (data.election_complete && !data.voting_open)) {
+                location.reload();
+                return;
+            }
 
-            var parts = data.participants || 0;
             var tb = data.total_ballots || 0;
+            var parts = data.participants || 0;
+            document.getElementById('vote-count').textContent = tb;
+            document.getElementById('total-participants').textContent = parts;
+
             var pct = parts > 0 ? Math.round(tb / parts * 100) : 0;
-            document.getElementById('progress-fill').style.width = pct + '%';
+            document.getElementById('progress-fill').style.width = (pct > 100 ? 100 : pct) + '%';
             document.getElementById('progress-label').textContent = tb + ' / ' + parts + ' (' + pct + '%)';
 
             var status = document.getElementById('voting-status');
-            status.textContent = data.voting_open ? 'OPEN' : 'CLOSED';
-            status.style.color = data.voting_open ? 'var(--green)' : 'var(--red)';
+            if (status) {
+                status.textContent = data.voting_open ? 'OPEN' : 'CLOSED';
+                status.className = 'status ' + (data.voting_open ? 'open' : 'closed');
+            }
 
+            var anomaly = document.getElementById('ballot-anomaly');
+            if (anomaly) {
+                if (parts > 0 && tb > parts) {
+                    anomaly.innerHTML =
+                        '<span class="anomaly-title">⚠ Ballot count anomaly</span>' +
+                        tb + ' ballots received but only ' + parts +
+                        ' brother' + (parts === 1 ? '' : 's') +
+                        ' marked as participating. Likely cause: a voter voted online and also submitted paper, or voting was re-opened after closure.';
+                    anomaly.style.display = '';
+                } else {
+                    anomaly.style.display = 'none';
+                }
+            }
+
+            var container = document.getElementById('results-container');
             var showCounts = data.show_results;
             var closed = !data.voting_open;
-            var container = document.getElementById('results-container');
-
             if (data.results && (showCounts || closed)) {
                 var html = '';
                 data.results.forEach(function(office) {
                     if (!office.candidates || office.candidates.length === 0) return;
-                    html += '<div style="margin-bottom:20px">';
-                    html += '<h3 style="font-size:16px;color:var(--navy);margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid var(--gold)">' + esc(office.office_name) + '</h3>';
+                    html += '<div class="office-block"><h3>' + esc(office.office_name) + '</h3>';
                     office.candidates.forEach(function(cand) {
-                        html += '<div class="phone-cand-row">';
-                        html += '<span style="color:var(--navy)">' + esc(cand.name);
-                        if (cand.elected && closed) html += ' <span style="color:var(--green);font-weight:700">ELECTED</span>';
+                        html += '<div class="cand-row"><span class="name">' + esc(cand.name);
+                        if (cand.elected && closed) html += '<span class="elected-tag">ELECTED</span>';
                         html += '</span>';
-                        if (showCounts) html += '<span style="font-weight:700;color:var(--navy)">' + cand.total + '</span>';
+                        if (showCounts) html += '<span class="votes">' + cand.total + '</span>';
                         html += '</div>';
                     });
                     if (showCounts) {
@@ -116,27 +310,19 @@
                         var vc = office.votes_cast || 0;
                         var blank = possible - vc;
                         if (possible > 0 && blank > 0) {
-                            html += '<div class="phone-cand-row" style="opacity:0.5">';
-                            html += '<span style="font-style:italic">Blank votes</span>';
-                            html += '<span style="font-weight:700">' + blank + '</span>';
-                            html += '</div>';
+                            html += '<div class="cand-row blank-row"><span class="name">Blank votes</span><span class="votes">' + blank + '</span></div>';
                         }
                     }
                     html += '</div>';
                 });
                 container.innerHTML = html;
-            } else {
+            } else if (container) {
                 container.innerHTML = '';
             }
         };
         xhr.send();
     }
-    function esc(t) {
-        var d = document.createElement('div');
-        d.appendChild(document.createTextNode(t));
-        return d.innerHTML;
-    }
-    setInterval(update, 2000);
+    setInterval(update, 3000);
 })();
 </script>
 {% endblock %}

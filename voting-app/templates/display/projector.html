@@ -80,6 +80,28 @@
     }
     .do-not-mark-office:last-child { margin-bottom: 0; }
     .do-not-mark-office strong { color: var(--navy); }
+    .ballot-anomaly {
+        background: #FFEAE8;
+        border: 3px solid #C0392B;
+        color: #6B1A12;
+        padding: 16px 24px;
+        margin: 8px auto 16px;
+        border-radius: 10px;
+        font-size: 22px;
+        font-weight: 600;
+        text-align: center;
+        max-width: 1400px;
+        line-height: 1.4;
+    }
+    .ballot-anomaly .anomaly-title {
+        color: #C0392B;
+        font-weight: 800;
+        font-size: 24px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        display: block;
+        margin-bottom: 6px;
+    }
 </style>
 {% endblock %}
 
@@ -93,6 +115,16 @@
 </div>
 
 <div class="display-main">
+    {% if total_ballots > participants and participants > 0 %}
+    <div class="ballot-anomaly" id="ballot-anomaly">
+        <span class="anomaly-title">&#9888; Ballot count anomaly</span>
+        {{ total_ballots }} ballots received but only {{ participants }} brother{{ '' if participants == 1 else 's' }} marked as participating.
+        A voter may have voted online and also handed in a paper ballot, or voting was reopened after closure and an extra vote slipped in. Review before finalising.
+    </div>
+    {% else %}
+    <div class="ballot-anomaly" id="ballot-anomaly" style="display:none;"></div>
+    {% endif %}
+
     {% if not election.voting_open and total_ballots == 0 %}
     <div style="text-align: center; padding: 40px 0;">
         <h2 style="font-size: 32px; color: var(--navy); margin-bottom: 16px;">Voting will begin shortly</h2>
@@ -380,6 +412,22 @@
 
             document.getElementById('vote-count').textContent = data.total_ballots || 0;
             document.getElementById('total-participants').textContent = data.participants || 0;
+
+            var anomaly = document.getElementById('ballot-anomaly');
+            if (anomaly) {
+                var tbA = data.total_ballots || 0;
+                var partsA = data.participants || 0;
+                if (partsA > 0 && tbA > partsA) {
+                    anomaly.innerHTML =
+                        '<span class="anomaly-title">⚠ Ballot count anomaly</span>' +
+                        tbA + ' ballots received but only ' + partsA +
+                        ' brother' + (partsA === 1 ? '' : 's') +
+                        ' marked as participating. A voter may have voted online and also handed in a paper ballot, or voting was reopened after closure and an extra vote slipped in. Review before finalising.';
+                    anomaly.style.display = '';
+                } else {
+                    anomaly.style.display = 'none';
+                }
+            }
 
             var plabel = document.getElementById('participants-label');
             if (plabel) {
