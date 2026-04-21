@@ -1677,7 +1677,9 @@ def generate_minutes_docx(
                     f"{t6b} votes (Article 6b) to be elected."
                 )
 
-        # Simple 2-column vote table per office
+        # Vote tables per office. Round 1 with postal votes gets a
+        # 'In-person | Postal | Total' breakdown; everything else stays
+        # single-column to match the reference minutes style.
         for o in rd["offices"]:
             p = doc.add_paragraph()
             run = p.add_run(o["name"])
@@ -1690,16 +1692,27 @@ def generate_minutes_docx(
                 _placeholder(f"[No candidates stood for {o['name']} this round.]")
                 continue
 
-            table = doc.add_table(rows=1 + len(cands), cols=2)
+            has_postal = round_num == 1 and any(
+                c.get("postal", 0) > 0 for c in cands
+            )
+
+            if has_postal:
+                headers = ["Candidate", "In-person", "Postal", "Total"]
+            else:
+                headers = ["Candidate", "# votes"]
+            col_count = len(headers)
+
+            table = doc.add_table(rows=1 + len(cands), cols=col_count)
             table.style = "Table Grid"
             table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-            table.rows[0].cells[0].text = "Candidate"
-            table.rows[0].cells[1].text = "# votes"
-            for paragraph in table.rows[0].cells[1].paragraphs:
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            for ci in range(2):
-                for paragraph in table.rows[0].cells[ci].paragraphs:
+            for i, hdr in enumerate(headers):
+                cell = table.rows[0].cells[i]
+                cell.text = hdr
+                if i > 0:
+                    for paragraph in cell.paragraphs:
+                        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for paragraph in cell.paragraphs:
                     for run in paragraph.runs:
                         run.bold = True
                         run.font.size = Pt(10)
@@ -1707,15 +1720,22 @@ def generate_minutes_docx(
             for row_idx, cand in enumerate(cands):
                 row = table.rows[row_idx + 1]
                 row.cells[0].text = f"Br {cand['name']}"
-                row.cells[1].text = str(cand["total"])
-                for paragraph in row.cells[1].paragraphs:
-                    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                for ci in range(2):
+                if has_postal:
+                    in_person = cand.get("digital", 0) + cand.get("paper", 0)
+                    row.cells[1].text = str(in_person)
+                    row.cells[2].text = str(cand.get("postal", 0))
+                    row.cells[3].text = str(cand["total"])
+                else:
+                    row.cells[1].text = str(cand["total"])
+                for ci in range(1, col_count):
+                    for paragraph in row.cells[ci].paragraphs:
+                        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for ci in range(col_count):
                     for paragraph in row.cells[ci].paragraphs:
                         for run in paragraph.runs:
                             run.font.size = Pt(10)
                 if cand.get("elected"):
-                    for ci in range(2):
+                    for ci in range(col_count):
                         for paragraph in row.cells[ci].paragraphs:
                             for run in paragraph.runs:
                                 run.bold = True
