@@ -40,7 +40,7 @@ the app in action.
 8. Click "Download Dual Ballot Handout PDF" and print 20+ copies on plain A4
 9. Print `demo_code_slips.pdf` (cut into individual slips)
 10. Set up the GL.iNet Flint 2 router and confirm the laptop has IP 192.168.8.100
-11. Right-click `captive-portal-on.bat` → Run as administrator (enables port forwarding for captive portal)
+11. *(Optional)* Right-click `captive-portal-on.bat` → Run as administrator. This enables port 80/443 forwarding so phones that support captive-portal auto-popup may open the voting app without scanning the QR code. The auto-popup is unreliable on many Android phones — treat it as a bonus only. Skip this step if you are happy for everyone to enter via the QR code on the code slip.
 12. Open the projector display page (`/display`) on a second device connected to the projector
 
 ## At the meeting

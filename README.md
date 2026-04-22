@@ -4,6 +4,8 @@ A self-contained offline voting app for office bearer elections in Free Reformed
 
 ## Before You Start
 
+**New here?** See [where_to_start.md](where_to_start.md) for a signpost to the right document based on your role (council member, technical volunteer, election-day admin, demo presenter, or developer).
+
 This software was built for a specific congregation and is shared freely in the hope that others find it useful. It is provided as-is under the MIT License, without warranty of any kind.
 
 A few things to keep in mind:

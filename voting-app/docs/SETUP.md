@@ -138,11 +138,32 @@ If you need to change the Voting Base URL after code slips have been printed:
 - [ ] Attendance register + pen
 - [ ] This setup guide (printed)
 
-## Configuring the GL.iNet Flint 2 Router for Captive Portal
+## Optional Bonus: Captive Portal Auto-Popup
 
-The Flask app is ready to serve captive portal auto-popup requests, but the
-router must be configured to redirect all DNS and HTTP traffic to the laptop.
-This is a one-time setup.
+> **This section is optional.** The reliable entry path for voters is the QR
+> code on the printed code slip — it works on every phone and does not depend
+> on any of the configuration described below. Skip this section entirely
+> unless you want to experiment with the auto-popup as a bonus convenience.
+
+A captive portal is the popup that some phones show automatically when you
+join a WiFi network with no internet ("Login to network"). If you configure
+the GL.iNet Flint 2 router and the laptop as described below, phones that
+join `ChurchVote` *may* open the voting app automatically without the voter
+having to scan a QR code or type a URL.
+
+**Reality check before you invest time in this:**
+
+- Behaviour varies wildly by phone manufacturer and OS version.
+- iOS phones tend to trigger the popup reliably.
+- Many Android phones will not show the popup even when everything is
+  configured correctly — this is a known quirk of Android's captive-portal
+  detection and there is no way to force it from the router side.
+- Phones with "Private DNS" enabled will bypass the router's DNS entirely
+  and the popup will never fire.
+
+Because of this variance, **do not promise the auto-popup as a feature**.
+Treat any phones where it works as a small bonus. The QR code remains the
+entry path to rely on.
 
 ### Prerequisites
 
@@ -265,11 +286,12 @@ laptop — do not leave ports open when the election app is not in use.
 
 ### Fallback behaviour
 
-Even with the captive portal configured correctly, a small number of phones
-may not trigger the auto-popup (e.g. some older Android devices, phones with
-DNS-over-HTTPS enabled). For these cases, the printed code slip includes a
-QR code and fallback URL. Voters can always reach the ballot by scanning the
-QR code if the auto-popup does not appear.
+Even with the captive portal configured correctly, many phones will not
+trigger the auto-popup (especially Android devices, and any phone with
+Private DNS / DNS-over-HTTPS enabled). This is expected. The printed code
+slip carries a QR code and a fallback URL, and that is the path voters
+should be directed to in the first place. The auto-popup is only ever a
+bonus convenience for the phones on which it happens to work.
 
 ### Troubleshooting
 
@@ -277,6 +299,7 @@ QR code if the auto-popup does not appear.
 |---------|----------|
 | Popup appears but shows a blank page | The dnsmasq wildcard is working, but the Flask app is not responding. Verify the laptop has IP `192.168.8.100` and the app is listening on `0.0.0.0:5000`. |
 | Popup does not appear at all on iOS | iOS 18+ may have changed its CPD behaviour. Fall back to the QR code on the code slip. |
-| Android shows "no internet" notification | This is normal. The captive portal popup should still appear. Tap the WiFi notification to open the captive portal manually. |
+| Popup does not appear on Android | Common — Android captive-portal detection is unreliable across manufacturers and OS versions. Use the QR code; do not spend time trying to force the popup. |
+| Android shows "no internet" notification | This is normal. The voting app still works. Scan the QR code on the code slip. |
 | Laptop keeps disconnecting from router | Check the Ethernet cable and adapter. Try a different USB-C port if using an adapter. |
 | `captive-portal-on.bat` fails | Make sure you right-clicked → Run as administrator. |
