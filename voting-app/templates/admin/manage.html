@@ -246,12 +246,76 @@
         </header>
         <div class="body" {% if p2_state != 'active' %}hidden{% endif %}>
             <p style="font-size: 14px; color: #555; margin-bottom: 14px;">
-                Walk the projector through Welcome → Election Rules → Voting.
-                Set the attendance count from the register so the thresholds
-                can be calculated.
+                Two things to do before opening voting:
+                <strong>(1)</strong> set the attendance count from the register, and
+                <strong>(2)</strong> confirm postal votes (in case any envelopes were
+                handed in late). Then walk the projector through Welcome → Election
+                Rules → Voting.
             </p>
 
-            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Projector display</h3>
+            {# ===== STEP 1: ATTENDANCE ===== #}
+            {% set attendance_missing = (in_person_participants or 0) <= 0 %}
+            <div style="margin-bottom: 14px; padding: 14px;
+                        border-radius: 8px;
+                        {% if attendance_missing %}
+                        background: #FFF6E5; border: 2px solid #C0392B;
+                        {% else %}
+                        background: #F4FAF6; border: 1px solid #B8E0C8;
+                        {% endif %}">
+                <h3 style="margin: 0 0 6px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">
+                    {% if attendance_missing %}
+                    &#9888; Step 1 — Attendance not yet set (Article 4)
+                    {% else %}
+                    &#10003; Step 1 — Attendance set (Article 4)
+                    {% endif %}
+                </h3>
+                <p style="font-size: 14px; color: #444; margin: 0 0 10px;">
+                    Count the brothers who have signed the <strong>attendance register</strong>
+                    at the door, and enter that number below. This drives the Article 6b
+                    threshold — without it, no candidate can be declared elected.
+                    The paper-ballot count is entered later, once paper ballots are collected.
+                </p>
+                <form method="POST" action="{{ url_for('admin_set_participants', election_id=election.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: end;">
+                        <div class="form-group" style="flex: 1; min-width: 200px; margin: 0;">
+                            <label for="participants" style="font-weight: 700;">Brothers Present (from attendance register)</label>
+                            <input type="number" id="participants" name="participants"
+                                   value="{{ in_person_participants }}" min="0"
+                                   style="text-align: center; font-size: 22px; font-weight: 700;">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <button type="submit" class="btn btn-primary">Save attendance</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            {# ===== STEP 2: POSTAL VOTES (LAST CHANCE) ===== #}
+            <div style="margin-bottom: 18px; padding: 12px 14px;
+                        background: #FFFAF0; border-left: 4px solid var(--gold);
+                        border-radius: 6px;">
+                <h3 style="margin: 0 0 4px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">
+                    Step 2 — Postal votes (last chance)
+                </h3>
+                <p style="font-size: 14px; color: #444; margin: 0 0 8px;">
+                    {% if postal_voter_count > 0 %}
+                    <strong>{{ postal_voter_count }} postal vote{{ '' if postal_voter_count == 1 else 's' }}</strong> already entered.
+                    {% else %}
+                    <strong>No postal votes entered yet.</strong>
+                    {% endif %}
+                    If a brother handed a postal envelope to the chairman or secretary
+                    just now, enter it here <em>before</em> opening voting — postal
+                    votes that arrive after voting opens cannot be added.
+                </p>
+                <a href="{{ url_for('admin_postal_votes', election_id=election.id) }}"
+                   class="btn btn-outline btn-small">
+                    {% if postal_voter_count > 0 %}Add or adjust postal votes{% else %}Enter postal votes{% endif %}
+                </a>
+            </div>
+
+            {# ===== STEP 3: ADVANCE PROJECTOR + OPEN VOTING ===== #}
+            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Step 3 — Projector display</h3>
             <div style="display: flex; align-items: center; gap: 0; margin-bottom: 12px;">
                 {% set proj_phases = [(1, "Welcome"), (2, "Election Rules"), (3, "Voting")] %}
                 {% for num, label in proj_phases %}
@@ -264,7 +328,7 @@
                 {% endfor %}
             </div>
 
-            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 18px;">
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 4px;">
                 {% if phase > 1 %}
                 <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -280,7 +344,7 @@
                     <button type="submit" class="btn btn-gold primary-cta">Next: Election Rules &rarr;</button>
                     {% elif phase == 2 %}
                     <button type="submit" class="btn btn-success primary-cta"
-                            onclick="return confirm('Open voting for round {{ election.current_round }}?');">
+                            onclick="return confirm({% if attendance_missing %}'WARNING: attendance is still 0. Without it, no candidate can be declared elected. Open voting anyway?'{% else %}'Open voting for round {{ election.current_round }}?'{% endif %});">
                         Next: Open Voting &rarr;
                     </button>
                     {% endif %}
@@ -290,25 +354,11 @@
                     Open Display
                 </a>
             </div>
-
-            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Attendance (Article 4)</h3>
-            <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
-                Number of brothers who signed the attendance register. Used for the Article 6b threshold.
-                The paper-ballot count is entered later, once they're collected and counted.
+            {% if attendance_missing and phase == 2 %}
+            <p style="margin: 8px 0 0; font-size: 13px; color: #C0392B; font-weight: 600;">
+                &#9888; Attendance is still 0. Set it under Step 1 above before opening voting.
             </p>
-            <form method="POST" action="{{ url_for('admin_set_participants', election_id=election.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: end;">
-                    <div class="form-group" style="flex: 1; min-width: 200px;">
-                        <label for="participants">Brothers Present</label>
-                        <input type="number" id="participants" name="participants"
-                               value="{{ in_person_participants }}" min="0" style="text-align: center;">
-                    </div>
-                    <div class="form-group">
-                        <button type="submit" class="btn btn-primary btn-small">Save</button>
-                    </div>
-                </div>
-            </form>
+            {% endif %}
         </div>
     </div>
 
