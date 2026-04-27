@@ -496,6 +496,7 @@ def test_printer_pack_zip_contains_all_files():
     with zipfile.ZipFile(buf) as zf:
         names = set(zf.namelist())
     expected = {
+        "0_INSTRUCTIONS.txt",
         "1_ballot_front.pdf",
         "2_code_slips_back.pdf",
         "3_cards_duplex.pdf",
@@ -503,7 +504,6 @@ def test_printer_pack_zip_contains_all_files():
         "5_counter_sheet.pdf",
         "6_attendance_register.pdf",
         "7_av_instructions.pdf",
-        "INSTRUCTIONS.txt",
     }
     assert names == expected
 
@@ -551,7 +551,7 @@ def test_printer_pack_zip_instructions_content():
     buf = _generate_sample_zip()
     buf.seek(0)
     with zipfile.ZipFile(buf) as zf:
-        instructions = zf.read("INSTRUCTIONS.txt").decode("utf-8")
+        instructions = zf.read("0_INSTRUCTIONS.txt").decode("utf-8")
     assert "1_ballot_front.pdf" in instructions
     assert "2_code_slips_back.pdf" in instructions
     assert "4_dual_sided_ballots.pdf" in instructions

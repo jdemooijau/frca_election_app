@@ -1173,9 +1173,10 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
                               is_demo=False):
     """Generate a ZIP containing all PDFs needed for professional printing.
 
-    Contents (filenames prefixed 1_..7_ so they sort in the order
-    described in INSTRUCTIONS.txt):
+    Contents (filenames prefixed so they sort in the order described
+    in 0_INSTRUCTIONS.txt — read that first):
 
+        0_INSTRUCTIONS.txt        — explanation of each file (read first)
         1_ballot_front.pdf        — card-sized paper ballot (duplicate this)
         2_code_slips_back.pdf     — N pages, card-sized unique code slips
         3_cards_duplex.pdf        — 2N pages, card-sized, interleaved front/back
@@ -1183,7 +1184,6 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
         5_counter_sheet.pdf       — tally sheet for counting paper ballots
         6_attendance_register.pdf — sign-in sheet for election day
         7_av_instructions.pdf     — handout for the AV team
-        INSTRUCTIONS.txt          — explanation of each file
 
     Returns:
         BytesIO buffer containing the ZIP.
@@ -1339,7 +1339,7 @@ For questions, contact the election administrator.
         zf.writestr("5_counter_sheet.pdf", counter_buf.getvalue())
         zf.writestr("6_attendance_register.pdf", attendance_buf.getvalue())
         zf.writestr("7_av_instructions.pdf", av_buf.getvalue())
-        zf.writestr("INSTRUCTIONS.txt", instructions)
+        zf.writestr("0_INSTRUCTIONS.txt", instructions)
 
     zip_buf.seek(0)
     return zip_buf
