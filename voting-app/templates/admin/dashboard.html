@@ -128,51 +128,6 @@
             </form>
         </div>
 
-        <div class="card" style="border-color: var(--gold); margin-top: 8px;">
-            <div class="card-header" style="border-color: var(--gold); color: var(--navy);">Load Demo Election</div>
-            <p style="font-size: 14px; margin-bottom: 12px;">
-                Wipe all current election data and load a demo election with fictional
-                Dutch candidates. For practice and proposal meetings only.
-            </p>
-            <form method="POST" action="{{ url_for('admin_load_demo') }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="form-group">
-                    <label for="load_demo_confirm">Type LOAD DEMO to confirm</label>
-                    <input type="text" id="load_demo_confirm" name="confirm_text"
-                           autocomplete="off" placeholder="Type LOAD DEMO" style="max-width: 300px;">
-                </div>
-                <div class="form-group">
-                    <label for="load_demo_password">Admin password</label>
-                    <input type="password" id="load_demo_password" name="password"
-                           autocomplete="off" placeholder="Re-enter password" style="max-width: 200px;">
-                </div>
-                <button type="submit" class="btn btn-gold btn-small">Load Demo Election</button>
-            </form>
-        </div>
-
-        {% if is_demo %}
-        <div class="card" style="border-color: var(--red); margin-top: 8px;">
-            <div class="card-header" style="border-color: var(--red); color: var(--red);">Exit Demo and Reset</div>
-            <p style="font-size: 14px; margin-bottom: 12px;">
-                Wipe the demo election and reset the app. The setup wizard will run on next launch.
-            </p>
-            <form method="POST" action="{{ url_for('admin_exit_demo') }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="form-group">
-                    <label for="exit_demo_confirm">Type RESET to confirm</label>
-                    <input type="text" id="exit_demo_confirm" name="confirm_text"
-                           autocomplete="off" placeholder="Type RESET" style="max-width: 300px;">
-                </div>
-                <div class="form-group">
-                    <label for="exit_demo_password">Admin password</label>
-                    <input type="password" id="exit_demo_password" name="password"
-                           autocomplete="off" placeholder="Re-enter password" style="max-width: 200px;">
-                </div>
-                <button type="submit" class="btn btn-danger btn-small">Exit Demo and Reset</button>
-            </form>
-        </div>
-
-        {% endif %}
     </details>
 </div>
 {% endblock %}

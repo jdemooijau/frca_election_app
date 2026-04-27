@@ -14,6 +14,22 @@
         <a href="{{ url_for('admin_election_manage', election_id=election.id) }}">Manage</a>
     </div>
 
+    <!-- Discreet shortcut: load a typical FRC slate (Elder + Deacon offices
+         with sample candidate names from the demo names pool). Only shown
+         when no offices exist yet, to avoid clutter and conflicts. -->
+    {% if not offices %}
+    <details style="margin-bottom: 14px;">
+        <summary style="cursor: pointer; color: #888; font-size: 13px;">Quick start (testing &amp; dry runs)</summary>
+        <form method="POST" action="{{ url_for('admin_load_sample_offices', election_id=election.id) }}" style="margin-top: 8px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <p style="font-size: 13px; color: #666; margin-bottom: 6px;">
+                Pre-fills <strong>Elder</strong> (3 vacancies, 6 candidates) and <strong>Deacon</strong> (2 vacancies, 4 candidates) with names from the sample pool. Useful for dry runs and demos.
+            </p>
+            <button type="submit" class="btn btn-outline btn-small">Load sample candidates</button>
+        </form>
+    </details>
+    {% endif %}
+
     <!-- Existing offices -->
     {% if offices %}
     <h2 style="margin-bottom: 12px;">Offices</h2>

@@ -48,7 +48,6 @@ DEMO_SETTINGS = {
     "wifi_ssid": "ChurchVote",
     "wifi_password": "",
     "voting_base_url": "http://church.vote",
-    "is_demo": "1",
     "setup_complete": "1",
     "admin_password": "admin",
 }
@@ -213,7 +212,7 @@ def _export_pdfs(codes, election_name, conn, election_id, code_count=20):
     # Code slips
     code_buf = generate_code_slips_pdf(
         codes, election_name, short_name, wifi_ssid,
-        wifi_password, base_url, is_demo=True,
+        wifi_password, base_url,
     )
     code_slips_path = os.path.join(pdf_dir, "demo_code_slips.pdf")
     with open(code_slips_path, "wb") as f:
@@ -236,7 +235,7 @@ def _export_pdfs(codes, election_name, conn, election_id, code_count=20):
         })
 
     ballot_buf = generate_paper_ballot_pdf(
-        election_name, 1, office_data, member_count=len(codes), is_demo=True,
+        election_name, 1, office_data, member_count=len(codes),
     )
     ballot_path = os.path.join(pdf_dir, "demo_paper_ballots.pdf")
     with open(ballot_path, "wb") as f:

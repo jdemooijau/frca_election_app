@@ -40,11 +40,8 @@
                    autocapitalize="characters"
                    spellcheck="false"
                    inputmode="text"
-                   pattern="[A-Za-z0-9]{% if is_demo %}{0,6}{% else %}{6}{% endif %}"
-                   {% if not is_demo %}required{% endif %}>
-            {% if is_demo %}
-            <p style="color: #999; margin-top: 8px; font-size: 13px;">Demo mode — any code (or blank) works.</p>
-            {% endif %}
+                   pattern="[A-Za-z0-9]{6}"
+                   required>
         </div>
 
         <button type="submit" class="btn btn-primary">Submit Code</button>

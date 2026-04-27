@@ -36,10 +36,10 @@ from reportlab.lib import colors
 from pdf_generators import (
     generate_code_slips_pdf, generate_paper_ballot_pdf,
     generate_counter_sheet_pdf, generate_results_pdf,
-    generate_dual_ballot_handout_pdf, generate_dual_sided_ballots_pdf,
+    generate_dual_sided_ballots_pdf,
     generate_attendance_register_pdf, generate_printer_pack_zip,
     generate_minutes_docx,
-    draw_demo_watermark, draw_demo_header, NAVY, GOLD, _generate_qr_image,
+    NAVY, GOLD, _generate_qr_image,
 )
 from demo_names import generate_demo_names, load_member_names_from_external
 from election_rules import (
@@ -273,7 +273,6 @@ def _init_db_on(db):
         "voting_base_url": "http://church.vote",
         "admin_password": DEFAULT_ADMIN_PASSWORD,
         "setup_complete": "0",
-        "is_demo": "0",
     }
     for key, value in defaults.items():
         db.execute(
@@ -509,7 +508,6 @@ def inject_globals():
         "wifi_ssid": get_setting("wifi_ssid", "ChurchVote"),
         "wifi_password": get_setting("wifi_password", ""),
         "voting_base_url": get_setting("voting_base_url", "http://church.vote"),
-        "is_demo": get_setting("is_demo", "0") == "1",
     }
 
 
@@ -1975,42 +1973,8 @@ def admin_wipe_database():
 
 
 # ---------------------------------------------------------------------------
-# Demo mode routes
+# Sample-data helpers (used by the "Load sample candidates" button)
 # ---------------------------------------------------------------------------
-
-DEMO_SETTINGS = {
-    # Load-demo must not touch the chairman's congregation name, WiFi,
-    # voting_base_url, or admin password. Only the is_demo flag is set
-    # so other code knows we're in demo mode.
-    "is_demo": "1",
-}
-
-ELECTION_DATA_TABLES = [
-    "votes", "paper_votes", "postal_votes", "codes",
-    "candidates", "offices", "elections", "round_counts",
-]
-
-
-def _backup_database():
-    """Create a timestamped backup of the database file. Returns backup path or None."""
-    if not os.path.isfile(DB_PATH):
-        return None
-    backup_dir = os.path.join(BASE_DIR, "backups")
-    os.makedirs(backup_dir, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = os.path.join(backup_dir, f"db_backup_{stamp}.sqlite")
-    shutil.copy2(DB_PATH, backup_path)
-    return backup_path
-
-
-def _wipe_election_tables(db):
-    """Delete all rows from election-data tables."""
-    for table in ELECTION_DATA_TABLES:
-        try:
-            db.execute(f"DELETE FROM {table}")  # noqa: S608
-        except Exception:
-            pass
-    db.commit()
 
 
 def _load_member_names(db):
@@ -2031,15 +1995,35 @@ def _load_member_names(db):
     return []
 
 
-def _create_demo_election(db, candidate_names):
-    """Create the demo election with Elder and Deacon offices. Returns election id."""
-    today = datetime.now().strftime("%Y-%m-%d")
-    cursor = db.execute(
-        "INSERT INTO elections (name, max_rounds, current_round, voting_open, "
-        "show_results, election_date) VALUES (?, 2, 1, 0, 0, ?)",
-        (f"DEMO Election {today}", today),
-    )
-    election_id = cursor.lastrowid
+@app.route("/admin/election/<int:election_id>/load-sample-offices", methods=["POST"])
+@admin_required
+def admin_load_sample_offices(election_id):
+    """One-click setup helper: add a typical FRC slate (Elder + Deacon offices
+    with sample candidate names drawn from the demo names pool).
+
+    Refuses if offices already exist for this election, to avoid duplicating
+    or conflicting with what the chairman has already entered.
+    """
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+
+    existing = db.execute(
+        "SELECT COUNT(*) FROM offices WHERE election_id = ?", (election_id,)
+    ).fetchone()[0]
+    if existing > 0:
+        flash(
+            "Sample candidates not loaded — this election already has offices. "
+            "Remove them first if you want to start over.",
+            "error",
+        )
+        return redirect(url_for("admin_election_setup", election_id=election_id))
+
+    member_names = _load_member_names(db)
+    candidate_names = generate_demo_names(count=10, member_names=member_names)
 
     # Elder office — 3 vacancies, 6 candidates, max_selections = 3
     cursor = db.execute(
@@ -2068,88 +2052,12 @@ def _create_demo_election(db, candidate_names):
         )
 
     db.commit()
-    return election_id
 
-
-@app.route("/admin/load-demo", methods=["POST"])
-@admin_required
-def admin_load_demo():
-    """Wipe election data and seed a demo election."""
-    if request.form.get("confirm_text", "").strip() != "LOAD DEMO":
-        flash("Load demo cancelled — type LOAD DEMO to confirm.", "error")
-        return redirect(url_for("admin_dashboard"))
-
-    if request.form.get("password") != get_setting("admin_password", DEFAULT_ADMIN_PASSWORD):
-        flash("Load demo cancelled — incorrect password.", "error")
-        return redirect(url_for("admin_dashboard"))
-
-    # Backup
-    _backup_database()
-
-    db = get_db()
-
-    # Wipe election data
-    _wipe_election_tables(db)
-
-    # Set demo congregation settings
-    for key, value in DEMO_SETTINGS.items():
-        db.execute(
-            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-            (key, value),
-        )
-    db.commit()
-
-    # Generate candidate names
-    member_names = _load_member_names(db)
-    candidate_names = generate_demo_names(count=10, member_names=member_names)
-
-    # Create demo election
-    election_id = _create_demo_election(db, candidate_names)
-
-    # Generate 20 voting codes
-    codes = generate_codes(election_id, 20)
-
-    # Open round 1 voting
-    db.execute("UPDATE elections SET voting_open = 1 WHERE id = ?", (election_id,))
-    db.commit()
-
-    flash("Demo election loaded with Elder and Deacon offices, 20 voting codes, and round 1 open.", "success")
-    return redirect(url_for("admin_dashboard"))
-
-
-@app.route("/admin/exit-demo", methods=["POST"])
-@admin_required
-def admin_exit_demo():
-    """Wipe the demo election and reset the app to initial state."""
-    if request.form.get("confirm_text", "").strip() != "RESET":
-        flash("Exit demo cancelled — type RESET to confirm.", "error")
-        return redirect(url_for("admin_dashboard"))
-
-    if request.form.get("password") != get_setting("admin_password", DEFAULT_ADMIN_PASSWORD):
-        flash("Exit demo cancelled — incorrect password.", "error")
-        return redirect(url_for("admin_dashboard"))
-
-    # Backup
-    _backup_database()
-
-    db = get_db()
-
-    # Wipe election data
-    _wipe_election_tables(db)
-
-    # Reset settings to defaults (setup_complete=0, is_demo=0)
-    db.execute("DELETE FROM settings")
-    db.commit()
-    _init_db_on(db)
-
-    # Delete demo PDFs if they exist
-    for pdf_name in ("demo_code_slips.pdf", "demo_paper_ballots.pdf", "demo_dual_ballot_handout.pdf"):
-        pdf_path = os.path.join(BASE_DIR, pdf_name)
-        if os.path.exists(pdf_path):
-            os.remove(pdf_path)
-
-    flash("Demo exited and app reset. The setup wizard will run on next launch.", "success")
-    return redirect(url_for("admin_setup"))
+    flash(
+        "Sample offices loaded: Elder (3 vacancies, 6 candidates) and Deacon (2 vacancies, 4 candidates).",
+        "success",
+    )
+    return redirect(url_for("admin_election_setup", election_id=election_id))
 
 
 @app.route("/admin/members", methods=["GET", "POST"])
@@ -2362,44 +2270,7 @@ def voter_validate_code():
                         "Form submit while voting closed")
         return redirect(url_for("voter_enter_code"))
 
-    is_demo = get_setting("is_demo", "0") == "1"
-
-    def _assign_fresh_demo_code(reason):
-        # Retry loop: concurrent requests may race on the same first unused code.
-        # Each attempt: select a candidate, then atomically claim it with
-        # UPDATE … WHERE used = 0.  If rowcount == 0 someone else grabbed it
-        # first — loop and try the next available code.
-        for _ in range(20):
-            row = db.execute(
-                "SELECT id, code_hash FROM codes WHERE election_id = ? AND used = 0 "
-                "ORDER BY id LIMIT 1",
-                (election["id"],),
-            ).fetchone()
-            if not row:
-                flash("All demo codes have been used.", "error")
-                log_voter_audit(eid, code or None, "rejected_demo_pool_empty",
-                                reason, round_number=rnd)
-                return redirect(url_for("voter_enter_code"))
-            result = db.execute(
-                "UPDATE codes SET used = 1 WHERE id = ? AND used = 0",
-                (row["id"],),
-            )
-            db.commit()
-            if result.rowcount == 0:
-                continue  # Lost the race — try the next available code
-            session["code_hash"] = row["code_hash"]
-            session["election_id"] = election["id"]
-            session["used_code"] = f"(demo-{row['id']})"
-            session["demo_pre_burned"] = True
-            log_voter_audit(eid, f"(demo-{row['id']})", "code_accepted",
-                            f"Demo auto-assign ({reason})", round_number=rnd)
-            return redirect(url_for("voter_ballot"))
-        flash("All demo codes have been used.", "error")
-        return redirect(url_for("voter_enter_code"))
-
     if not code or len(code) != CODE_LENGTH:
-        if is_demo:
-            return _assign_fresh_demo_code("invalid format")
         flash("Please enter a valid 6-character code.", "error")
         log_voter_audit(eid, code or None, "rejected_invalid_format",
                         f"Form submit length {len(code)}", round_number=rnd)
@@ -2412,16 +2283,12 @@ def voter_validate_code():
     ).fetchone()
 
     if not code_row:
-        if is_demo:
-            return _assign_fresh_demo_code("unknown code")
         flash("Invalid code. Please check and try again.", "error")
         log_voter_audit(eid, code, "rejected_unknown_code",
                         "Form submit code not in DB", round_number=rnd)
         return redirect(url_for("voter_enter_code"))
 
     if code_row["used"]:
-        if is_demo:
-            return _assign_fresh_demo_code("already used")
         flash("This code has already been used.", "error")
         log_voter_audit(eid, code, "rejected_already_used",
                         "Form submit code already burned", round_number=rnd)
@@ -2591,26 +2458,23 @@ def voter_submit():
 
     # Atomic transaction: burn code + record votes
     try:
-        # Burn the code — demo codes are pre-burned at assignment, skip re-burn
-        demo_pre_burned = session.pop("demo_pre_burned", False)
-        if not demo_pre_burned:
-            result = db.execute(
-                "UPDATE codes SET used = 1 WHERE code_hash = ? AND used = 0",
-                (code_h,)
+        result = db.execute(
+            "UPDATE codes SET used = 1 WHERE code_hash = ? AND used = 0",
+            (code_h,)
+        )
+        if result.rowcount == 0:
+            # Code was already used (race condition)
+            db.rollback()
+            session.pop("code_hash", None)
+            session.pop("election_id", None)
+            session.pop("used_code", None)
+            flash("This code has already been used.", "error")
+            log_voter_audit(
+                election_id, code_for_log, "rejected_already_used_at_submit",
+                "Submit reached burn step but code was already used (race)",
+                round_number=election["current_round"]
             )
-            if result.rowcount == 0:
-                # Code was already used (race condition)
-                db.rollback()
-                session.pop("code_hash", None)
-                session.pop("election_id", None)
-                session.pop("used_code", None)
-                flash("This code has already been used.", "error")
-                log_voter_audit(
-                    election_id, code_for_log, "rejected_already_used_at_submit",
-                    "Submit reached burn step but code was already used (race)",
-                    round_number=election["current_round"]
-                )
-                return redirect(url_for("voter_enter_code"))
+            return redirect(url_for("voter_enter_code"))
 
         # Record votes — NO link to the code
         for cand_id in selected_candidates:
@@ -3124,7 +2988,6 @@ def admin_codes_pdf(election_id):
     election = db.execute(
         "SELECT * FROM elections WHERE id = ?", (election_id,)
     ).fetchone()
-    is_demo = get_setting("is_demo", "0") == "1"
 
     buf = generate_code_slips_pdf(
         codes=codes,
@@ -3133,7 +2996,6 @@ def admin_codes_pdf(election_id):
         wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
         wifi_password=get_setting("wifi_password", ""),
         base_url=get_setting("voting_base_url", "http://church.vote"),
-        is_demo=is_demo,
     )
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
                      download_name="voting_codes.pdf")
@@ -3165,14 +3027,12 @@ def admin_counter_sheet_pdf(election_id):
 
     cong_name = get_setting("congregation_name", "Free Reformed Church")
     member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
-    is_demo = get_setting("is_demo", "0") == "1"
 
     buf = generate_counter_sheet_pdf(
         election_name=election["name"],
         congregation_name=cong_name,
         offices_data=offices_data,
         member_count=member_count,
-        is_demo=is_demo,
     )
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
                      download_name="counter_sheet.pdf")
@@ -3206,60 +3066,15 @@ def admin_paper_ballot_pdf(election_id, round_number):
         })
 
     member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
-    is_demo = get_setting("is_demo", "0") == "1"
 
     buf = generate_paper_ballot_pdf(
         election_name=election["name"],
         round_number=round_number,
         office_data=office_data,
         member_count=member_count,
-        is_demo=is_demo,
     )
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
                      download_name=f"paper_ballot_round_{round_number}.pdf")
-
-
-@app.route("/admin/election/<int:election_id>/dual-ballot-pdf")
-@admin_required
-def admin_dual_ballot_pdf(election_id):
-    """Generate dual ballot handout PDF (demo mode only)."""
-    if get_setting("is_demo", "0") != "1":
-        abort(403)
-
-    db = get_db()
-    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
-    if not election:
-        abort(404)
-
-    offices = db.execute(
-        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order", (election_id,)
-    ).fetchall()
-
-    office_data = []
-    for office in offices:
-        candidates = db.execute(
-            "SELECT * FROM candidates WHERE office_id = ? AND active = 1 ORDER BY surname_sort_key(name)",
-            (office["id"],)
-        ).fetchall()
-        office_data.append({"office": dict(office), "candidates": [dict(c) for c in candidates]})
-
-    codes = load_codes_from_db(election_id)
-    if not codes:
-        flash("Codes are not available. Delete and regenerate codes to get a new PDF.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
-
-    buf = generate_dual_ballot_handout_pdf(
-        election_name=election["name"],
-        congregation_name=get_setting("congregation_name", "Free Reformed Church"),
-        office_data=office_data,
-        codes=codes[:20],
-        wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
-        wifi_password=get_setting("wifi_password", ""),
-        base_url=get_setting("voting_base_url", "http://church.vote"),
-    )
-
-    return send_file(buf, mimetype="application/pdf", as_attachment=True,
-                     download_name="demo_dual_ballot_handout.pdf")
 
 
 @app.route("/admin/election/<int:election_id>/dual-sided-ballots-pdf")
@@ -3300,8 +3115,7 @@ def admin_dual_sided_ballots_pdf(election_id):
         ).fetchall()
         office_data.append({"office": dict(office), "candidates": [dict(c) for c in candidates]})
 
-    is_demo = get_setting("is_demo", "0") == "1"
-    filename = "demo_dual_sided_ballots.pdf" if is_demo else "dual_sided_ballots.pdf"
+    filename = "dual_sided_ballots.pdf"
 
     member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
 
@@ -3315,7 +3129,6 @@ def admin_dual_sided_ballots_pdf(election_id):
         wifi_password=get_setting("wifi_password", ""),
         base_url=get_setting("voting_base_url", "http://church.vote"),
         member_count=member_count,
-        is_demo=is_demo,
     )
 
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
@@ -3368,7 +3181,6 @@ def admin_printer_pack_zip(election_id):
         "SELECT * FROM members ORDER BY last_name, first_name"
     ).fetchall()
 
-    is_demo = get_setting("is_demo", "0") == "1"
     cong_name = get_setting("congregation_name", "Free Reformed Church")
 
     buf = generate_printer_pack_zip(
@@ -3384,7 +3196,6 @@ def admin_printer_pack_zip(election_id):
         members=[dict(m) for m in members],
         election_date=election["election_date"],
         member_count=len(members),
-        is_demo=is_demo,
     )
 
     return send_file(buf, mimetype="application/zip", as_attachment=True,
@@ -3463,11 +3274,9 @@ def admin_results_pdf(election_id):
             "offices": offices_list,
         })
 
-    is_demo = get_setting("is_demo", "0") == "1"
     buf = generate_results_pdf(
         election_name=election["name"],
         rounds_data=rounds_data,
-        is_demo=is_demo,
     )
     return send_file(
         buf,
@@ -3659,14 +3468,12 @@ def admin_minutes_docx(election_id):
             "names": names_in_order,
         })
 
-    is_demo = get_setting("is_demo", "0") == "1"
     buf = generate_minutes_docx(
         congregation_name=congregation_name,
         election_name=election["name"],
         election_date=election["election_date"] or "",
         rounds_data=rounds_data,
         elected_summary=elected_summary,
-        is_demo=is_demo,
     )
 
     safe_name = election["name"].replace(" ", "_")

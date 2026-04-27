@@ -144,20 +144,6 @@ def test_dual_sided_ballots_pdf_does_not_burn_codes():
     assert buf.getbuffer().nbytes > 0
 
 
-def test_dual_sided_ballots_pdf_demo_generates():
-    """In demo mode, PDF should still generate without error."""
-    buf = _generate_sample_pdf(is_demo=True)
-    assert buf.getbuffer().nbytes > 0
-
-
-def test_dual_sided_ballots_pdf_no_demo_in_production():
-    """In production mode, no DEMO text should appear."""
-    # Our test data doesn't have DEMO in the election name
-    # Watermark with alpha may not be extractable — this is best-effort
-    buf = _generate_sample_pdf(is_demo=False)
-    assert buf.getbuffer().nbytes > 0  # Just verify it generates
-
-
 # ---------------------------------------------------------------------------
 # Code slips PDF — 6-per-page layout
 # ---------------------------------------------------------------------------
@@ -282,20 +268,6 @@ def test_card_shows_fallback_url():
     buf = _generate_code_slips(codes=["KR4T7N"])
     text = _extract_text(buf, 0)
     assert "192.168.8.100:5000" in text
-
-
-def test_demo_watermark_present_on_page_in_demo_mode():
-    """DEMO watermark should appear on code slips page in demo mode."""
-    buf = _generate_code_slips(codes=["KR4T7N"], is_demo=True)
-    text = _extract_text(buf, 0)
-    assert "DEMO" in text
-
-
-def test_demo_watermark_absent_on_page_in_production_mode():
-    """No DEMO text on code slips in production mode."""
-    buf = _generate_code_slips(codes=["KR4T7N"], is_demo=False)
-    text = _extract_text(buf, 0)
-    assert "DEMO" not in text
 
 
 def test_code_slip_renders_at_full_page():
@@ -587,7 +559,3 @@ def test_printer_pack_zip_instructions_content():
     assert "attendance_register.pdf" in instructions
 
 
-def test_printer_pack_zip_demo_mode():
-    """ZIP should generate without error in demo mode."""
-    buf = _generate_sample_zip(is_demo=True)
-    assert buf.getbuffer().nbytes > 0

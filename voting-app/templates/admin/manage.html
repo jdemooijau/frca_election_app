@@ -211,9 +211,6 @@
                     <a href="{{ url_for('admin_counter_sheet_pdf', election_id=election.id) }}" class="btn btn-outline btn-small">Counter Sheet PDF</a>
                     <a href="{{ url_for('admin_dual_sided_ballots_pdf', election_id=election.id) }}" class="btn btn-outline btn-small">Dual-Sided Ballots PDF</a>
                     <a href="{{ url_for('admin_paper_ballot_pdf', election_id=election.id, round_number=election.current_round) }}" class="btn btn-outline btn-small">Paper Ballot PDF</a>
-                    {% if is_demo %}
-                    <a href="{{ url_for('admin_dual_ballot_pdf', election_id=election.id) }}" class="btn btn-outline btn-small">Dual-Ballot Handout PDF</a>
-                    {% endif %}
                     <a href="{{ url_for('admin_codes_pdf', election_id=election.id) }}" class="btn btn-outline btn-small">Code Slips PDF</a>
                 </div>
             </details>

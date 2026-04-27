@@ -49,28 +49,6 @@ def _generate_qr_image(url, size=120):
     return ImageReader(img_buf)
 
 
-def draw_demo_watermark(c, page_width, page_height):
-    """Draw diagonal 'DEMO' text in light grey across the page."""
-    c.saveState()
-    c.setFont("Helvetica-Bold", 100)
-    c.setFillColor(HexColor("#CCCCCC"))
-    c.setFillAlpha(0.3)
-    c.translate(page_width / 2, page_height / 2)
-    c.rotate(45)
-    c.drawCentredString(0, 0, "DEMO")
-    c.restoreState()
-
-
-def draw_demo_header(c, page_width, page_height):
-    """Draw 'DEMO MODE -- Practice Election' at top of page in red."""
-    c.saveState()
-    c.setFont("Helvetica-Bold", 12)
-    c.setFillColor(HexColor("#C0392B"))
-    c.drawCentredString(page_width / 2, page_height - 10 * mm,
-                        "DEMO MODE \u2014 Practice Election")
-    c.restoreState()
-
-
 # ---------------------------------------------------------------------------
 # Warning strip (shared between front and back of dual-sided ballots)
 # ---------------------------------------------------------------------------
@@ -279,9 +257,6 @@ def generate_code_slips_pdf(codes, election_name, short_name, wifi_ssid,
     for page_start in range(0, len(codes), cards_per_page):
         page_codes = codes[page_start:page_start + cards_per_page]
 
-        if is_demo:
-            draw_demo_watermark(c, width, height)
-            draw_demo_header(c, width, height)
 
         for i, code in enumerate(page_codes):
             row = i // cols
@@ -346,9 +321,6 @@ def generate_counter_sheet_pdf(election_name, congregation_name, offices_data,
         if not candidates:
             continue
 
-        if is_demo:
-            draw_demo_watermark(c, width, height)
-            draw_demo_header(c, width, height)
 
         # Each office gets its own page(s)
         # Header
@@ -383,9 +355,6 @@ def generate_counter_sheet_pdf(election_name, congregation_name, offices_data,
             # Page break if needed
             if y - candidate_height < 25 * mm:
                 c.showPage()
-                if is_demo:
-                    draw_demo_watermark(c, width, height)
-                    draw_demo_header(c, width, height)
                 y = height - 20 * mm
 
             # Candidate name
@@ -512,9 +481,6 @@ def generate_paper_ballot_pdf(election_name, round_number, office_data,
 
     ballot_index = 0
     while ballot_index < total_ballots:
-        if is_demo:
-            draw_demo_watermark(c, width, height)
-            draw_demo_header(c, width, height)
 
         for slot in range(ballots_per_page):
             if ballot_index >= total_ballots:
@@ -615,13 +581,6 @@ def generate_results_pdf(election_name, rounds_data, is_demo=False):
         BytesIO buffer containing the PDF.
     """
     buf = io.BytesIO()
-
-    def _add_watermarks(canvas_obj, doc):
-        """Callback for SimpleDocTemplate to add demo watermarks."""
-        if is_demo:
-            draw_demo_watermark(canvas_obj, A4[0], A4[1])
-            draw_demo_header(canvas_obj, A4[0], A4[1])
-
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20 * mm, bottomMargin=20 * mm)
     styles = getSampleStyleSheet()
     elements = []
@@ -708,255 +667,8 @@ def generate_results_pdf(election_name, rounds_data, is_demo=False):
             elements.append(table)
             elements.append(Spacer(1, 8 * mm))
 
-    if is_demo:
-        doc.build(elements, onFirstPage=_add_watermarks,
-                  onLaterPages=_add_watermarks)
-    else:
-        doc.build(elements)
+    doc.build(elements)
 
-    buf.seek(0)
-    return buf
-
-
-# ---------------------------------------------------------------------------
-# Dual Ballot Handout PDF
-# ---------------------------------------------------------------------------
-
-
-def generate_dual_ballot_handout_pdf(election_name, congregation_name,
-                                     office_data, codes, wifi_ssid,
-                                     wifi_password, base_url):
-    """Generate a dual ballot handout PDF.
-
-    Page 1 is an explanation page. Pages 2-21 each contain a dual ballot:
-    top half is a traditional paper ballot, bottom half is an online code
-    ballot with QR code.
-
-    Args:
-        election_name: name of the election.
-        congregation_name: full congregation name.
-        office_data: list of dicts with 'office' and 'candidates' keys.
-        codes: list of plaintext 6-character code strings (up to 20).
-        wifi_ssid: WiFi SSID to display.
-        wifi_password: WiFi password (may be empty for open network).
-        base_url: voting base URL.
-
-    Returns:
-        BytesIO buffer containing the PDF.
-    """
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    width, height = A4
-    margin = 10 * mm
-
-    # -----------------------------------------------------------------------
-    # Page 1 — Explanation page
-    # -----------------------------------------------------------------------
-    draw_demo_watermark(c, width, height)
-
-    y = height - 20 * mm
-
-    # Title
-    c.setFillColor(NAVY)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawCentredString(width / 2, y, election_name)
-    y -= 7 * mm
-    c.setFont("Helvetica", 11)
-    c.setFillColor(HexColor("#444444"))
-    c.drawCentredString(width / 2, y, congregation_name)
-    y -= 14 * mm
-
-    # Explanation text — line by line
-    def draw_line(text, font="Helvetica", size=10, color=HexColor("#333333"),
-                  indent=0, spacing=4.5):
-        nonlocal y
-        c.setFont(font, size)
-        c.setFillColor(color)
-        c.drawString(margin + indent, y, text)
-        y -= size * 0.35 + spacing
-        return y
-
-    draw_line("What you have received", font="Helvetica-Bold", size=12,
-              color=NAVY, spacing=6)
-
-    draw_line("As a council member, you have received a sheet with two voting options.")
-    draw_line("Both options allow you to cast the same vote for the same election.")
-    draw_line("You only need to choose one.", font="Helvetica-Bold", spacing=8)
-
-    y -= 2 * mm
-    draw_line("Option A — Traditional Paper Ballot (top half)",
-              font="Helvetica-Bold", size=11, color=NAVY, spacing=5)
-    draw_line("The top half of each page is a familiar paper ballot.")
-    draw_line("Mark your selections with an X in the checkbox next to each candidate.")
-    draw_line("Fold the ballot and submit it to the secretary of council.", spacing=8)
-
-    y -= 2 * mm
-    draw_line("Option B — Online Code Ballot (bottom half)",
-              font="Helvetica-Bold", size=11, color=NAVY, spacing=5)
-    draw_line("The bottom half contains a unique voting code and QR code.")
-    draw_line("Scan the QR code with your phone, or connect to the WiFi and open the URL.")
-    draw_line("Enter your code and vote on-screen. Results are tallied automatically.",
-              spacing=8)
-
-    y -= 4 * mm
-    draw_line("Why both?", font="Helvetica-Bold", size=12, color=NAVY, spacing=6)
-
-    draw_line("This election app is being proposed as an option for future elections.")
-    draw_line("Providing both methods lets you experience the digital option while")
-    draw_line("retaining the familiar paper ballot as a fallback.")
-    draw_line("The council will decide which method to adopt going forward.", spacing=8)
-
-    y -= 4 * mm
-    c.setFont("Helvetica-Oblique", 9)
-    c.setFillColor(HexColor("#888888"))
-    c.drawString(margin, y, "This is a DEMO election with fictional candidates.")
-    y -= 5 * mm
-    c.drawString(margin, y, "No real election data is used. Results do not count.")
-    y -= 8 * mm
-
-    c.setFont("Helvetica-Bold", 10)
-    c.setFillColor(NAVY)
-    c.drawString(margin, y, "Try both methods if you like! The demo is here for you to explore.")
-
-    c.showPage()
-
-    # -----------------------------------------------------------------------
-    # Pages 2-21 — Dual ballot pages (one per code)
-    # -----------------------------------------------------------------------
-    midpoint = height / 2
-    half_height = (height - 2 * margin) / 2
-    qr_size = 35 * mm
-
-    for code in codes[:20]:
-        draw_demo_watermark(c, width, height)
-
-        # ===================================================================
-        # TOP HALF — Traditional Paper Ballot
-        # ===================================================================
-        top_y = height - margin
-
-        # Congregation header
-        c.setFillColor(HexColor("#666666"))
-        c.setFont("Helvetica", 8)
-        c.drawCentredString(width / 2, top_y, congregation_name)
-        top_y -= 5 * mm
-
-        # Election name
-        c.setFillColor(NAVY)
-        c.setFont("Helvetica-Bold", 11)
-        c.drawCentredString(width / 2, top_y, election_name)
-        top_y -= 5 * mm
-
-        # Instruction
-        c.setFont("Helvetica", 8)
-        c.setFillColor(HexColor("#555555"))
-        c.drawCentredString(width / 2, top_y, "Mark your selections with an X")
-        top_y -= 7 * mm
-
-        # Offices and candidates
-        for item in office_data:
-            office = item["office"]
-            candidates = item["candidates"]
-
-            c.setFillColor(NAVY)
-            c.setFont("Helvetica-Bold", 9)
-            c.drawString(margin + 5 * mm, top_y,
-                         f"For {office['name']} (select {office['max_selections']})")
-            top_y -= 5 * mm
-
-            for cand in candidates:
-                # Checkbox
-                c.setStrokeColor(NAVY)
-                c.setFillColor(HexColor("#FFFFFF"))
-                c.rect(margin + 7 * mm, top_y - 0.5 * mm, 3.5 * mm, 3.5 * mm)
-
-                # Candidate name
-                c.setFillColor(NAVY)
-                c.setFont("Helvetica", 9)
-                c.drawString(margin + 13 * mm, top_y, cand["name"])
-                top_y -= 5.5 * mm
-
-            top_y -= 2 * mm
-
-        # Footer
-        c.setFont("Helvetica-Oblique", 7)
-        c.setFillColor(HexColor("#999999"))
-        c.drawCentredString(width / 2, midpoint + 5 * mm,
-                            "Fold and submit to the secretary of council")
-
-        # ===================================================================
-        # SEPARATOR — dotted cut line
-        # ===================================================================
-        c.setStrokeColor(HexColor("#AAAAAA"))
-        c.setDash(4, 3)
-        c.line(margin, midpoint, width - margin, midpoint)
-        c.setDash()
-
-        c.setFont("Helvetica", 7)
-        c.setFillColor(HexColor("#AAAAAA"))
-        c.drawCentredString(width / 2, midpoint - 4 * mm,
-                            "(both options are provided \u2014 choose the one you prefer)")
-
-        # ===================================================================
-        # BOTTOM HALF — Online Code Ballot
-        # ===================================================================
-        bot_y = midpoint - 12 * mm
-
-        # Congregation header
-        c.setFillColor(HexColor("#666666"))
-        c.setFont("Helvetica", 8)
-        c.drawCentredString(width / 2, bot_y, congregation_name)
-        bot_y -= 5 * mm
-
-        # Election name
-        c.setFillColor(NAVY)
-        c.setFont("Helvetica-Bold", 11)
-        c.drawCentredString(width / 2, bot_y, election_name)
-        bot_y -= 10 * mm
-
-        # QR code (centred)
-        vote_url = f"{base_url}/v/{code}"
-        qr_img = _generate_qr_image(vote_url)
-        qr_x = (width - qr_size) / 2
-        c.drawImage(qr_img, qr_x, bot_y - qr_size, qr_size, qr_size)
-        bot_y -= qr_size + 5 * mm
-
-        # Code in large bold monospace
-        formatted_code = f"{code[:3]} {code[3:]}"
-        c.setFont("Courier-Bold", 22)
-        c.setFillColor(NAVY)
-        c.drawCentredString(width / 2, bot_y, formatted_code)
-        bot_y -= 8 * mm
-
-        # WiFi info
-        c.setFont("Helvetica", 9)
-        c.setFillColor(HexColor("#333333"))
-        c.drawCentredString(width / 2, bot_y,
-                            f"WiFi: {wifi_ssid}   |   "
-                            f"{'Password: ' + wifi_password if wifi_password else 'Open network'}")
-        bot_y -= 5 * mm
-
-        # Fallback URL
-        c.setFont("Helvetica", 8)
-        c.setFillColor(HexColor("#555555"))
-        c.drawCentredString(width / 2, bot_y, f"Or open: {vote_url}")
-        bot_y -= 6 * mm
-
-        # Instructions
-        c.setFont("Helvetica", 8)
-        c.setFillColor(HexColor("#555555"))
-        c.drawCentredString(width / 2, bot_y,
-                            "Scan QR or connect to WiFi and open the URL")
-        bot_y -= 8 * mm
-
-        # Footer
-        c.setFont("Helvetica-Oblique", 7)
-        c.setFillColor(HexColor("#999999"))
-        c.drawCentredString(width / 2, margin + 2 * mm, "Keep this slip private")
-
-        c.showPage()
-
-    c.save()
     buf.seek(0)
     return buf
 
@@ -1212,9 +924,6 @@ def generate_ballot_front_pdf(election_name, office_data, wifi_password,
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(col_w, cell_h))
 
-    if is_demo:
-        draw_demo_watermark(c, col_w, cell_h)
-
     _draw_ballot_card(c, 0, cell_h, col_w, cell_h, election_name,
                       left, right, sub_w, sub_gap)
     c.showPage()
@@ -1243,8 +952,6 @@ def generate_code_slips_back_pdf(codes, wifi_ssid, wifi_password, base_url,
     c = canvas.Canvas(buf, pagesize=(col_w, cell_h))
 
     for code_str in codes:
-        if is_demo:
-            draw_demo_watermark(c, col_w, cell_h)
         draw_code_slip(c, 0, cell_h, col_w, cell_h, code_str,
                        wifi_ssid, wifi_password, base_url)
         c.showPage()
@@ -1277,15 +984,11 @@ def generate_cards_duplex_pdf(election_name, office_data, codes, wifi_ssid,
 
     for code_str in codes:
         # Front (ballot)
-        if is_demo:
-            draw_demo_watermark(c, col_w, cell_h)
         _draw_ballot_card(c, 0, cell_h, col_w, cell_h, election_name,
                           left, right, sub_w, sub_gap)
         c.showPage()
 
         # Back (unique code + QR)
-        if is_demo:
-            draw_demo_watermark(c, col_w, cell_h)
         draw_code_slip(c, 0, cell_h, col_w, cell_h, code_str,
                        wifi_ssid, wifi_password, base_url)
         c.showPage()
@@ -1740,14 +1443,6 @@ def generate_minutes_docx(
     # =====================================================================
     # TITLE
     # =====================================================================
-    if is_demo:
-        demo_p = doc.add_paragraph()
-        demo_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = demo_p.add_run("DEMO MODE \u2014 This is not an official document")
-        run.bold = True
-        run.font.color.rgb = RGBColor(0xC0, 0x39, 0x2B)
-        run.font.size = Pt(12)
-
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = title.add_run(congregation_name)
