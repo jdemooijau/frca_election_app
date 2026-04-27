@@ -259,6 +259,7 @@ def demo_election(demo_client):
         "candidate_names": "Pieter van Rijksen\nHendrik Brouwerhof\nWillem de Kempenaar\nGerrit van Dijkstra",
     })
     demo_client.post("/admin/election/1/codes", data={"count": "20"})
+    demo_client.post("/admin/election/1/participants", data={"participants": "20"})
     demo_client.post("/admin/election/1/voting")
     return demo_client
 
@@ -281,6 +282,7 @@ def test_production_mode_rejects_invalid_code_strictly(client):
         "candidate_names": "Real Candidate A\nReal Candidate B",
     })
     client.post("/admin/election/1/codes", data={"count": "10"})
+    client.post("/admin/election/1/participants", data={"participants": "10"})
     client.post("/admin/election/1/voting")
     resp = client.post("/vote", data={"code": "XXXXXX"}, follow_redirects=True)
     assert b"Invalid code" in resp.data
@@ -294,6 +296,7 @@ def test_production_mode_rejects_blank_code(client):
         "candidate_names": "Real Candidate A\nReal Candidate B",
     })
     client.post("/admin/election/1/codes", data={"count": "10"})
+    client.post("/admin/election/1/participants", data={"participants": "10"})
     client.post("/admin/election/1/voting")
     resp = client.post("/vote", data={"code": ""}, follow_redirects=True)
     assert b"valid 6-character code" in resp.data
@@ -309,6 +312,7 @@ def test_demo_mode_handles_exhausted_code_pool(demo_client):
         "candidate_names": "Candidate A\nCandidate B",
     })
     demo_client.post("/admin/election/1/codes", data={"count": "1"})
+    demo_client.post("/admin/election/1/participants", data={"participants": "1"})
     demo_client.post("/admin/election/1/voting")
     # Mark all codes as used
     with app.app_context():

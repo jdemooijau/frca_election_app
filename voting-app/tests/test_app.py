@@ -68,6 +68,12 @@ def election_with_codes(admin_client):
         "count": "10"
     })
 
+    # Set in-person attendance so voting can be opened (Article 4 prerequisite).
+    admin_client.post(
+        "/admin/election/1/participants",
+        data={"participants": "10"},
+    )
+
     return admin_client
 
 

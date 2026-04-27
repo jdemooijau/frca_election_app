@@ -344,7 +344,7 @@
                     <button type="submit" class="btn btn-gold primary-cta">Next: Election Rules &rarr;</button>
                     {% elif phase == 2 %}
                     <button type="submit" class="btn btn-success primary-cta"
-                            onclick="return confirm({% if attendance_missing %}'WARNING: attendance is still 0. Without it, no candidate can be declared elected. Open voting anyway?'{% else %}'Open voting for round {{ election.current_round }}?'{% endif %});">
+                            {% if attendance_missing %}disabled title="Set attendance under Step 1 first"{% else %}onclick="return confirm('Open voting for round {{ election.current_round }}?');"{% endif %}>
                         Next: Open Voting &rarr;
                     </button>
                     {% endif %}

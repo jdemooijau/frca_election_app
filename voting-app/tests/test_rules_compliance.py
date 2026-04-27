@@ -214,6 +214,7 @@ class TestArticle7Ballots:
             "candidate_names": "A\nB\nC\nD"
         })
         admin_client.post("/admin/election/1/codes", data={"count": "5"})
+        admin_client.post("/admin/election/1/participants", data={"participants": "5"})
         admin_client.post("/admin/election/1/voting")
 
         # Create a test code and vote for only 1 candidate (max is 2)
@@ -249,6 +250,7 @@ class TestArticle7Ballots:
             "candidate_names": "A\nB",
         })
         admin_client.post("/admin/election/1/codes", data={"count": "5"})
+        admin_client.post("/admin/election/1/participants", data={"participants": "5"})
         admin_client.post("/admin/election/1/voting")
 
         test_code = "OVRTST"

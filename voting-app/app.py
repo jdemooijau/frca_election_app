@@ -923,6 +923,17 @@ def admin_toggle_voting(election_id):
             flash("Cannot open voting — no unused codes available.", "error")
             return redirect(url_for("admin_election_manage", election_id=election_id))
 
+        # Don't open voting until attendance is set. Without it, the Article 6b
+        # threshold cannot be calculated and no candidate can be declared elected.
+        in_person, _, _ = get_round_counts(election_id, election["current_round"])
+        if in_person <= 0:
+            flash(
+                "Cannot open voting — set the attendance count from the register first "
+                "(Phase 2, Step 1).",
+                "error",
+            )
+            return redirect(url_for("admin_election_manage", election_id=election_id))
+
     # Closing voting auto-reveals the results panel on the projector so the
     # chairman doesn't need a second click. The clean ELECTED-only summary
     # is still a separate manual step (advance display phase to 4).
@@ -1009,6 +1020,19 @@ def admin_set_display_phase(election_id):
         if code_count == 0:
             flash("Cannot proceed to voting — no unused codes available.", "error")
             return redirect(url_for("admin_election_manage", election_id=election_id))
+
+        # Attendance must be set before voting can open. Without it the
+        # Article 6b threshold cannot be calculated and no candidate can be
+        # declared elected.
+        in_person, _, _ = get_round_counts(election_id, election["current_round"])
+        if in_person <= 0:
+            flash(
+                "Cannot proceed to voting — set the attendance count from the register first "
+                "(Step 1 above).",
+                "error",
+            )
+            return redirect(url_for("admin_election_manage", election_id=election_id))
+
         db.execute(
             "UPDATE elections SET display_phase = ?, voting_open = 1 WHERE id = ?",
             (new_phase, election_id)
