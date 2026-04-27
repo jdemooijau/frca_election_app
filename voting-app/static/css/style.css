@@ -501,7 +501,8 @@ tr:nth-child(even) {
 .display-topbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    gap: 18px;
     padding: 12px 32px;
     background: var(--navy);
     border-bottom: 3px solid var(--gold);
@@ -509,7 +510,7 @@ tr:nth-child(even) {
 }
 
 .display-title {
-    font-size: 36px;
+    font-size: 28px;
     font-weight: 700;
     color: var(--white);
 }
