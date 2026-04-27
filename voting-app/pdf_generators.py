@@ -1315,15 +1315,15 @@ Three printing workflows are provided. Pick ONE based on your equipment:
 PRINTING SUMMARY
 {'=' * 60}
 
-  File                        Size        Copies    Paper
-  ──────────────────────────  ──────────  ────────  ──────
-  1_ballot_front.pdf          Card-sized  x{total_cards:<6}  Duplex (with #2)
-  2_code_slips_back.pdf       Card-sized  x1        Duplex (with #1)
-  3_cards_duplex.pdf          Card-sized  x1        Duplex (replaces #1+#2)
-  4_dual_sided_ballots.pdf    A4          x1        Duplex (A4 fallback)
-  5_counter_sheet.pdf         A4          x2-3      Simplex
-  6_attendance_register.pdf   A4          x1-2      Simplex
-  7_av_instructions.pdf       A4          x1-2      Simplex
+  File                        Size        Print     Yields              Paper
+  ──────────────────────────  ──────────  ───────   ──────────────────  ──────
+  1_ballot_front.pdf          Card-sized  x1        duplicated to {total_cards:<5}  Duplex (with #2)
+  2_code_slips_back.pdf       Card-sized  x1        {total_cards} unique cards   Duplex (with #1)
+  3_cards_duplex.pdf          Card-sized  x1        {total_cards} cards          Duplex (replaces #1+#2)
+  4_dual_sided_ballots.pdf    A4          x1        {total_cards} cards (cut)    Duplex (A4 fallback)
+  5_counter_sheet.pdf         A4          x2-3      tally sheet         Simplex
+  6_attendance_register.pdf   A4          x1-2      sign-in sheet       Simplex
+  7_av_instructions.pdf       A4          x1-2      AV handout          Simplex
 
 For questions, contact the election administrator.
 """
