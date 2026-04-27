@@ -96,14 +96,20 @@
             {% endif %}
             {% for item in results %}
             <div class="candidate-office">
-                <h3>{{ item.office_name }}
-                    <span style="font-size: 22px; font-weight: 400; color: #666;">
-                        {% if item.max_selections > 0 %}
-                        — select {{ item.max_selections }}
-                        {% else %}
-                        — all vacancies filled
-                        {% endif %}
+                <h3>
+                    {{ item.office_name }}
+                    {% if item.max_selections > 0 %}
+                    <span style="display: inline-block; margin-left: 10px; padding: 4px 14px;
+                                 background: var(--gold); color: var(--navy);
+                                 border-radius: 999px; font-size: 22px; font-weight: 700;
+                                 letter-spacing: 0.3px; vertical-align: middle;">
+                        Tick {{ item.max_selections }} name{{ '' if item.max_selections == 1 else 's' }}
                     </span>
+                    {% else %}
+                    <span style="font-size: 22px; font-weight: 400; color: #666;">
+                        — all vacancies filled
+                    </span>
+                    {% endif %}
                 </h3>
                 {% if item.candidates %}
                 <ul class="candidate-list">

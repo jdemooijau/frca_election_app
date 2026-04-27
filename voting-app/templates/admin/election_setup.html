@@ -68,15 +68,19 @@
                 </p>
             </div>
 
-            <div class="form-group">
-                <label for="max_selections">Maximum Selections per Voter (optional)</label>
-                <input type="number" id="max_selections" name="max_selections"
-                       value="{{ prefill_max_selections|default(0) }}" min="0" max="20">
-                <p style="font-size: 14px; color: #666; margin-top: 4px;">
-                    Leave at 0 to default to the number of vacancies. Only set this if
-                    different from vacancies.
-                </p>
-            </div>
+            <details style="margin-bottom: 14px;">
+                <summary style="cursor: pointer; color: #888; font-size: 13px;">Advanced options</summary>
+                <div class="form-group" style="margin-top: 10px;">
+                    <label for="max_selections">Votes per voter (override)</label>
+                    <input type="number" id="max_selections" name="max_selections"
+                           value="{{ prefill_max_selections|default(0) }}" min="0" max="20">
+                    <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                        Leave at 0 (the default). For a normal election, voters tick
+                        as many names as there are vacancies, which is what 0 produces.
+                        Only override if your council uses a different rule.
+                    </p>
+                </div>
+            </details>
 
             <div class="form-group">
                 <label>Candidates</label>
