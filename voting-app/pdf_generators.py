@@ -827,8 +827,7 @@ def generate_dual_sided_ballots_pdf(election_name, short_name, round_number,
     cards_per_page = cols * rows_per_page
 
     # Limit cards to member_count + 10 (spare), but never more than available codes
-    total_cards = max(member_count + 10, 30) if member_count > 0 else len(codes)
-    codes = codes[:total_cards]
+    total_cards = len(codes)
 
     # --- Helper: compute x, y for a grid slot ---
     def _slot_xy(slot, is_back):
@@ -945,8 +944,7 @@ def generate_code_slips_back_pdf(codes, wifi_ssid, wifi_password, base_url,
     col_w, cell_h, _, _, _, _ = _calc_card_dimensions(office_data,
                                                        wifi_password)
 
-    total_cards = max(member_count + 10, 30) if member_count > 0 else len(codes)
-    codes = codes[:total_cards]
+    total_cards = len(codes)
 
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(col_w, cell_h))
@@ -976,8 +974,7 @@ def generate_cards_duplex_pdf(election_name, office_data, codes, wifi_ssid,
     col_w, cell_h, sub_w, sub_gap, left, right = _calc_card_dimensions(
         office_data, wifi_password)
 
-    total_cards = max(member_count + 10, 30) if member_count > 0 else len(codes)
-    codes = codes[:total_cards]
+    total_cards = len(codes)
 
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(col_w, cell_h))
@@ -1224,8 +1221,10 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
         election_name, wifi_ssid, wifi_password, base_url)
 
     # 7. Instructions
-    total_cards = max(member_count + 10, 30) if member_count > 0 else len(codes)
-    total_cards = min(total_cards, len(codes))
+    # One card per generated code. Multi-round elections generate codes
+    # for all rounds at once (members x max_rounds), so the printer pack
+    # produces all the cards needed for the whole election.
+    total_cards = len(codes)
     total_cards_x2 = total_cards * 2
     instructions = f"""\
 PRINTER PACK — {election_name}
