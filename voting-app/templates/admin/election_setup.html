@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}Election Setup — {{ election.name }}{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Setup: {{ election.name }}</h1>
+    <a href="{{ url_for('admin_dashboard') }}">Back</a>
+</div>
+
+<div class="container-wide">
+    <div class="admin-nav">
+        <a href="{{ url_for('admin_election_setup', election_id=election.id) }}" class="active">Offices &amp; Candidates</a>
+        <a href="{{ url_for('admin_codes', election_id=election.id) }}">Codes</a>
+        <a href="{{ url_for('admin_election_manage', election_id=election.id) }}">Manage</a>
+    </div>
+
+    <!-- Existing offices -->
+    {% if offices %}
+    <h2 style="margin-bottom: 12px;">Offices</h2>
+    {% for office in offices %}
+    <div class="card">
+        <div class="card-header">
+            {{ office.name }}
+            <span style="font-weight: normal; font-size: 14px; color: #666;">
+                ({{ office.vacancies or office.max_selections }} {% if (office.vacancies or office.max_selections) == 1 %}vacancy{% else %}vacancies{% endif %}, select {{ office.max_selections }})
+            </span>
+        </div>
+        <ul style="list-style: none; padding: 0;">
+            {% for cand in candidates_by_office[office.id] %}
+            <li style="padding: 8px 0; border-bottom: 1px solid #eee;">
+                {{ cand.name }}
+                {% if not cand.active %}
+                <span style="color: #999;">(inactive)</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        <form method="POST" action="{{ url_for('admin_office_delete', election_id=election.id, office_id=office.id) }}"
+              style="margin-top: 12px;"
+              onsubmit="return confirm('Delete this office and all its candidates?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger btn-small">Remove Office</button>
+        </form>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Add new office -->
+    <div class="card">
+        <div class="card-header">Add Office</div>
+        <form method="POST" id="add-office-form" onsubmit="return validateCandidates();">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="form-group">
+                <label for="office_name">Office Name</label>
+                <input type="text" id="office_name" name="office_name" required
+                       placeholder="e.g. Elder, Deacon"
+                       autocomplete="off">
+            </div>
+
+            <div class="form-group">
+                <label for="vacancies">Number of Vacancies</label>
+                <input type="number" id="vacancies" name="vacancies"
+                       value="{{ prefill_vacancies|default(1) }}" min="1" max="20">
+                <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                    Positions to fill. Article 2: the slate should be twice this number.
+                    Brothers vote for this many candidates.
+                </p>
+            </div>
+
+            <div class="form-group">
+                <label for="max_selections">Maximum Selections per Voter (optional)</label>
+                <input type="number" id="max_selections" name="max_selections"
+                       value="{{ prefill_max_selections|default(0) }}" min="0" max="20">
+                <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                    Leave at 0 to default to the number of vacancies. Only set this if
+                    different from vacancies.
+                </p>
+            </div>
+
+            <div class="form-group">
+                <label>Candidates</label>
+                <div class="candidate-picker">
+                    <input type="text" id="candidate_search"
+                           placeholder="Type a name to search members..."
+                           autocomplete="off" autocorrect="off" spellcheck="false">
+                    <div id="candidate_dropdown" class="candidate-dropdown"></div>
+                </div>
+                <ul id="candidate_list" class="candidate-tag-list"></ul>
+                <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                    Search members by name. Press Enter to add a name manually.
+                </p>
+                <!-- Hidden textarea synced by JS — preserves existing backend contract -->
+                <textarea id="candidate_names" name="candidate_names"
+                          style="display: none;"></textarea>
+            </div>
+
+            {% if slate_warning|default(false) %}
+            <div class="flash flash-error" style="margin-bottom: 16px;">
+                <strong>Article 2 Slate Size Warning</strong><br>
+                Confirm below to proceed under Article 13 (deviation from rules).
+            </div>
+            <input type="hidden" name="confirm_slate_override" value="1">
+            <button type="submit" class="btn btn-gold">Confirm and Add Office (Article 13 Deviation)</button>
+            {% else %}
+            <button type="submit" class="btn btn-gold">Add Office</button>
+            {% endif %}
+        </form>
+    </div>
+
+    {% if offices %}
+    <div style="margin-top: 16px;">
+        <a href="{{ url_for('admin_codes', election_id=election.id) }}" class="btn btn-primary">
+            Next: Generate Codes
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var candidateList = [];
+    var highlightIndex = -1;
+    var debounceTimer;
+    var searchInput = document.getElementById('candidate_search');
+    var dropdown = document.getElementById('candidate_dropdown');
+    var tagList = document.getElementById('candidate_list');
+    var hiddenTextarea = document.getElementById('candidate_names');
+
+    // Sync the hidden textarea with the candidate list
+    function syncTextarea() {
+        hiddenTextarea.value = candidateList.join('\n');
+    }
+
+    // Render the tag list
+    function renderTags() {
+        tagList.innerHTML = '';
+        candidateList.forEach(function(name, index) {
+            var li = document.createElement('li');
+            li.className = 'candidate-tag';
+            li.textContent = name;
+
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'remove-btn';
+            btn.textContent = '\u00D7';
+            btn.setAttribute('aria-label', 'Remove ' + name);
+            btn.addEventListener('click', function() {
+                candidateList.splice(index, 1);
+                renderTags();
+                syncTextarea();
+            });
+
+            li.appendChild(btn);
+            tagList.appendChild(li);
+        });
+    }
+
+    // Add a candidate
+    function addCandidate(name) {
+        name = name.trim();
+        if (!name) return;
+        // Prevent duplicates
+        if (candidateList.indexOf(name) !== -1) return;
+        candidateList.push(name);
+        renderTags();
+        syncTextarea();
+        searchInput.value = '';
+        closeDropdown();
+    }
+
+    // Render the dropdown
+    function renderDropdown(results) {
+        dropdown.innerHTML = '';
+        highlightIndex = -1;
+
+        // Filter out already-selected names
+        var filtered = results.filter(function(r) {
+            return candidateList.indexOf(r.name) === -1;
+        });
+
+        if (filtered.length === 0) {
+            closeDropdown();
+            return;
+        }
+
+        filtered.forEach(function(r, i) {
+            var div = document.createElement('div');
+            div.className = 'candidate-dropdown-item';
+            div.textContent = r.name;
+            div.addEventListener('mousedown', function(e) {
+                e.preventDefault(); // Prevent blur before click fires
+                addCandidate(r.name);
+            });
+            dropdown.appendChild(div);
+        });
+
+        dropdown.classList.add('open');
+    }
+
+    function closeDropdown() {
+        dropdown.classList.remove('open');
+        dropdown.innerHTML = '';
+        highlightIndex = -1;
+    }
+
+    function updateHighlight() {
+        var items = dropdown.querySelectorAll('.candidate-dropdown-item');
+        items.forEach(function(item, i) {
+            if (i === highlightIndex) {
+                item.classList.add('highlighted');
+                // Scroll into view if needed
+                item.scrollIntoView({ block: 'nearest' });
+            } else {
+                item.classList.remove('highlighted');
+            }
+        });
+    }
+
+    // Search with debounce
+    function doSearch() {
+        var q = searchInput.value.trim();
+        if (q.length < 1) {
+            closeDropdown();
+            return;
+        }
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/members/search?q=' + encodeURIComponent(q), true);
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                var results = JSON.parse(xhr.responseText);
+                renderDropdown(results);
+            }
+        };
+        xhr.send();
+    }
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(doSearch, 150);
+    });
+
+    searchInput.addEventListener('blur', function() {
+        // Small delay to allow dropdown click to fire
+        setTimeout(closeDropdown, 200);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+        var items = dropdown.querySelectorAll('.candidate-dropdown-item');
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (items.length > 0) {
+                highlightIndex = Math.min(highlightIndex + 1, items.length - 1);
+                updateHighlight();
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (items.length > 0) {
+                highlightIndex = Math.max(highlightIndex - 1, 0);
+                updateHighlight();
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (highlightIndex >= 0 && items.length > highlightIndex) {
+                // Add the highlighted dropdown item
+                addCandidate(items[highlightIndex].textContent);
+            } else if (searchInput.value.trim()) {
+                // Manual entry — add the typed text
+                addCandidate(searchInput.value);
+            }
+        } else if (e.key === 'Escape') {
+            closeDropdown();
+        }
+    });
+
+    // Form validation
+    window.validateCandidates = function() {
+        if (candidateList.length === 0) {
+            alert('Please add at least one candidate.');
+            searchInput.focus();
+            return false;
+        }
+        return true;
+    };
+})();
+</script>
+{% endblock %}

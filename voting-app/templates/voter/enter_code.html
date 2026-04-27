@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Vote — Office Bearer Election{% endblock %}
+
+{% block flash_messages %}{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>Office Bearer Election</h1>
+    {% if election %}
+    <div class="subtitle">{{ election.name }} — Round {{ election.current_round }}</div>
+    {% endif %}
+</div>
+
+<div class="container">
+    {% if election %}
+    <form method="POST" action="{{ url_for('voter_validate_code') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-group" style="margin-top: 24px;">
+            <label for="code">Enter Your Voting Code</label>
+
+            <div aria-live="polite" class="error-region">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% for category, message in messages %}
+                {% if category == 'error' %}
+                <p class="error-message">{{ message }}</p>
+                {% endif %}
+                {% endfor %}
+                {% endwith %}
+            </div>
+
+            <input type="text"
+                   id="code"
+                   name="code"
+                   value="{{ prefill_code or '' }}"
+                   class="code-input"
+                   maxlength="6"
+                   autocomplete="off"
+                   autocorrect="off"
+                   autocapitalize="characters"
+                   spellcheck="false"
+                   inputmode="text"
+                   pattern="[A-Za-z0-9]{% if is_demo %}{0,6}{% else %}{6}{% endif %}"
+                   {% if not is_demo %}required{% endif %}>
+            {% if is_demo %}
+            <p style="color: #999; margin-top: 8px; font-size: 13px;">Demo mode — any code (or blank) works.</p>
+            {% endif %}
+        </div>
+
+        <button type="submit" class="btn btn-primary">Submit Code</button>
+    </form>
+
+    {% else %}
+    <div style="text-align: center; padding: 40px 0;">
+        <h2>Voting is not yet open</h2>
+        <p style="color: #666; margin-top: 12px;">You are connected — please wait for the chairman to open voting.</p>
+        <p style="color: #999; margin-top: 8px; font-size: 14px;">This page will update automatically when voting begins.</p>
+    </div>
+    <script>setTimeout(function(){ location.reload(); }, 10000);</script>
+    {% endif %}
+</div>
+{% endblock %}

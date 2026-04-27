@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Vote Recorded — Office Bearer Election{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>Office Bearer Election</h1>
+</div>
+
+<div class="container">
+    <div class="confirmation">
+        <div class="checkmark" aria-hidden="true">&#10003;</div>
+        <h2>Vote Registered</h2>
+
+        {% if used_code %}
+        <p style="color: #666; font-size: 18px; margin-bottom: 8px;">
+            Thank you. Your vote has been recorded anonymously.
+        </p>
+        <div style="margin: 24px auto; padding: 16px 20px; background: #f4f4f4; border-radius: 8px; display: inline-block;">
+            <div style="font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Your Code</div>
+            <div style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #222; margin-top: 4px;">{{ used_code }}</div>
+        </div>
+        <p style="color: #666; font-size: 16px; margin-top: 8px;">
+            This code is now used and cannot be used again.
+        </p>
+        {% else %}
+        <p style="color: #666; font-size: 18px; margin-bottom: 24px;">
+            Thank you. Your vote has been recorded anonymously.
+        </p>
+        {% endif %}
+    </div>
+
+    <hr style="border: none; border-top: 1px solid #ddd; margin: 32px 0;">
+
+    <div style="text-align: center;">
+        <h3 style="font-size: 20px; margin-bottom: 8px;">Next voter</h3>
+        <p style="color: #666; font-size: 16px; margin-bottom: 16px;">
+            Hand this device to the next voter, or scan a new QR code.
+        </p>
+        <a href="{{ url_for('voter_enter_code') }}" class="btn btn-primary">
+            Enter code or scan QR
+        </a>
+        <a href="{{ url_for('display_phone') }}" class="btn btn-outline" style="margin-top: 12px;">
+            View Live Results
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,1100 @@
+/* =========================================================================
+   FRCA Election App — Mobile-first responsive styles
+   Navy (#1A3353), Gold (#D4A843), White (#FFFFFF)
+   ========================================================================= */
+
+:root {
+    --navy: #1A3353;
+    --navy-light: #2A4A6B;
+    --navy-dark: #0F2138;
+    --gold: #D4A843;
+    --gold-light: #E8C96A;
+    --gold-dark: #B8912E;
+    --white: #FFFFFF;
+    --grey-light: #F5F5F5;
+    --grey: #E0E0E0;
+    --grey-dark: #666666;
+    --red: #C0392B;
+    --green: #27AE60;
+    --font-size-base: 18px;
+    --font-size-large: 22px;
+    --font-size-xlarge: 28px;
+    --font-size-small: 14px;
+    --border-radius: 8px;
+    --spacing: 16px;
+    --max-width: 600px;
+}
+
+/* Reset */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-size: var(--font-size-base);
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+    color: var(--navy);
+    background: var(--white);
+    min-height: 100vh;
+}
+
+/* =========================================================================
+   Layout
+   ========================================================================= */
+
+.container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: var(--spacing);
+}
+
+.container-wide {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: var(--spacing);
+}
+
+/* =========================================================================
+   Header
+   ========================================================================= */
+
+.header {
+    background: var(--navy);
+    color: var(--white);
+    padding: 12px var(--spacing);
+    text-align: center;
+}
+
+.header h1 {
+    font-size: var(--font-size-xlarge);
+    margin-bottom: 4px;
+}
+
+.header .subtitle {
+    color: var(--gold);
+    font-size: var(--font-size-small);
+}
+
+/* =========================================================================
+   Flash messages
+   ========================================================================= */
+
+.flash-messages {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 var(--spacing);
+}
+
+.flash {
+    padding: 12px var(--spacing);
+    margin-top: var(--spacing);
+    border-radius: var(--border-radius);
+    font-size: var(--font-size-base);
+    font-weight: 500;
+}
+
+.flash-error {
+    background: #FDEDEC;
+    color: var(--red);
+    border: 1px solid var(--red);
+}
+
+.flash-success {
+    background: #EAFAF1;
+    color: var(--green);
+    border: 1px solid var(--green);
+}
+
+.flash-info {
+    background: #EBF5FB;
+    color: var(--navy);
+    border: 1px solid var(--navy-light);
+}
+
+/* =========================================================================
+   Forms
+   ========================================================================= */
+
+.form-group {
+    margin-bottom: var(--spacing);
+}
+
+label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: var(--font-size-base);
+    color: var(--navy);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+    width: 100%;
+    padding: 14px;
+    font-size: var(--font-size-large);
+    border: 2px solid var(--grey);
+    border-radius: var(--border-radius);
+    background: var(--white);
+    color: var(--navy);
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.3);
+}
+
+textarea {
+    min-height: 120px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.code-input {
+    text-align: center;
+    letter-spacing: 6px;
+    font-size: 28px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 20px;
+    /* iOS Safari zooms on inputs < 16px — we're well above that */
+}
+
+/* =========================================================================
+   Buttons
+   ========================================================================= */
+
+.btn {
+    display: inline-block;
+    padding: 18px 32px;
+    min-height: 60px;
+    font-size: 20px;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.btn-primary {
+    background: var(--navy);
+    color: var(--white);
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background: var(--navy-light);
+}
+
+.btn-gold {
+    background: var(--gold);
+    color: var(--navy);
+}
+
+.btn-gold:hover, .btn-gold:active {
+    background: var(--gold-light);
+}
+
+.btn-danger {
+    background: var(--red);
+    color: var(--white);
+}
+
+.btn-danger:hover, .btn-danger:active {
+    background: #A93226;
+}
+
+.btn-success {
+    background: var(--green);
+    color: var(--white);
+}
+
+.btn-success:hover, .btn-success:active {
+    background: #1E8449;
+}
+
+.btn-outline {
+    background: transparent;
+    color: var(--navy);
+    border: 2px solid var(--navy);
+}
+
+.btn-outline:hover, .btn-outline:active {
+    background: var(--navy);
+    color: var(--white);
+}
+
+.btn-small {
+    padding: 10px 20px;
+    font-size: var(--font-size-base);
+    width: auto;
+}
+
+.btn + .btn {
+    margin-top: 10px;
+}
+
+.btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn-row .btn {
+    width: auto;
+    flex: 1;
+}
+
+/* =========================================================================
+   Cards
+   ========================================================================= */
+
+.card {
+    background: var(--white);
+    border: 1px solid var(--grey);
+    border-radius: var(--border-radius);
+    padding: var(--spacing);
+    margin-bottom: var(--spacing);
+}
+
+.card-header {
+    font-size: var(--font-size-large);
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--gold);
+}
+
+/* =========================================================================
+   Checkboxes — large touch-friendly
+   ========================================================================= */
+
+.checkbox-group {
+    margin: 8px 0;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    margin-bottom: 8px;
+    border: 2px solid var(--grey);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-size: var(--font-size-large);
+    font-weight: 500;
+    transition: border-color 0.2s, background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.checkbox-label:active {
+    background: var(--grey-light);
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 28px;
+    height: 28px;
+    margin-right: 16px;
+    flex-shrink: 0;
+    accent-color: var(--navy);
+}
+
+.checkbox-label.selected {
+    border-color: var(--navy);
+    background: #EBF0F5;
+}
+
+.checkbox-label.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.max-notice {
+    font-size: var(--font-size-small);
+    color: var(--grey-dark);
+    margin-bottom: 8px;
+}
+
+/* =========================================================================
+   Voter ballot — no-JS, high-compatibility design
+   ========================================================================= */
+
+.error-region {
+    margin-bottom: 12px;
+}
+
+.error-message {
+    background: #FDEDEC;
+    color: var(--red);
+    border: 2px solid var(--red);
+    border-radius: var(--border-radius);
+    padding: 14px 16px;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.ballot-office {
+    margin-bottom: 16px;
+}
+
+.ballot-office-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 4px;
+}
+
+.ballot-max-notice {
+    font-size: 16px;
+    color: var(--grey-dark);
+    margin-bottom: 12px;
+}
+
+/* Each candidate is a large tappable label row */
+.ballot-option {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 10px 16px;
+    margin-bottom: 8px;
+    border: 2px solid var(--grey);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.ballot-option:active {
+    background: var(--grey-light);
+}
+
+.ballot-option input[type="checkbox"] {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    margin-right: 14px;
+    accent-color: var(--navy);
+}
+
+.ballot-option-text {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--navy);
+}
+
+/* Checked state — bold text when checked (no :has() — not supported on older browsers) */
+.ballot-option input[type="checkbox"]:checked + .ballot-option-text {
+    font-weight: 700;
+}
+
+/* =========================================================================
+   Tables
+   ========================================================================= */
+
+.table-wrapper {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-base);
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--grey);
+}
+
+th {
+    background: var(--navy);
+    color: var(--white);
+    font-weight: 600;
+}
+
+tr:nth-child(even) {
+    background: var(--grey-light);
+}
+
+/* =========================================================================
+   Progress bar
+   ========================================================================= */
+
+.progress-bar {
+    background: var(--grey);
+    border-radius: 20px;
+    height: 30px;
+    overflow: hidden;
+    margin: 12px 0;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--gold);
+    border-radius: 20px;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: var(--font-size-small);
+    color: var(--navy);
+    min-width: 40px;
+}
+
+/* =========================================================================
+   Voter confirmation
+   ========================================================================= */
+
+.confirmation {
+    text-align: center;
+    padding: 40px var(--spacing);
+}
+
+.confirmation .checkmark {
+    font-size: 80px;
+    color: var(--green);
+    line-height: 1;
+    margin-bottom: var(--spacing);
+}
+
+.confirmation h2 {
+    font-size: var(--font-size-xlarge);
+    margin-bottom: var(--spacing);
+}
+
+/* =========================================================================
+   Projector display — compact 16:9, white background for readability
+   ========================================================================= */
+
+.display-body {
+    background: var(--white);
+    color: var(--navy);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Top bar: title, round, status */
+.display-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 32px;
+    background: var(--navy);
+    border-bottom: 3px solid var(--gold);
+    flex-shrink: 0;
+}
+
+.display-title {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--white);
+}
+
+.round-badge {
+    background: var(--gold);
+    color: var(--navy);
+    padding: 8px 24px;
+    border-radius: 20px;
+    font-size: 26px;
+    font-weight: 700;
+}
+
+.display-status {
+    font-size: 30px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.display-status.open {
+    color: var(--green);
+}
+
+.display-status.closed {
+    color: #FF4444;
+}
+
+/* Main content area */
+.display-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 28px;
+    overflow: hidden;
+    min-width: 0;
+}
+
+/* Summary row: votes cast, codes issued, progress bar */
+.display-summary {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    margin-bottom: 18px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.display-vote-count,
+.display-vote-total,
+.display-vote-waiting {
+    text-align: center;
+    min-width: 140px;
+}
+
+.big-number {
+    display: block;
+    font-size: 52px;
+    font-weight: 700;
+    color: var(--navy);
+    line-height: 1;
+}
+
+.big-number.dim {
+    color: var(--grey-dark);
+}
+
+.big-label {
+    display: block;
+    font-size: 16px;
+    color: var(--grey-dark);
+    margin-top: 4px;
+}
+
+.display-vote-progress {
+    flex: 1;
+}
+
+.display-pbar {
+    height: 36px;
+    background: var(--grey);
+    border-radius: 18px;
+    overflow: hidden;
+    position: relative;
+}
+
+.display-pfill {
+    height: 100%;
+    background: var(--gold);
+    border-radius: 24px;
+    min-width: 0;
+}
+
+.display-pbar-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--navy);
+    min-width: 36px;
+    transition: width 0.5s ease;
+}
+
+/* Instructions panel (shown when voting open, no results) */
+.display-instructions {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 8px 40px;
+}
+
+.instructions-grid {
+    display: flex;
+    gap: 24px;
+    width: 100%;
+}
+
+.instructions-options {
+    display: flex;
+    align-items: stretch;
+    gap: 20px;
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.options-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.options-divider span {
+    display: inline-block;
+    background: var(--navy);
+    color: #fff;
+    font-weight: 800;
+    font-size: 32px;
+    padding: 10px 22px;
+    border-radius: 40px;
+    letter-spacing: 3px;
+}
+
+.instruction-card {
+    flex: 1;
+    background: var(--grey-light);
+    border-radius: 12px;
+    padding: 24px 28px;
+    border-top: 4px solid var(--navy);
+}
+
+.instruction-icon {
+    font-size: 56px;
+    margin-bottom: 8px;
+    color: var(--navy);
+    line-height: 1;
+}
+
+.instruction-card h2 {
+    font-size: 40px;
+    color: var(--navy);
+    margin-bottom: 12px;
+}
+
+.instruction-card ol {
+    list-style: decimal;
+    padding-left: 32px;
+    font-size: 34px;
+    line-height: 1.4;
+    color: var(--navy);
+}
+
+.instruction-card ol li {
+    margin-bottom: 6px;
+}
+
+.instruction-warning {
+    border-top-color: var(--red);
+}
+
+.instruction-warning .instruction-icon {
+    color: var(--red);
+}
+
+.instruction-warning h2 {
+    color: var(--red);
+}
+
+.instruction-warning-wide {
+    width: 100%;
+}
+
+.instruction-warning-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+}
+
+.instruction-warning-body .instruction-icon {
+    margin-bottom: 0;
+    flex: 0 0 auto;
+}
+
+.warning-text {
+    font-size: 34px;
+    line-height: 1.4;
+    color: var(--navy);
+}
+
+.warning-highlight {
+    margin-top: 12px;
+    padding: 12px 16px;
+    background: var(--grey-light);
+    border: 2px solid var(--navy);
+    color: var(--navy);
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1.3;
+    border-radius: var(--border-radius);
+}
+
+.or-divider {
+    text-align: center;
+    margin: 8px 0;
+    position: relative;
+}
+
+.or-divider span {
+    display: inline-block;
+    background: var(--gold);
+    color: #fff;
+    font-weight: 800;
+    font-size: 22px;
+    padding: 2px 18px;
+    border-radius: 20px;
+    letter-spacing: 2px;
+}
+
+.instruction-alt {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--grey);
+    font-size: 28px;
+    color: var(--grey-dark);
+}
+
+/* Results: offices side by side */
+.display-results {
+    flex: 1;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.display-offices {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 40px;
+    height: 100%;
+    width: 100%;
+}
+
+.display-office {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.display-office h2 {
+    font-size: 30px;
+    color: var(--navy);
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 3px solid var(--gold);
+}
+
+/* Column headers for Digital / Paper / Total */
+.display-col-headers {
+    display: flex;
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--grey);
+}
+
+.display-col-headers span:first-child {
+    flex: 1;
+}
+
+.col-hdr {
+    width: 90px;
+    text-align: right;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--grey-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Candidate row */
+.display-candidate {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 10px 0;
+    font-size: 28px;
+    border-bottom: 1px solid var(--grey);
+}
+
+.display-candidate .name {
+    color: var(--navy);
+    font-weight: 500;
+}
+
+.display-candidate .digital,
+.display-candidate .paper {
+    margin-left: 24px;
+    font-size: 24px;
+    color: var(--grey-dark);
+}
+
+.display-candidate .votes {
+    margin-left: 24px;
+    color: var(--navy);
+    font-weight: 700;
+    font-size: 32px;
+}
+
+/* Phone display candidate row */
+.phone-cand-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 15px;
+    border-bottom: 1px solid var(--grey);
+}
+
+/* Waiting page */
+.display-waiting {
+    text-align: center;
+    padding: 100px 40px;
+    font-size: 36px;
+    color: var(--grey-dark);
+}
+
+/* =========================================================================
+   Admin-specific
+   ========================================================================= */
+
+.admin-header {
+    background: var(--navy);
+    color: var(--white);
+    padding: 12px var(--spacing);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.admin-header h1 {
+    font-size: var(--font-size-large);
+}
+
+.admin-header a {
+    color: var(--white);
+    text-decoration: none;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    padding: 10px 24px;
+    border: 2px solid var(--gold);
+    border-radius: var(--border-radius);
+    background: transparent;
+}
+
+.admin-header a:hover {
+    background: var(--gold);
+    color: var(--navy);
+}
+
+.admin-nav {
+    display: flex;
+    gap: 10px;
+    margin-bottom: var(--spacing);
+    flex-wrap: wrap;
+}
+
+.admin-nav a {
+    padding: 10px 24px;
+    background: var(--grey-light);
+    color: var(--navy);
+    text-decoration: none;
+    border-radius: var(--border-radius);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    border: 2px solid var(--grey-light);
+}
+
+.admin-nav a:hover, .admin-nav a.active {
+    background: var(--navy);
+    color: var(--white);
+    border-color: var(--navy);
+}
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--spacing);
+    margin-bottom: var(--spacing);
+}
+
+.stat-box {
+    background: var(--grey-light);
+    border-radius: var(--border-radius);
+    padding: var(--spacing);
+    text-align: center;
+}
+
+.stat-box .number {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--navy);
+}
+
+.stat-box .label {
+    font-size: var(--font-size-small);
+    color: var(--grey-dark);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: var(--font-size-small);
+    font-weight: 600;
+}
+
+.status-open {
+    background: #EAFAF1;
+    color: var(--green);
+}
+
+.status-closed {
+    background: #FDEDEC;
+    color: var(--red);
+}
+
+.results-table td.votes {
+    font-weight: 700;
+    font-size: var(--font-size-large);
+    text-align: center;
+}
+
+.inline-form {
+    display: inline;
+}
+
+/* =========================================================================
+   Candidate autocomplete picker
+   ========================================================================= */
+
+.candidate-picker {
+    position: relative;
+}
+
+.candidate-dropdown {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    background: var(--white);
+    border: 2px solid var(--gold);
+    border-top: none;
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+}
+
+.candidate-dropdown.open {
+    display: block;
+}
+
+.candidate-dropdown-item {
+    padding: 12px 14px;
+    cursor: pointer;
+    font-size: var(--font-size-base);
+    border-bottom: 1px solid var(--grey-light);
+}
+
+.candidate-dropdown-item:hover,
+.candidate-dropdown-item.highlighted {
+    background: var(--grey-light);
+    color: var(--navy);
+}
+
+.candidate-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.candidate-tag-list {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.candidate-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--navy);
+    color: var(--white);
+    padding: 8px 12px;
+    border-radius: var(--border-radius);
+    font-size: var(--font-size-base);
+    font-weight: 500;
+}
+
+.candidate-tag .remove-btn {
+    background: none;
+    border: none;
+    color: var(--gold);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    font-weight: 700;
+}
+
+.candidate-tag .remove-btn:hover {
+    color: var(--white);
+}
+
+/* =========================================================================
+   Responsive — desktop overrides
+   ========================================================================= */
+
+@media (min-width: 768px) {
+    .container {
+        padding: 24px;
+    }
+
+    .btn {
+        width: auto;
+    }
+
+    .btn + .btn {
+        margin-top: 0;
+        margin-left: 10px;
+    }
+}
+
+/* =========================================================================
+   Demo mode banner
+   ========================================================================= */
+
+.demo-banner {
+    background: #FFD700;
+    color: #1A3353;
+    font-weight: bold;
+    text-align: center;
+    padding: 12px 16px;
+    font-size: 16px;
+    position: sticky;
+    top: 0;
+    width: 100%;
+    z-index: 9999;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.demo-notice {
+    background: #E8F4FD;
+    color: #1A3353;
+    border: 1px solid #B3D9F2;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    font-size: 14px;
+}

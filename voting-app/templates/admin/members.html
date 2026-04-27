@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Members — Office Bearer Election{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Member Directory</h1>
+    <a href="{{ url_for('admin_dashboard') }}">Back</a>
+</div>
+
+<div class="container-wide">
+    <!-- Upload form -->
+    <div class="card">
+        <div class="card-header">Import Members from Church Social</div>
+        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
+            Upload a CSV with at least <strong>Last name</strong> and <strong>First name</strong> columns.
+            Other columns are optional and will be ignored. Uploading replaces all existing members.
+        </p>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <input type="file" name="csv_file" accept=".csv" required
+                       style="font-size: 16px;">
+            </div>
+            <button type="submit" class="btn btn-gold btn-small">Upload CSV</button>
+        </form>
+    </div>
+
+    {% if member_count > 0 %}
+    <!-- Actions -->
+    <div class="card">
+        <div class="card-header">{{ member_count }} Members Imported</div>
+        <div class="btn-row">
+            <a href="{{ url_for('admin_attendance_pdf') }}" class="btn btn-primary btn-small">
+                Print Attendance Register
+            </a>
+            <form method="POST" action="{{ url_for('admin_members_clear') }}" class="inline-form"
+                  onsubmit="return confirm('Clear all imported members?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger btn-small">Clear All</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Member table -->
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Last Name</th>
+                    <th>First Name</th>
+                    <th>Email</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for member in members %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ member.last_name }}</td>
+                    <td>{{ member.first_name }}</td>
+                    <td style="font-size: 14px;">{{ member.email }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

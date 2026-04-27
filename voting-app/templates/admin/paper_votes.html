@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Paper Votes — {{ election.name }}{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Paper Votes: Round {{ election.current_round }}</h1>
+    <a href="{{ url_for('admin_election_manage', election_id=election.id) }}">Back</a>
+</div>
+
+<div class="container">
+    <p style="margin: 16px 0; color: #666;">
+        Enter the total paper votes counted for each candidate.
+        These will be added to the digital vote totals.
+    </p>
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        {% for item in office_candidates %}
+        <div class="card" data-max="{{ item.office.max_selections }}">
+            <div class="card-header">{{ item.office.name }}</div>
+            {% for cand in item.candidates %}
+            <div class="form-group">
+                <label for="paper_{{ cand.id }}">{{ cand.name }}</label>
+                <input type="number" id="paper_{{ cand.id }}" name="paper_{{ cand.id }}"
+                       value="{{ cand.paper_count }}" min="0"
+                       style="font-size: 24px; text-align: center;">
+            </div>
+            {% endfor %}
+            <div class="form-group" style="border-top: 1px solid #eee; margin-top: 12px; padding-top: 12px;">
+                <label for="spoilt_{{ item.office.id }}" style="color: #C0392B;">
+                    Spoilt ballots
+                    <small style="color: #888; font-weight: normal;">(filled in wrongly, e.g. too many ticks)</small>
+                </label>
+                <input type="number" id="spoilt_{{ item.office.id }}" name="spoilt_{{ item.office.id }}"
+                       value="{{ item.spoilt_count }}" min="0"
+                       style="font-size: 24px; text-align: center;">
+            </div>
+        </div>
+        {% endfor %}
+
+        <button type="submit" class="btn btn-primary">Save Paper Votes</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,748 @@
+{% extends "base.html" %}
+{% block title %}Manage — {{ election.name }}{% endblock %}
+
+{% block head %}
+<style>
+    .phase-stepper {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 16px 0 20px;
+        flex-wrap: wrap;
+    }
+    .phase-stepper .step {
+        flex: 1 1 0;
+        min-width: 96px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: var(--grey-light);
+        border-radius: 8px;
+        color: #888;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .phase-stepper .step .num {
+        display: inline-flex;
+        width: 24px;
+        height: 24px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: #ccc;
+        color: #fff;
+        font-weight: 700;
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+    .phase-stepper .step.done {
+        background: #E8F8EE;
+        color: #13532B;
+    }
+    .phase-stepper .step.done .num {
+        background: var(--green);
+    }
+    .phase-stepper .step.active {
+        background: var(--navy);
+        color: #fff;
+    }
+    .phase-stepper .step.active .num {
+        background: var(--gold);
+        color: var(--navy);
+    }
+
+    .phase-card {
+        border: 1px solid var(--grey);
+        border-radius: 10px;
+        margin-bottom: 12px;
+        background: #fff;
+        overflow: hidden;
+    }
+    .phase-card.active { border-color: var(--navy); border-width: 2px; }
+    .phase-card.done { border-color: #cfe7d7; }
+    .phase-card.pending { opacity: 0.85; }
+    .phase-card > header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        cursor: pointer;
+        background: #fafafa;
+    }
+    .phase-card.active > header { background: var(--navy); color: #fff; }
+    .phase-card.done > header { background: #F1F9F4; }
+    .phase-card > header .num {
+        display: inline-flex;
+        width: 30px;
+        height: 30px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: #ccc;
+        color: #fff;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+    .phase-card.active > header .num { background: var(--gold); color: var(--navy); }
+    .phase-card.done > header .num { background: var(--green); }
+    .phase-card > header .title {
+        font-weight: 700;
+        font-size: 16px;
+    }
+    .phase-card.active > header .title { color: #fff; }
+    .phase-card > header .state {
+        margin-left: auto;
+        font-size: 13px;
+        color: #666;
+        text-align: right;
+    }
+    .phase-card.active > header .state { color: rgba(255,255,255,0.85); }
+    .phase-card .body {
+        padding: 16px 18px;
+        border-top: 1px solid #eee;
+    }
+    .phase-card.active .body { border-top-color: var(--navy); }
+    .primary-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        font-size: 15px;
+        font-weight: 700;
+        border-radius: 8px;
+    }
+    .phase-status-strip {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: baseline;
+        font-size: 14px;
+        color: #555;
+        margin-bottom: 4px;
+    }
+    .phase-status-strip strong { color: var(--navy); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Manage: {{ election.name }}</h1>
+    <a href="{{ url_for('admin_dashboard') }}">Back</a>
+</div>
+
+<div class="container-wide">
+    <div class="admin-nav">
+        <a href="{{ url_for('admin_election_setup', election_id=election.id) }}">Offices &amp; Candidates</a>
+        <a href="{{ url_for('admin_codes', election_id=election.id) }}">Codes</a>
+        <a href="{{ url_for('admin_election_manage', election_id=election.id) }}" class="active">Manage</a>
+    </div>
+
+    {% set total_ballots = used_codes + paper_ballot_count + postal_voter_count %}
+
+    <!-- Compact at-a-glance status row -->
+    <div class="phase-status-strip">
+        <span><strong>Round {{ election.current_round }}</strong></span>
+        <span>&middot;</span>
+        <span>
+            {% if election.voting_open %}
+                <strong style="color: var(--green);">Voting OPEN</strong>
+            {% else %}
+                <strong style="color: var(--red);">Voting CLOSED</strong>
+            {% endif %}
+        </span>
+        {% if total_ballots > 0 or participants > 0 %}
+        <span>&middot;</span>
+        <span>{{ total_ballots }} ballot{{ '' if total_ballots == 1 else 's' }}{% if participants > 0 %} of {{ participants }} participating{% endif %}</span>
+        {% endif %}
+    </div>
+
+    <!-- Stepper -->
+    <div class="phase-stepper">
+        {% set steps = [
+            (1, "Before"),
+            (2, "Opening"),
+            (3, "Round " ~ election.current_round ~ " voting"),
+            (4, "Counting"),
+            (5, "Final"),
+        ] %}
+        {% for n, label in steps %}
+            {% set state = 'active' if active_phase == n else ('done' if phase_done[n] else 'pending') %}
+            <a href="#phase-{{ n }}" class="step {{ state }}">
+                <span class="num">{{ '✓' if state == 'done' else n }}</span>
+                <span>{{ label }}</span>
+            </a>
+        {% endfor %}
+    </div>
+
+    <!-- =================================================================
+         PHASE 1 — Before the meeting
+         ================================================================= -->
+    {% set p1_state = 'active' if active_phase == 1 else ('done' if phase_done[1] else 'pending') %}
+    <div class="phase-card {{ p1_state }}" id="phase-1">
+        <header onclick="togglePhase(1)">
+            <span class="num">{{ '✓' if p1_state == 'done' else '1' }}</span>
+            <span class="title">Before the meeting</span>
+            <span class="state">{{ phase_summary[1] }}</span>
+        </header>
+        <div class="body" {% if p1_state != 'active' %}hidden{% endif %}>
+            <p style="font-size: 14px; color: #555; margin-bottom: 14px;">
+                Print the materials you'll hand out at the meeting and enter
+                any postal votes you've received before the day.
+            </p>
+
+            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Print &amp; prepare</h3>
+            <div class="btn-row" style="flex-wrap: wrap; margin-bottom: 16px;">
+                <a href="{{ url_for('admin_printer_pack_zip', election_id=election.id) }}" class="btn btn-gold btn-small">
+                    Printer Pack ZIP (recommended)
+                </a>
+                <a href="{{ url_for('admin_attendance_pdf') }}" class="btn btn-outline btn-small">
+                    Attendance Register PDF
+                </a>
+                <a href="{{ url_for('admin_codes', election_id=election.id) }}" class="btn btn-outline btn-small">
+                    Voting Codes
+                </a>
+            </div>
+            <details>
+                <summary style="cursor: pointer; font-size: 13px; color: #666;">More formats (individual PDFs)</summary>
+                <div class="btn-row" style="flex-wrap: wrap; margin-top: 8px;">
+                    <a href="{{ url_for('admin_counter_sheet_pdf', election_id=election.id) }}" class="btn btn-outline btn-small">Counter Sheet PDF</a>
+                    <a href="{{ url_for('admin_dual_sided_ballots_pdf', election_id=election.id) }}" class="btn btn-outline btn-small">Dual-Sided Ballots PDF</a>
+                    <a href="{{ url_for('admin_paper_ballot_pdf', election_id=election.id, round_number=election.current_round) }}" class="btn btn-outline btn-small">Paper Ballot PDF</a>
+                    {% if is_demo %}
+                    <a href="{{ url_for('admin_dual_ballot_pdf', election_id=election.id) }}" class="btn btn-outline btn-small">Dual-Ballot Handout PDF</a>
+                    {% endif %}
+                    <a href="{{ url_for('admin_codes_pdf', election_id=election.id) }}" class="btn btn-outline btn-small">Code Slips PDF</a>
+                </div>
+            </details>
+
+            <h3 style="margin: 18px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Postal votes</h3>
+            <p style="font-size: 14px; color: #555; margin-bottom: 8px;">
+                {% if postal_voter_count > 0 %}
+                {{ postal_voter_count }} postal vote{{ '' if postal_voter_count == 1 else 's' }} entered.
+                {% else %}
+                No postal votes entered yet.
+                {% endif %}
+            </p>
+            <div class="btn-row">
+                <a href="{{ url_for('admin_postal_votes', election_id=election.id) }}" class="btn btn-outline btn-small">Enter Postal Votes (Round 1)</a>
+                <a href="{{ url_for('admin_postal_tally', election_id=election.id) }}" class="btn btn-outline btn-small">Postal Tally Helper</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- =================================================================
+         PHASE 2 — Opening the meeting
+         ================================================================= -->
+    {% set p2_state = 'active' if active_phase == 2 else ('done' if phase_done[2] else 'pending') %}
+    {% set phase = election.display_phase or 1 %}
+    <div class="phase-card {{ p2_state }}" id="phase-2">
+        <header onclick="togglePhase(2)">
+            <span class="num">{{ '✓' if p2_state == 'done' else '2' }}</span>
+            <span class="title">Opening the meeting</span>
+            <span class="state">{{ phase_summary[2] }}</span>
+        </header>
+        <div class="body" {% if p2_state != 'active' %}hidden{% endif %}>
+            <p style="font-size: 14px; color: #555; margin-bottom: 14px;">
+                Walk the projector through Welcome → Election Rules → Voting.
+                Set the attendance count from the register so the thresholds
+                can be calculated.
+            </p>
+
+            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Projector display</h3>
+            <div style="display: flex; align-items: center; gap: 0; margin-bottom: 12px;">
+                {% set proj_phases = [(1, "Welcome"), (2, "Election Rules"), (3, "Voting")] %}
+                {% for num, label in proj_phases %}
+                <div style="flex: 1; text-align: center; padding: 8px 4px; font-size: 13px; font-weight: 600;
+                            {{ 'background: var(--navy); color: var(--white);' if phase == num else 'background: var(--grey-light); color: #999;' }}
+                            {{ 'border-radius: 6px 0 0 6px;' if loop.first else '' }}
+                            {{ 'border-radius: 0 6px 6px 0;' if loop.last else '' }}">
+                    {{ num }}. {{ label }}{% if phase == num %} &bull;{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 18px;">
+                {% if phase > 1 %}
+                <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="direction" value="prev">
+                    <button type="submit" class="btn btn-outline btn-small">&larr; Back</button>
+                </form>
+                {% endif %}
+                {% if phase < 3 %}
+                <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="direction" value="next">
+                    {% if phase == 1 %}
+                    <button type="submit" class="btn btn-gold primary-cta">Next: Election Rules &rarr;</button>
+                    {% elif phase == 2 %}
+                    <button type="submit" class="btn btn-success primary-cta"
+                            onclick="return confirm('Open voting for round {{ election.current_round }}?');">
+                        Next: Open Voting &rarr;
+                    </button>
+                    {% endif %}
+                </form>
+                {% endif %}
+                <a href="{{ url_for('display') }}" target="_blank" class="btn btn-outline btn-small" style="margin-left: auto;">
+                    Open Display
+                </a>
+            </div>
+
+            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Attendance (Article 4)</h3>
+            <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
+                Number of brothers who signed the attendance register. Used for the Article 6b threshold.
+                The paper-ballot count is entered later, once they're collected and counted.
+            </p>
+            <form method="POST" action="{{ url_for('admin_set_participants', election_id=election.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: end;">
+                    <div class="form-group" style="flex: 1; min-width: 200px;">
+                        <label for="participants">Brothers Present</label>
+                        <input type="number" id="participants" name="participants"
+                               value="{{ in_person_participants }}" min="0" style="text-align: center;">
+                    </div>
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-primary btn-small">Save</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- =================================================================
+         PHASE 3 — Round N — Voting in progress
+         ================================================================= -->
+    {% set p3_state = 'active' if active_phase == 3 else ('done' if phase_done[3] else 'pending') %}
+    <div class="phase-card {{ p3_state }}" id="phase-3">
+        <header onclick="togglePhase(3)">
+            <span class="num">{{ '✓' if p3_state == 'done' else '3' }}</span>
+            <span class="title">Round {{ election.current_round }} — Voting</span>
+            <span class="state">{{ phase_summary[3] }}</span>
+        </header>
+        <div class="body" {% if p3_state != 'active' %}hidden{% endif %}>
+            <div class="phase-status-strip" style="margin-bottom: 14px;">
+                <span>Ballots received: <strong>{{ total_ballots }}</strong></span>
+                <span>&middot;</span>
+                <span>Brothers participating: <strong>{{ participants }}</strong></span>
+                {% if participants > 0 %}
+                <span>&middot;</span>
+                <span>Still to vote: <strong>{{ (participants - total_ballots) if (participants - total_ballots) > 0 else 0 }}</strong></span>
+                {% endif %}
+            </div>
+
+            {% set anomaly = participants > 0 and total_ballots > participants %}
+            {% if anomaly %}
+            <div style="padding: 10px 14px; background: #FFEAE8; border-left: 4px solid #C0392B; color: #6B1A12; border-radius: 6px; margin-bottom: 14px; font-size: 14px;">
+                <strong>&#9888; Ballot anomaly:</strong>
+                {{ total_ballots }} ballots received but only {{ participants }} brother{{ '' if participants == 1 else 's' }} marked as participating.
+                Likely causes: the attendance register was miscounted, or a voter voted online and also handed in a paper ballot. Review before finalising.
+            </div>
+            {% endif %}
+
+            <div class="btn-row" style="flex-wrap: wrap; margin-bottom: 14px;">
+                <form method="POST" action="{{ url_for('admin_toggle_voting', election_id=election.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if election.voting_open %}
+                    <button type="submit" class="btn btn-danger primary-cta"
+                            onclick="return confirm('Close voting for round {{ election.current_round }}?');">
+                        Close Voting
+                    </button>
+                    {% else %}
+                    <button type="submit" class="btn btn-success btn-small">Open Voting</button>
+                    {% endif %}
+                </form>
+                <form method="POST" action="{{ url_for('admin_toggle_results', election_id=election.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if election.show_results %}
+                    <button type="submit" class="btn btn-outline btn-small">Hide Results on Projector</button>
+                    {% else %}
+                    <button type="submit" class="btn btn-gold btn-small">Show Results on Projector</button>
+                    {% endif %}
+                </form>
+                <a href="{{ url_for('display') }}" target="_blank" class="btn btn-outline btn-small">Open Display</a>
+            </div>
+
+            {# Live tally per office #}
+            {% if results %}
+            <h3 style="margin: 14px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Live tally</h3>
+            {% for item in results %}
+            {% set office_id = item.office.id %}
+            <div style="margin-bottom: 12px;">
+                <strong style="color: var(--navy);">{{ item.office.name }}</strong>
+                <span style="font-size: 13px; color: #666;">
+                    ({{ item.office.vacancies or item.office.max_selections }}
+                    {% if (item.office.vacancies or item.office.max_selections) == 1 %}vacancy{% else %}vacancies{% endif %})
+                </span>
+                <table style="width: 100%; margin-top: 6px;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Candidate</th>
+                            <th style="text-align: right;">Total</th>
+                            {% if office_id in thresholds %}
+                            <th style="text-align: center;">6a</th>
+                            <th style="text-align: center;">6b</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for cand in item.candidates %}
+                    {% if cand.active %}
+                    <tr>
+                        <td>{{ cand.name }}</td>
+                        <td style="text-align: right; font-weight: 700;">{{ cand.total }}</td>
+                        {% if office_id in thresholds %}
+                        <td style="text-align: center;">
+                            {% if cand.passes_6a %}<span style="color: var(--green);">✓</span>
+                            {% else %}<span style="color: var(--red); opacity: 0.6;">✗</span>{% endif %}
+                        </td>
+                        <td style="text-align: center;">
+                            {% if cand.passes_6b %}<span style="color: var(--green);">✓</span>
+                            {% else %}<span style="color: var(--red); opacity: 0.6;">✗</span>{% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {% if used_codes > 0 %}
+            <details style="margin-top: 12px;">
+                <summary style="cursor: pointer; color: #6B1A12; font-size: 13px;">
+                    Vote corrections{% if anomaly %} — anomaly detected{% endif %}
+                </summary>
+                <div style="margin-top: 8px; padding: 10px 14px; background: #fff7f6; border: 1px solid #f3c8c0; border-radius: 6px;">
+                    <p style="font-size: 13px; color: #6B1A12; margin-bottom: 8px;">
+                        Roll back the most recent digital vote submission. The voting code stays burned.
+                    </p>
+                    <form method="POST" action="{{ url_for('admin_rollback_last_vote', election_id=election.id) }}"
+                          class="inline-form"
+                          onsubmit="return confirm('Roll back the most recent digital vote submission for round {{ election.current_round }}?\n\nThis cannot be undone. The voting code stays burned.');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-small {{ 'btn-danger' if anomaly else 'btn-outline' }}">
+                            Roll back last digital vote
+                        </button>
+                    </form>
+                </div>
+            </details>
+            {% endif %}
+
+            <p style="font-size: 13px; margin-top: 10px;">
+                <a href="{{ url_for('admin_voter_log', election_id=election.id) }}" style="color: #666;">
+                    View voter audit log &rarr;
+                </a>
+            </p>
+        </div>
+    </div>
+
+    <!-- =================================================================
+         PHASE 4 — Round N — Counting & decide
+         ================================================================= -->
+    {% set p4_state = 'active' if active_phase == 4 else ('done' if phase_done[4] else 'pending') %}
+    <div class="phase-card {{ p4_state }}" id="phase-4">
+        <header onclick="togglePhase(4)">
+            <span class="num">{{ '✓' if p4_state == 'done' else '4' }}</span>
+            <span class="title">Round {{ election.current_round }} — Counting &amp; Decide</span>
+            <span class="state">{{ phase_summary[4] }}</span>
+        </header>
+        <div class="body" {% if p4_state != 'active' %}hidden{% endif %}>
+            <p style="font-size: 14px; color: #555; margin-bottom: 14px;">
+                Voting closed. Count the paper ballots, enter the per-candidate
+                tally, then decide whether the round filled all vacancies or
+                another round is needed.
+            </p>
+
+            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Paper ballots received</h3>
+            <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
+                Total paper ballots collected for round {{ election.current_round }} (counted at the door, before the per-candidate tally).
+            </p>
+            <form method="POST" action="{{ url_for('admin_set_participants', election_id=election.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: end; margin-bottom: 8px;">
+                    <div class="form-group" style="flex: 1; min-width: 200px;">
+                        <label for="paper_ballot_count_p4">Paper Ballots Received</label>
+                        <input type="number" id="paper_ballot_count_p4" name="paper_ballot_count"
+                               value="{{ paper_ballot_count }}" min="0" style="text-align: center;">
+                    </div>
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-primary btn-small">Save</button>
+                    </div>
+                </div>
+            </form>
+            <div class="btn-row" style="margin-bottom: 16px;">
+                <a href="{{ url_for('admin_paper_votes', election_id=election.id) }}" class="btn btn-gold primary-cta">
+                    Enter Paper Votes (per candidate)
+                </a>
+                <form method="POST" action="{{ url_for('admin_toggle_results', election_id=election.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if election.show_results %}
+                    <button type="submit" class="btn btn-outline btn-small">Hide Results on Projector</button>
+                    {% else %}
+                    <button type="submit" class="btn btn-gold btn-small">Show Results on Projector</button>
+                    {% endif %}
+                </form>
+            </div>
+
+            <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Round {{ election.current_round }} results</h3>
+            {% for item in results %}
+            {% set office_id = item.office.id %}
+            <div style="margin-bottom: 14px;">
+                <strong>{{ item.office.name }}</strong>
+                <span style="font-size: 13px; color: #666;">
+                    ({{ item.office.vacancies or item.office.max_selections }}
+                    {% if (item.office.vacancies or item.office.max_selections) == 1 %}vacancy{% else %}vacancies{% endif %})
+                </span>
+                {% if office_id in thresholds %}
+                {% set t = thresholds[office_id] %}
+                <p style="font-size: 13px; color: #555; margin: 4px 0;">
+                    Article 6a: need &gt; {{ "%.2f"|format(t.threshold_6a) }}
+                    &nbsp;&middot;&nbsp; Article 6b: need &ge; {{ t.threshold_6b }}
+                </p>
+                {% endif %}
+                <table style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Candidate</th>
+                            <th style="text-align: center;">Digital</th>
+                            <th style="text-align: center;">Paper</th>
+                            {% if postal_voter_count > 0 %}
+                            <th style="text-align: center;">Postal</th>
+                            {% endif %}
+                            <th style="text-align: right;">Total</th>
+                            {% if office_id in thresholds %}
+                            <th style="text-align: center;">Elected</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for cand in item.candidates %}
+                    {% if cand.active %}
+                    <tr>
+                        <td>{{ cand.name }}</td>
+                        <td style="text-align: center;">{{ cand.digital }}</td>
+                        <td style="text-align: center;">{{ cand.paper }}</td>
+                        {% if postal_voter_count > 0 %}
+                        <td style="text-align: center;">{{ cand.postal }}</td>
+                        {% endif %}
+                        <td style="text-align: right; font-weight: 700;">{{ cand.total }}</td>
+                        {% if office_id in thresholds %}
+                        <td style="text-align: center;">
+                            {% if cand.meets_threshold %}
+                            <span style="color: var(--green); font-weight: 700;">ELECTED</span>
+                            {% else %}
+                            <span style="color: #999;">—</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endfor %}
+
+            {% if not election.voting_open and not election_complete %}
+            <h3 style="margin: 18px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Decide what's next</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                <div style="border: 1px solid var(--grey); border-radius: 8px; padding: 14px;">
+                    <h4 style="margin: 0 0 8px; color: var(--navy);">Start Round {{ election.current_round + 1 }}</h4>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
+                        Select the candidates to carry forward. Article 7: if no candidate is elected this round, reduce the slate to twice the remaining vacancies by eliminating those with the lowest votes.
+                    </p>
+                    <form method="POST" action="{{ url_for('admin_next_round', election_id=election.id) }}"
+                          onsubmit="return confirm('Start round {{ election.current_round + 1 }}? This cannot be undone.');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% for item in results %}
+                        <p style="margin: 8px 0 4px; font-weight: 700;">{{ item.office.name }}</p>
+                        {% for cand in item.candidates %}
+                        {% if cand.active %}
+                        <label class="checkbox-label" style="display: block; margin-bottom: 4px; font-size: 13px;">
+                            <input type="checkbox" name="carry_forward" value="{{ cand.id }}"
+                                   {% if cand.meets_threshold|default(false) %}disabled{% endif %}>
+                            {{ cand.name }} ({{ cand.total }} votes)
+                            {% if cand.meets_threshold|default(false) %}
+                            <span style="color: var(--green); font-size: 12px;">— ELECTED</span>
+                            {% endif %}
+                        </label>
+                        {% endif %}
+                        {% endfor %}
+                        {% endfor %}
+                        <button type="submit" class="btn btn-gold btn-small" style="margin-top: 10px;">
+                            Start Round {{ election.current_round + 1 }} &rarr;
+                        </button>
+                    </form>
+                </div>
+                <div style="border: 1px solid var(--grey); border-radius: 8px; padding: 14px;">
+                    <h4 style="margin: 0 0 8px; color: var(--navy);">Finalise the election</h4>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
+                        Conclude with the result as it stands. The projector and phone displays will switch to the Final Results screen.
+                    </p>
+                    <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="target" value="4">
+                        <button type="submit" class="btn btn-primary btn-small">Show Final Results &rarr;</button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- =================================================================
+         PHASE 5 — Final results
+         ================================================================= -->
+    {% set p5_state = 'active' if active_phase == 5 else 'pending' %}
+    <div class="phase-card {{ p5_state }}" id="phase-5">
+        <header onclick="togglePhase(5)">
+            <span class="num">{{ p5_state == 'active' and '★' or '5' }}</span>
+            <span class="title">Final results</span>
+            <span class="state">{{ phase_summary[5] }}</span>
+        </header>
+        <div class="body" {% if p5_state != 'active' %}hidden{% endif %}>
+            {% if elected_summary_by_office %}
+            <h3 style="margin: 0 0 10px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Elected brothers</h3>
+            {% for entry in elected_summary_by_office %}
+            <div style="margin-bottom: 12px;">
+                <strong>For {{ entry.office_name }}:</strong>
+                {% if entry.names %}
+                {{ entry.names | join(', ') | replace('Br ', 'Br. ') }}
+                {{ '— ' ~ entry.names | length ~ ' of ' ~ entry.original_vacancies }}
+                {% else %}
+                <em>no candidate met the required thresholds</em>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            <div class="btn-row" style="margin-top: 14px; flex-wrap: wrap;">
+                {% if phase != 4 %}
+                <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="target" value="4">
+                    <button type="submit" class="btn btn-gold primary-cta">Show Final Results on Projector</button>
+                </form>
+                {% else %}
+                <span style="color: #555; font-size: 14px;">
+                    Projector showing: <strong>{% if election.show_results %}Vote Details{% else %}Final Summary{% endif %}</strong>
+                </span>
+                <form method="POST" action="{{ url_for('admin_toggle_results', election_id=election.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if election.show_results %}
+                    <button type="submit" class="btn btn-outline btn-small">Show Final Summary</button>
+                    {% else %}
+                    <button type="submit" class="btn btn-gold btn-small">Show Vote Details</button>
+                    {% endif %}
+                </form>
+                <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="target" value="3">
+                    <button type="submit" class="btn btn-outline btn-small">&larr; Back to Voting view</button>
+                </form>
+                {% endif %}
+                <a href="{{ url_for('admin_minutes_docx', election_id=election.id) }}" class="btn btn-primary primary-cta">
+                    Download Election Minutes (DOCX)
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Persistent diagnostic links — visible regardless of which phase is open -->
+    <div style="margin: 20px 0 8px; padding: 10px 14px; background: var(--grey-light); border-radius: 6px; font-size: 13px;">
+        <strong>Diagnostics:</strong>
+        <a href="{{ url_for('admin_voter_log', election_id=election.id) }}" style="margin-left: 8px;">
+            Voter audit log
+        </a>
+        <span style="color: #999; margin-left: 8px;">— every voter-route hit with its result</span>
+    </div>
+
+    <!-- Advanced Actions (hidden by default) -->
+    <details style="margin: 8px 0 16px;">
+        <summary style="cursor: pointer; font-weight: 600; color: var(--grey-dark); padding: 12px 0;">
+            Advanced Actions (reset)
+        </summary>
+
+        <div class="card" style="border-color: var(--red); margin-top: 8px;">
+            <div class="card-header" style="border-color: var(--red); color: var(--red);">Soft Reset — Redo Round {{ election.current_round }}</div>
+            <p style="font-size: 14px; margin-bottom: 12px;">
+                Clears all votes for round {{ election.current_round }} and restores all codes.
+                Postal votes, attendance register, and election setup are kept.
+                <strong>This cannot be undone.</strong>
+            </p>
+            <form method="POST" action="{{ url_for('admin_soft_reset', election_id=election.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="soft_confirm">Type RESET to confirm</label>
+                    <input type="text" id="soft_confirm" name="confirm_text" autocomplete="off"
+                           placeholder="Type RESET" style="max-width: 200px;">
+                </div>
+                <div class="form-group">
+                    <label for="soft_password">Admin password</label>
+                    <input type="password" id="soft_password" name="password" autocomplete="off"
+                           placeholder="Re-enter password" style="max-width: 200px;">
+                </div>
+                <button type="submit" class="btn btn-danger btn-small">Soft Reset Round {{ election.current_round }}</button>
+            </form>
+        </div>
+
+        <div class="card" style="border-color: var(--red); margin-top: 12px;">
+            <div class="card-header" style="border-color: var(--red); color: var(--red);">Hard Reset — Start Entire Election Over</div>
+            <p style="font-size: 14px; margin-bottom: 12px;">
+                Clears <strong>all votes, all codes, all postal votes</strong> across all rounds.
+                Resets to round 1. You will need to regenerate codes and reprint slips.
+                <strong>This cannot be undone.</strong>
+            </p>
+            <form method="POST" action="{{ url_for('admin_hard_reset', election_id=election.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="hard_confirm">Type HARD RESET to confirm</label>
+                    <input type="text" id="hard_confirm" name="confirm_text" autocomplete="off"
+                           placeholder="Type HARD RESET" style="max-width: 200px;">
+                </div>
+                <div class="form-group">
+                    <label for="hard_password">Admin password</label>
+                    <input type="password" id="hard_password" name="password" autocomplete="off"
+                           placeholder="Re-enter password" style="max-width: 200px;">
+                </div>
+                <button type="submit" class="btn btn-danger btn-small">Hard Reset Entire Election</button>
+            </form>
+        </div>
+    </details>
+
+    <p style="font-size: 12px; color: #999; margin-top: 24px; text-align: center;">
+        Results are generated by this software as-is. The council is responsible for verifying correctness.
+    </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function togglePhase(n) {
+    var card = document.getElementById('phase-' + n);
+    if (!card) return;
+    var body = card.querySelector('.body');
+    if (!body) return;
+    body.hidden = !body.hidden;
+}
+document.addEventListener('click', function(e) {
+    var anchor = e.target.closest('.phase-stepper .step');
+    if (!anchor) return;
+    var href = anchor.getAttribute('href') || '';
+    var match = href.match(/phase-(\d)/);
+    if (match) {
+        var n = match[1];
+        var card = document.getElementById('phase-' + n);
+        if (card) {
+            var body = card.querySelector('.body');
+            if (body && body.hidden) body.hidden = false;
+        }
+    }
+});
+</script>
+{% endblock %}
