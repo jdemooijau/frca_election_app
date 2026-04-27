@@ -190,8 +190,6 @@ shows:
   not see live counts during voting
 - A red **Ballot anomaly** banner if more ballots come in than there
   are participants (e.g. someone voted online and also handed in paper)
-- **Vote corrections** disclosure — roll back the most recent digital
-  submission if needed (the code stays burned)
 
 The projector display shows a progress bar and Article 6 thresholds.
 
@@ -286,7 +284,7 @@ more than one acceptance — useful if a code somehow gets used twice.
 | Brother's phone won't load the page | Check WiFi; try a different browser; use the QR scan |
 | "Invalid code" error | Verify the 6 characters (case-insensitive). If still failing, hand over a paper ballot |
 | Code shows as "already used" but the brother insists they haven't voted | Check the **Voter audit log** for that code — usually two scans of the same QR slip |
-| Anomaly banner shows on the projector | Use **Vote corrections → Roll back last digital vote** in Step 3 to remove an extra submission |
+| Anomaly banner shows on the projector | Investigate the cause (attendance miscount, double-voting). The chairman decides how to record the discrepancy in the minutes |
 | WiFi drops out | Restart the WiFi router; cast votes are already saved |
 | App crashes | Restart the app; all data is preserved in the database |
 | Major failure | **Switch to paper ballots immediately** |

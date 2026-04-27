@@ -459,26 +459,6 @@
             {% endfor %}
             {% endif %}
 
-            {% if used_codes > 0 %}
-            <details style="margin-top: 12px;">
-                <summary style="cursor: pointer; color: #6B1A12; font-size: 13px;">
-                    Vote corrections{% if anomaly %} — anomaly detected{% endif %}
-                </summary>
-                <div style="margin-top: 8px; padding: 10px 14px; background: #fff7f6; border: 1px solid #f3c8c0; border-radius: 6px;">
-                    <p style="font-size: 13px; color: #6B1A12; margin-bottom: 8px;">
-                        Roll back the most recent digital vote submission. The voting code stays burned.
-                    </p>
-                    <form method="POST" action="{{ url_for('admin_rollback_last_vote', election_id=election.id) }}"
-                          class="inline-form"
-                          onsubmit="return confirm('Roll back the most recent digital vote submission for round {{ election.current_round }}?\n\nThis cannot be undone. The voting code stays burned.');">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-small {{ 'btn-danger' if anomaly else 'btn-outline' }}">
-                            Roll back last digital vote
-                        </button>
-                    </form>
-                </div>
-            </details>
-            {% endif %}
 
             <p style="font-size: 13px; margin-top: 10px;">
                 <a href="{{ url_for('admin_voter_log', election_id=election.id) }}" style="color: #666;">

@@ -1754,62 +1754,6 @@ def admin_voter_log(election_id):
     )
 
 
-@app.route("/admin/election/<int:election_id>/rollback-last-vote", methods=["POST"])
-@admin_required
-def admin_rollback_last_vote(election_id):
-    """Delete the most recent digital vote submission for the current round.
-
-    Intended for anomaly cases (extra vote slipped in after voting was
-    briefly reopened, or a voter voted online and also submitted paper).
-    The associated voting code stays burned — the voter has already cast
-    their vote, so it must not become reusable.
-    """
-    db = get_db()
-    election = db.execute(
-        "SELECT * FROM elections WHERE id = ?", (election_id,)
-    ).fetchone()
-    if not election:
-        abort(404)
-
-    current_round = election["current_round"]
-
-    # A single submission shares one cast_at timestamp across all of its
-    # candidate rows. Find the most recent one for this round.
-    row = db.execute(
-        "SELECT MAX(cast_at) FROM votes "
-        "WHERE election_id = ? AND round_number = ? AND source = 'digital'",
-        (election_id, current_round)
-    ).fetchone()
-    max_cast_at = row[0] if row else None
-    if not max_cast_at:
-        flash("No digital votes recorded for this round to roll back.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
-
-    deleted = db.execute(
-        "DELETE FROM votes "
-        "WHERE election_id = ? AND round_number = ? AND source = 'digital' "
-        "AND cast_at = ?",
-        (election_id, current_round, max_cast_at)
-    ).rowcount
-
-    # Digital ballot counter: one submission = one ballot
-    db.execute(
-        "UPDATE round_counts SET digital_ballot_count = MAX(digital_ballot_count - 1, 0) "
-        "WHERE election_id = ? AND round_number = ?",
-        (election_id, current_round)
-    )
-
-    db.commit()
-
-    flash(
-        f"Rolled back the most recent digital vote submission from "
-        f"{max_cast_at} ({deleted} candidate row{'s' if deleted != 1 else ''} "
-        "removed). The voting code remains burned and cannot be reused.",
-        "success"
-    )
-    return redirect(url_for("admin_election_manage", election_id=election_id))
-
-
 @app.route("/admin/election/<int:election_id>/soft-reset", methods=["POST"])
 @admin_required
 def admin_soft_reset(election_id):
