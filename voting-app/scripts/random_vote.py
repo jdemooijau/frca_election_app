@@ -15,7 +15,7 @@ Optional flags:
   --workers N        concurrent voter threads (default: 8)
   --db PATH          SQLite DB path (default: data/frca_election.db)
   --seed N           random seed for reproducible vote distributions
-  --blank-rate F     probability of a blank vote per office (default: 0.05)
+  --blank-rate F     probability of a blank vote per office (default: 0.01)
 """
 
 import argparse
@@ -52,8 +52,8 @@ def parse_args():
                    help="SQLite DB path (default: data/frca_election.db)")
     p.add_argument("--seed", "-s", type=int, default=None,
                    help="Random seed for reproducible vote distributions")
-    p.add_argument("--blank-rate", "-b", type=float, default=0.05,
-                   help="Probability of a blank vote per office (default: 0.05)")
+    p.add_argument("--blank-rate", "-b", type=float, default=0.01,
+                   help="Probability of a blank vote per office (default: 0.01)")
     return p.parse_args()
 
 
@@ -232,7 +232,10 @@ def _simulate_voter_inner(base_url, code, candidate_weights, weights_lock, blank
         cand_ids = office["cand_ids"]
         with weights_lock:
             weights = [candidate_weights.get(cid, 0.5) for cid in cand_ids]
-        count = max_sel if random.random() < 0.85 else random.randint(1, max_sel)
+        # Most realistic voters use every available slot. A small fraction
+        # under-vote (mark fewer than max_selections). Tuned to keep total
+        # blank slots in the low single digits per office for ~100 voters.
+        count = max_sel if random.random() < 0.97 else random.randint(1, max_sel)
         selected = weighted_sample(cand_ids, weights, count)
         for cid in selected:
             form_data.append((office["field"], cid))
