@@ -457,6 +457,55 @@ class TestSecondRound:
         resp = client.post("/vote", data={"code": test_code}, follow_redirects=True)
         assert b"already been used" in resp.data
 
+    def test_minutes_excludes_dropped_candidates_from_round_2(self, election_with_codes):
+        """A candidate who was not carried forward must not appear in the
+        round-2 narrative or table of the minutes. They were not on that
+        round's ballot.
+        """
+        from io import BytesIO
+        from docx import Document
+
+        client = election_with_codes
+
+        # Round 1: cast a single vote so the round has data, then close.
+        client.post("/admin/election/1/voting")
+        test_code = "MNTSXX"
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO codes (election_id, code_hash) VALUES (1, ?)",
+                (hash_code(test_code),),
+            )
+            db.commit()
+        client.post("/vote", data={"code": test_code})
+        client.post("/submit", data={"office_1": "1", "confirm_partial": "1"})
+        client.post("/admin/election/1/voting")
+
+        # Carry forward only candidates 1 and 2 — drop candidate 3.
+        client.post(
+            "/admin/election/1/next-round",
+            data={"carry_forward": ["1", "2"]},
+        )
+
+        resp = client.get("/admin/election/1/minutes-docx")
+        assert resp.status_code == 200
+
+        doc = Document(BytesIO(resp.data))
+        paragraphs = [p.text for p in doc.paragraphs]
+        further = [t for t in paragraphs if "further ballot was conducted" in t]
+        assert further, "Expected a 'further ballot' narrative for round 2"
+        assert "Candidate C" not in " ".join(further), (
+            f"Dropped candidate listed in further-ballot intro: {further}"
+        )
+
+        # The round-2 table is the last table in the doc (one office, two rounds).
+        last_table_text = " ".join(
+            cell.text for row in doc.tables[-1].rows for cell in row.cells
+        )
+        assert "Candidate C" not in last_table_text, (
+            f"Dropped candidate appeared in round-2 results table: {last_table_text}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Member import tests

@@ -17,11 +17,16 @@
     }
     .rules-layout {
         display: grid;
-        grid-template-columns: 2fr 3fr;
+        grid-template-columns: 1fr 1fr;
         gap: 48px;
     }
     .rules-column {
         padding: 8px 0;
+    }
+    .candidate-offices {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 28px;
     }
     .rules-column h2 {
         font-size: 26px;
@@ -39,13 +44,13 @@
         margin-bottom: 24px;
     }
     .candidate-office h3 {
-        font-size: 28px;
+        font-size: 36px;
         color: var(--gold);
-        margin-bottom: 12px;
+        margin-bottom: 14px;
     }
     .candidate-list li {
-        font-size: 26px;
-        padding: 10px 16px;
+        font-size: 32px;
+        padding: 12px 16px;
         border-bottom: 1px solid var(--grey);
         color: var(--navy);
     }
@@ -53,12 +58,14 @@
         border-bottom: none;
     }
     .article-block {
-        margin-bottom: 18px;
+        margin-bottom: 0;
         padding: 14px 20px;
         background: var(--grey-light);
-        border-radius: 8px;
         border-left: 5px solid var(--gold);
     }
+    .article-block:first-of-type { border-top-right-radius: 8px; border-top-left-radius: 8px; }
+    .article-block:last-of-type { border-bottom-right-radius: 8px; border-bottom-left-radius: 8px; }
+    .article-block + .article-block { border-top: 1px solid var(--grey); }
     .article-block h3 {
         font-size: 28px;
         color: var(--navy);
@@ -114,20 +121,21 @@
             {% else %}
             <h2>Slate / Candidate List</h2>
             {% endif %}
+            <div class="candidate-offices">
             {% for item in results %}
             <div class="candidate-office">
                 <h3>
-                    {{ item.office_name }}
+                    For {{ item.office_name }}
                     {% if item.max_selections > 0 %}
-                    <span style="display: inline-block; margin-left: 10px; padding: 4px 14px;
+                    <span style="display: block; width: fit-content; margin-top: 6px; padding: 4px 14px;
                                  background: var(--gold); color: var(--navy);
                                  border-radius: 999px; font-size: 22px; font-weight: 700;
-                                 letter-spacing: 0.3px; vertical-align: middle;">
+                                 letter-spacing: 0.3px;">
                         Select {{ item.max_selections }} name{{ '' if item.max_selections == 1 else 's' }}
                     </span>
                     {% else %}
-                    <span style="font-size: 22px; font-weight: 400; color: #666;">
-                        — all vacancies filled
+                    <span style="display: block; margin-top: 6px; font-size: 22px; font-weight: 400; color: #666;">
+                        all vacancies filled
                     </span>
                     {% endif %}
                 </h3>
@@ -140,6 +148,7 @@
                 {% endif %}
             </div>
             {% endfor %}
+            </div>
         </div>
 
         <!-- Right column: Articles -->

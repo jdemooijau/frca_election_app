@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Vote — Office Bearer Election{% endblock %}
 
-{% block flash_messages %}{% endblock %}
+{% block flash_messages %}{% if not election %}{{ super() }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="header">
@@ -48,10 +48,34 @@
     </form>
 
     {% else %}
-    <div style="text-align: center; padding: 40px 0;">
-        <h2>Voting is not yet open</h2>
-        <p style="color: #666; margin-top: 12px;">You are connected — please wait for the chairman to open voting.</p>
-        <p style="color: #999; margin-top: 8px; font-size: 14px;">This page will update automatically when voting begins.</p>
+    <div style="text-align: center; padding: 32px 0 24px 0;">
+        <svg aria-hidden="true" width="56" height="56" viewBox="0 0 24 24"
+             fill="none" stroke="var(--navy)" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round"
+             style="margin-bottom: 16px; opacity: 0.85;">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 7 12 12 15.5 14"/>
+        </svg>
+        <h2 style="font-size: 24px; color: var(--navy); margin: 0 0 8px 0;">You're connected{% if wifi_ssid %} to {{ wifi_ssid }}{% endif %}.</h2>
+        <p style="color: #444; margin: 0 0 24px 0; font-size: 16px;">Voting hasn't started yet.</p>
+        <div style="background: var(--grey-light); border-left: 4px solid var(--gold);
+                    padding: 16px 20px; border-radius: 6px; text-align: left;
+                    color: #444; font-size: 15px; line-height: 1.5;">
+            When voting opens you'll be handed a card with a QR code.
+            Scan it with your phone to vote here, or use the paper ballot
+            on the back.
+        </div>
+        <div style="margin-top: 14px; background: #FFEAE8; border-left: 4px solid #C0392B;
+                    padding: 14px 18px; border-radius: 6px; text-align: left;
+                    color: #6B1A12; font-size: 14px; line-height: 1.45;">
+            <strong style="color: #C0392B; display: block; margin-bottom: 4px;">
+                &#9888; Vote one way only.
+            </strong>
+            If you vote on your phone, do not also submit the paper ballot.
+        </div>
+        <div style="margin-top: 14px; color: #888; font-size: 13px; text-align: center;">
+            This page updates automatically when voting starts.
+        </div>
     </div>
     <script>setTimeout(function(){ location.reload(); }, 10000);</script>
     {% endif %}

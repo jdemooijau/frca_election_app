@@ -189,8 +189,9 @@
             try {
                 var data = JSON.parse(xhr.responseText);
                 if (!data.active) return;
-                // Reload if finalization state changed or the chairman moved to a different phase
-                if (!data.election_complete || data.display_phase !== 3 || data.voting_open) {
+                // final.html only renders on phase 4 with show_results=0.
+                // Reload if the chairman left phase 4 or toggled vote details on.
+                if (data.display_phase !== 4 || data.show_results) {
                     location.reload();
                 }
             } catch (e) {}

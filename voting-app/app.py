@@ -19,6 +19,7 @@ import hashlib
 import time
 from datetime import datetime
 from functools import wraps
+from urllib.parse import urlparse
 
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
@@ -1187,13 +1188,15 @@ def admin_election_manage(election_id):
             ).fetchall()
         ]
         names = list(persisted_names)
-        if (not election["voting_open"]) or display_phase == 4:
-            for item in results:
-                if item["office"]["id"] == off["id"]:
-                    for c in item["candidates"]:
-                        if c.get("elected") and c["name"] not in names:
-                            names.append(c["name"])
-                    break
+        # Always merge live-elected names so the per-office summary stays
+        # consistent with the row-level ELECTED badges. Phase 5 workflow
+        # advancement is gated separately below via voting closure.
+        for item in results:
+            if item["office"]["id"] == off["id"]:
+                for c in item["candidates"]:
+                    if c.get("elected") and c["name"] not in names:
+                        names.append(c["name"])
+                break
         names.sort(key=_surname_sort_key)
         original = (
             off["original_vacancies"]
@@ -1208,6 +1211,11 @@ def admin_election_manage(election_id):
             "names": names,
             "filled": len(names) >= original,
         })
+
+    # Phase 5 should not auto-activate while ballots are still being cast,
+    # even if live thresholds say every vacancy is filled.
+    if election["voting_open"] and display_phase != 4:
+        election_complete = False
 
     if election_complete or display_phase == 4:
         active_phase = 5
@@ -2143,8 +2151,14 @@ def api_members_search():
 @app.route("/v/<prefill_code>", methods=["GET"])
 def voter_enter_code(prefill_code=None):
     db = get_db()
+    # Gate on both voting_open and display_phase: the chairman drives the
+    # projector through phases 1 (Welcome), 2 (Rules), 3 (Voting). Even if
+    # voting_open is set, voters should only see the form when the projector
+    # is actually on the voting phase.
     election = db.execute(
-        "SELECT * FROM elections WHERE voting_open = 1 ORDER BY id DESC LIMIT 1"
+        "SELECT * FROM elections "
+        "WHERE voting_open = 1 AND display_phase >= 3 "
+        "ORDER BY id DESC LIMIT 1"
     ).fetchone()
 
     # QR scan with code: validate immediately and skip to ballot
@@ -2188,7 +2202,10 @@ def voter_enter_code(prefill_code=None):
         prefill_code = None
 
     resp = make_response(render_template(
-        "voter/enter_code.html", election=election, prefill_code=prefill_code
+        "voter/enter_code.html",
+        election=election,
+        prefill_code=prefill_code,
+        wifi_ssid=get_setting("wifi_ssid", ""),
     ))
     return no_cache(resp)
 
@@ -2688,9 +2705,10 @@ def display():
         if election["show_results"]:
             return render_template("display/projector.html", **ctx)
         return render_template("display/final.html", **ctx)
-    elif ctx.get("election_complete") and not election["voting_open"]:
-        return render_template("display/final.html", **ctx)
     else:
+        # Closing voting reveals vote counts on the projector view; the clean
+        # Final Summary (final.html) is only shown when the chairman explicitly
+        # advances to phase 4.
         return render_template("display/projector.html", **ctx)
 
 
@@ -2704,8 +2722,8 @@ def display_phone():
         if election["show_results"]:
             return render_template("display/phone.html", **ctx)
         return render_template("display/final.html", **ctx)
-    if ctx.get("election_complete") and not election["voting_open"]:
-        return render_template("display/final.html", **ctx)
+    # Closing voting keeps the phone display on the live view (now revealing
+    # counts); final.html only renders once the chairman advances to phase 4.
     return render_template("display/phone.html", **ctx)
 
 
@@ -3196,6 +3214,23 @@ def admin_results_pdf(election_id):
                         (cand["id"], election_id)
                     ).fetchone()[0]
 
+                # Skip candidates who were already elected before this round
+                # or who weren't on this round's ballot. See the matching
+                # block in admin_minutes_docx for the heuristic's rationale.
+                already_elected_before = (
+                    cand["elected_round"] is not None
+                    and cand["elected_round"] < round_num
+                )
+                if already_elected_before:
+                    continue
+                on_ballot = (
+                    cand["active"] == 1
+                    or cand["elected_round"] == round_num
+                    or (digital + paper + postal) > 0
+                )
+                if not on_ballot:
+                    continue
+
                 cand_list.append({
                     "name": cand["name"],
                     "digital": digital,
@@ -3324,6 +3359,21 @@ def admin_minutes_docx(election_id):
                     and cand["elected_round"] < round_num
                 )
                 if already_elected_before:
+                    continue
+
+                # Per-round ballot membership isn't persisted in the schema,
+                # so reconstruct it heuristically: a candidate was on this
+                # round's ballot if they're still active, were elected this
+                # round, or received any vote this round. Risk: a candidate
+                # who genuinely got 0 votes drops from historical minutes,
+                # which is vanishingly unlikely in a real congregational
+                # ballot.
+                on_ballot = (
+                    cand["active"] == 1
+                    or cand["elected_round"] == round_num
+                    or (digital + paper + postal) > 0
+                )
+                if not on_ballot:
                     continue
 
                 cand_list.append({
@@ -3469,13 +3519,69 @@ def admin_council_proposal():
 # Captive portal detection (CPD) routes
 # ---------------------------------------------------------------------------
 
+# Paths whose response must not be host-redirected. Phone OSes probe these to
+# decide whether the network is captive, and the portal API itself is hit
+# directly on the literal IP advertised in DHCP option 114, so they must
+# answer with their own response regardless of the Host header.
+_CPD_PROBE_PATHS = frozenset({
+    "/api/captive-portal",
+    "/.well-known/captive-portal",
+    "/hotspot-detect.html",
+    "/library/test/success.html",
+    "/generate_204",
+    "/gen_204",
+    "/connecttest.txt",
+    "/ncsi.txt",
+    "/success.txt",
+    "/canonical.html",
+    "/redirect",
+    "/mobile/status.php",
+    "/favicon.ico",
+})
+
+
+@app.before_request
+def force_canonical_host():
+    """Bounce phones that hit the server via DNS hijack to the canonical URL.
+
+    A phone joined to ChurchVote that opens, say, bbc.com will resolve that
+    hostname to the laptop and arrive here with Host=bbc.com. We 302 it to
+    voting_base_url so the URL bar reads church.vote. Admin access via the
+    raw IP, plus localhost/127.0.0.1 for local testing, is left alone.
+    """
+    path = request.path
+    if path in _CPD_PROBE_PATHS or path.startswith("/static/"):
+        return None
+
+    canonical_url = get_setting("voting_base_url", "http://church.vote")
+    canonical_host = (urlparse(canonical_url).hostname or "").lower()
+    if not canonical_host:
+        return None
+
+    request_host = request.host.split(":", 1)[0].lower()
+    if request_host == canonical_host:
+        return None
+    if request_host in ("localhost", "127.0.0.1"):
+        return None
+    parts = request_host.split(".")
+    if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
+        return None
+
+    target = canonical_url.rstrip("/") + path
+    qs = request.query_string.decode("utf-8")
+    if qs:
+        target += "?" + qs
+    return redirect(target, code=302)
+
 
 @app.route("/api/captive-portal")
 @app.route("/.well-known/captive-portal")
 def captive_portal_api():
-    """RFC 8908 Captive Portal API — tells phones the network is open."""
+    """RFC 8908 Captive Portal API. Advertises the voting page so the OS
+    popup (triggered by DHCP option 114) opens church.vote directly."""
     from flask import Response, json as flask_json
-    data = flask_json.dumps({"captive": False})
+    portal_url = get_setting("voting_base_url", "http://church.vote")
+    data = flask_json.dumps({"captive": True, "user-portal-url": portal_url})
     return Response(data, status=200, content_type="application/captive+json")
 
 
@@ -3531,8 +3637,10 @@ def favicon():
 
 @app.route("/<path:path>")
 def catch_all(path):
-    """Redirect unknown paths to the voting entry page."""
-    return redirect("/", code=302)
+    """Redirect unknown paths to the canonical voting URL so the URL bar
+    shows church.vote rather than whatever foreign host the phone tried."""
+    canonical_url = get_setting("voting_base_url", "http://church.vote")
+    return redirect(canonical_url.rstrip("/") + "/", code=302)
 
 
 # ---------------------------------------------------------------------------

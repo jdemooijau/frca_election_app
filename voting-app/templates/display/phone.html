@@ -214,6 +214,7 @@
     </div>
 
     <div id="results-container">
+        {% if not election.voting_open %}
         {% for office in results %}
         {% if office.candidates %}
         <div class="office-block">
@@ -221,7 +222,7 @@
             {% for cand in office.candidates %}
             <div class="cand-row">
                 <span class="name">
-                    {{ cand.name }}{% if cand.elected and not election.voting_open %}<span class="elected-tag">ELECTED</span>{% endif %}
+                    {{ cand.name }}{% if cand.elected %}<span class="elected-tag">ELECTED</span>{% endif %}
                 </span>
                 {% if election.show_results %}
                 <span class="votes">{{ cand.total }}</span>
@@ -248,6 +249,7 @@
         </div>
         {% endif %}
         {% endfor %}
+        {% endif %}
     </div>
 
     <a href="{{ url_for('voter_enter_code') }}" class="nav-btn">Back to voting</a>
@@ -271,8 +273,9 @@
             try { data = JSON.parse(xhr.responseText); } catch (e) { return; }
             if (!data.active) return;
 
-            // Auto-switch to final if the chairman or auto-detect marks the election complete
-            if (data.display_phase === 4 || (data.election_complete && !data.voting_open)) {
+            // Switch to final.html only when the chairman explicitly advances
+            // to phase 4. Closing voting alone keeps the live view (with counts).
+            if (data.display_phase === 4) {
                 location.reload();
                 return;
             }
@@ -306,17 +309,20 @@
                 }
             }
 
+            // Candidate listing only appears once the round is closed —
+            // while voting is open, the phone display shows the ballot
+            // progress only.
             var container = document.getElementById('results-container');
-            var showCounts = data.show_results;
             var closed = !data.voting_open;
-            if (data.results && (showCounts || closed)) {
+            var showCounts = !!data.show_results && closed;
+            if (data.results && closed) {
                 var html = '';
                 data.results.forEach(function(office) {
                     if (!office.candidates || office.candidates.length === 0) return;
                     html += '<div class="office-block"><h3>' + esc(office.office_name) + '</h3>';
                     office.candidates.forEach(function(cand) {
                         html += '<div class="cand-row"><span class="name">' + esc(cand.name);
-                        if (cand.elected && closed) html += '<span class="elected-tag">ELECTED</span>';
+                        if (cand.elected) html += '<span class="elected-tag">ELECTED</span>';
                         html += '</span>';
                         if (showCounts) html += '<span class="votes">' + cand.total + '</span>';
                         html += '</div>';

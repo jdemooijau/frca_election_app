@@ -16,48 +16,39 @@
 
 <div class="display-main" style="justify-content: center; align-items: center; text-align: center;">
     {% if election.current_round > 1 %}
-    <h1 style="font-size: 96px; color: var(--navy); margin-bottom: 12px;">Round {{ election.current_round }}</h1>
-    <h2 style="font-size: 40px; color: var(--gold); margin-bottom: 40px;">Further vote required</h2>
+    <h1 style="font-size: 88px; color: var(--navy); margin-bottom: 8px; line-height: 1.05;">Round {{ election.current_round }}</h1>
+    <h2 style="font-size: 38px; color: var(--gold); margin-bottom: 48px; font-weight: 600;">Further vote required</h2>
 
     {% if offices %}
-    <div style="display: flex; justify-content: center; gap: 56px; flex-wrap: wrap; margin-bottom: 56px;">
+    <div style="display: flex; justify-content: center; gap: 48px; flex-wrap: wrap; margin-bottom: 48px;">
         {% for office in offices %}
         {% set remaining = office.vacancies or office.max_selections %}
         {% if remaining > 0 %}
-        <div style="padding: 32px 60px; background: var(--grey-light); border-radius: 12px; min-width: 260px;">
-            <div style="font-size: 42px; font-weight: 700; color: var(--navy);">{{ office.name }}</div>
-            <div style="font-size: 32px; color: var(--gold); margin-top: 6px;">
+        <div style="padding: 28px 56px; background: var(--grey-light); border-radius: 12px; min-width: 240px;">
+            <div style="font-size: 40px; font-weight: 700; color: var(--navy);">{{ office.name }}</div>
+            <div style="font-size: 30px; color: var(--gold); margin-top: 4px;">
                 {{ remaining }}
                 {% if remaining == 1 %}vacancy{% else %}vacancies{% endif %} remaining
             </div>
         </div>
         {% else %}
-        <div style="padding: 32px 60px; background: #E8F8EE; border-radius: 12px; min-width: 260px; opacity: 0.85;">
-            <div style="font-size: 42px; font-weight: 700; color: var(--green);">{{ office.name }}</div>
-            <div style="font-size: 28px; color: var(--green); margin-top: 6px;">
-                All vacancies filled
-            </div>
+        <div style="padding: 28px 56px; background: #E8F8EE; border-radius: 12px; min-width: 240px; opacity: 0.85;">
+            <div style="font-size: 40px; font-weight: 700; color: var(--green);">{{ office.name }}</div>
+            <div style="font-size: 26px; color: var(--green); margin-top: 4px;">All vacancies filled</div>
         </div>
         {% endif %}
         {% endfor %}
     </div>
     {% endif %}
     {% else %}
-    <h1 style="font-size: 72px; color: var(--navy); margin-bottom: 16px;">{{ congregation_name }}</h1>
-    <h2 style="font-size: 48px; color: var(--gold); margin-bottom: 48px;">Office Bearer Election</h2>
-
-    {% if election.election_date %}
-    <p style="font-size: 40px; color: #666; margin-bottom: 48px;">
-        {{ election.election_date }}
-    </p>
-    {% endif %}
+    <h1 style="font-size: 64px; color: var(--navy); margin: 0 0 56px 0; line-height: 1.1; font-weight: 700;">{{ congregation_name }}</h1>
 
     {% if offices %}
-    <div style="display: flex; justify-content: center; gap: 56px; flex-wrap: wrap; margin-bottom: 56px;">
+    <div style="display: flex; justify-content: center; gap: 48px; flex-wrap: wrap; margin-bottom: 56px;">
         {% for office in offices %}
-        <div style="padding: 32px 60px; background: var(--grey-light); border-radius: 12px; min-width: 260px;">
-            <div style="font-size: 42px; font-weight: 700; color: var(--navy);">{{ office.name }}</div>
-            <div style="font-size: 32px; color: var(--gold); margin-top: 6px;">
+        <div style="padding: 28px 56px; background: var(--grey-light); border-radius: 12px; min-width: 240px;">
+            <div style="font-size: 40px; font-weight: 700; color: var(--navy);">{{ office.name }}</div>
+            <div style="font-size: 30px; color: var(--gold); margin-top: 4px;">
                 {{ office.vacancies or office.max_selections }}
                 {% if (office.vacancies or office.max_selections) == 1 %}vacancy{% else %}vacancies{% endif %}
             </div>
@@ -67,15 +58,64 @@
     {% endif %}
     {% endif %}
 
-    {% if wifi_ssid %}
-    <div style="padding: 32px 56px; background: var(--grey-light); border-radius: 12px; display: inline-block;">
-        <p style="font-size: 36px; color: var(--navy); margin-bottom: 4px;"><strong>WiFi Network:</strong> {{ wifi_ssid }}</p>
-        {% if wifi_password %}
-        <p style="font-size: 36px; color: var(--navy);"><strong>Password:</strong> {{ wifi_password }}</p>
-        {% else %}
-        <p style="font-size: 30px; color: #888;">No password required</p>
-        {% endif %}
+    {% if election.current_round > 1 %}
+    <div style="margin-bottom: 40px; padding: 28px 56px; background: var(--grey-light);
+                border-top: 6px solid var(--gold); border-radius: 16px;
+                display: inline-block; text-align: center; max-width: 900px;">
+        <div style="font-size: 24px; color: #555; text-transform: uppercase;
+                    letter-spacing: 3px; margin-bottom: 14px; font-weight: 600;">
+            Round {{ election.current_round }} voting
+        </div>
+        <div style="font-size: 32px; color: var(--navy); line-height: 1.35;">
+            A <strong>new code slip with QR code</strong> will be issued to each brother for this round.
+        </div>
+        <div style="font-size: 26px; color: #555; margin-top: 12px;">
+            Scan the QR code on your new slip to vote.
+        </div>
     </div>
+    {% else %}
+    <div style="margin-bottom: 40px; padding: 18px 36px; background: #C0392B; color: #fff;
+                border-radius: 12px; font-weight: 700; font-size: 28px;
+                display: inline-block; letter-spacing: 0.3px;">
+        &#9888; If you have not yet signed the attendance register, please do so now.
+    </div>
+
+    {% if wifi_ssid or vote_url %}
+    {% set vote_host = vote_url | replace('http://', '') | replace('https://', '') | replace('/', '') %}
+    <div style="padding: 36px 64px; background: var(--grey-light); border-radius: 16px;
+                display: inline-block; text-align: left; border-top: 6px solid var(--gold);">
+        <div style="font-size: 24px; color: #555; text-transform: uppercase;
+                    letter-spacing: 3px; margin-bottom: 24px; text-align: center; font-weight: 600;">
+            To vote on your phone
+        </div>
+        <div style="display: grid; grid-template-columns: auto auto 1fr; column-gap: 28px; row-gap: 14px;
+                    align-items: baseline;">
+            {% if wifi_ssid %}
+            <span style="font-size: 28px; font-weight: 700; color: var(--gold);">1.</span>
+            <span style="font-size: 28px; color: #444;">Connect to WiFi</span>
+            <span style="font-size: 32px; font-weight: 700; color: var(--navy); font-family: 'Courier New', monospace;">
+                {{ wifi_ssid }}{% if wifi_password %} <span style="font-size: 22px; color: #888; font-weight: 400; font-family: inherit;">&nbsp;password: {{ wifi_password }}</span>{% endif %}
+            </span>
+
+            <span style="font-size: 28px; font-weight: 700; color: var(--gold);">2.</span>
+            <span style="font-size: 28px; color: #444;">Open your browser</span>
+            <span></span>
+
+            <span style="font-size: 28px; font-weight: 700; color: var(--gold);">3.</span>
+            <span style="font-size: 28px; color: #444;">Go to</span>
+            <span style="font-size: 36px; font-weight: 700; color: var(--navy); font-family: 'Courier New', monospace;">{{ vote_host }}</span>
+            {% else %}
+            <span style="font-size: 28px; font-weight: 700; color: var(--gold);">1.</span>
+            <span style="font-size: 28px; color: #444;">Open your browser</span>
+            <span></span>
+
+            <span style="font-size: 28px; font-weight: 700; color: var(--gold);">2.</span>
+            <span style="font-size: 28px; color: #444;">Go to</span>
+            <span style="font-size: 36px; font-weight: 700; color: var(--navy); font-family: 'Courier New', monospace;">{{ vote_host }}</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
     {% endif %}
 </div>
 {% endblock %}

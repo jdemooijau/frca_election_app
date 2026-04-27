@@ -179,7 +179,6 @@
 
     <div class="display-instructions" id="instructions-panel"
          style="{{ '' if election.voting_open and not election.show_results else 'display:none' }}">
-        <h2 style="font-size: 42px; color: var(--navy); text-align: center; margin: 8px 0 16px;">Please cast your vote:</h2>
         <div class="instructions-options">
             <div class="instruction-card">
                 <div class="instruction-icon">
@@ -195,7 +194,7 @@
                         Go to <strong>{{ vote_url }}</strong> and type in your code</li>
                     <li>Mark your selections and submit</li>
                 </ol>
-                <p style="margin-top: 8px; color: #555; line-height: 1.25;">
+                <p style="margin-top: 12px; padding: 14px 18px; background: #FFF8DC; border-left: 6px solid #D4A017; border-radius: 8px; color: #5C4400; font-size: 34px; line-height: 1.3; font-weight: 600;">
                     No phone? <strong>Borrow one.</strong> Your code slip is what identifies your vote.
                 </p>
             </div>
@@ -424,11 +423,6 @@
 
             // Phase changed — reload to get the correct template
             if (data.display_phase && data.display_phase !== 3) {
-                location.reload();
-                return;
-            }
-            // Election just finalised — reload so the server serves final.html
-            if (data.election_complete && !data.voting_open) {
                 location.reload();
                 return;
             }
