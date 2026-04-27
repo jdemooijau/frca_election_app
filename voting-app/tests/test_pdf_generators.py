@@ -496,13 +496,13 @@ def test_printer_pack_zip_contains_all_files():
     with zipfile.ZipFile(buf) as zf:
         names = set(zf.namelist())
     expected = {
-        "ballot_front.pdf",
-        "code_slips_back.pdf",
-        "cards_duplex.pdf",
-        "dual_sided_ballots.pdf",
-        "counter_sheet.pdf",
-        "attendance_register.pdf",
-        "av_instructions.pdf",
+        "1_ballot_front.pdf",
+        "2_code_slips_back.pdf",
+        "3_cards_duplex.pdf",
+        "4_dual_sided_ballots.pdf",
+        "5_counter_sheet.pdf",
+        "6_attendance_register.pdf",
+        "7_av_instructions.pdf",
         "INSTRUCTIONS.txt",
     }
     assert names == expected
@@ -515,7 +515,7 @@ def test_printer_pack_zip_cards_duplex_page_count():
     buf = _generate_sample_zip()
     buf.seek(0)
     with zipfile.ZipFile(buf) as zf:
-        data = zf.read("cards_duplex.pdf")
+        data = zf.read("3_cards_duplex.pdf")
     reader = PdfReader(io.BytesIO(data))
     # _generate_sample_zip uses 8 codes, member_count=0, so total_cards=8 → 16 pages
     assert len(reader.pages) == 16
@@ -528,7 +528,7 @@ def test_printer_pack_zip_front_is_single_page():
     buf = _generate_sample_zip()
     buf.seek(0)
     with zipfile.ZipFile(buf) as zf:
-        front_data = zf.read("ballot_front.pdf")
+        front_data = zf.read("1_ballot_front.pdf")
     reader = PdfReader(io.BytesIO(front_data))
     assert len(reader.pages) == 1
 
@@ -540,7 +540,7 @@ def test_printer_pack_zip_back_page_count():
     buf = _generate_sample_zip()
     buf.seek(0)
     with zipfile.ZipFile(buf) as zf:
-        back_data = zf.read("code_slips_back.pdf")
+        back_data = zf.read("2_code_slips_back.pdf")
     reader = PdfReader(io.BytesIO(back_data))
     assert len(reader.pages) == len(SAMPLE_CODES)
 
@@ -552,10 +552,10 @@ def test_printer_pack_zip_instructions_content():
     buf.seek(0)
     with zipfile.ZipFile(buf) as zf:
         instructions = zf.read("INSTRUCTIONS.txt").decode("utf-8")
-    assert "ballot_front.pdf" in instructions
-    assert "code_slips_back.pdf" in instructions
-    assert "dual_sided_ballots.pdf" in instructions
-    assert "counter_sheet.pdf" in instructions
-    assert "attendance_register.pdf" in instructions
+    assert "1_ballot_front.pdf" in instructions
+    assert "2_code_slips_back.pdf" in instructions
+    assert "4_dual_sided_ballots.pdf" in instructions
+    assert "5_counter_sheet.pdf" in instructions
+    assert "6_attendance_register.pdf" in instructions
 
 
