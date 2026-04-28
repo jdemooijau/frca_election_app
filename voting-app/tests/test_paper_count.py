@@ -105,3 +105,80 @@ def test_paper_count_toggle_via_settings_post(client):
             "SELECT paper_count_enabled FROM elections WHERE id = ?", (election_id,)
         ).fetchone()
         assert row["paper_count_enabled"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Helper join + lazy session creation (Task 3)
+# ---------------------------------------------------------------------------
+
+def _setup_paper_count_election(client):
+    """Create election, enable paper count, add 1 office with 4 candidates,
+    set attendance, generate codes. Returns (id, list[plaintext codes]).
+    """
+    election_id = _create_election(client)
+    client.post(f"/admin/election/{election_id}/settings", data={"paper_count_enabled": "1"})
+    client.post(f"/admin/election/{election_id}/setup", data={
+        "office_name": "Elder", "vacancies": "2", "max_selections": "2",
+        "candidate_names": "Smith\nJones\nBrown\nWhite",
+        "confirm_slate_override": "1",
+    })
+    client.post(f"/admin/election/{election_id}/codes", data={"count": "3"})
+    # Attendance is required before voting can be opened (Article 4 prerequisite).
+    client.post(f"/admin/election/{election_id}/participants", data={"participants": "10"})
+    with app.app_context():
+        codes = get_db().execute(
+            "SELECT plaintext FROM codes WHERE election_id = ?", (election_id,)
+        ).fetchall()
+        return election_id, [c["plaintext"] for c in codes]
+
+
+def test_count_join_creates_session_and_helper(client):
+    election_id, codes = _setup_paper_count_election(client)
+    # Open then close voting (toggle twice). Route is /admin/election/<id>/voting.
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    # Simulate burned-code session for a non-admin
+    with client.session_transaction() as sess:
+        sess["used_code"] = codes[0]
+        sess["election_id"] = election_id
+        sess.pop("admin", None)
+    resp = client.post("/count/join", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/count/" in resp.headers["Location"]
+    with app.app_context():
+        sess_row = get_db().execute(
+            "SELECT * FROM count_sessions WHERE election_id = ?", (election_id,)
+        ).fetchone()
+        assert sess_row is not None
+        assert sess_row["status"] == "active"
+        helper_row = get_db().execute(
+            "SELECT * FROM count_session_helpers WHERE session_id = ?", (sess_row["id"],)
+        ).fetchone()
+        assert helper_row["voter_code"] == codes[0]
+        assert helper_row["short_id"] == codes[0][-6:].upper()
+
+
+def test_count_join_idempotent(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    with client.session_transaction() as sess:
+        sess["used_code"] = codes[0]
+        sess["election_id"] = election_id
+    client.post("/count/join")
+    client.post("/count/join")
+    with app.app_context():
+        n = get_db().execute("SELECT COUNT(*) AS n FROM count_session_helpers").fetchone()["n"]
+        assert n == 1
+
+
+def test_count_join_blocked_when_disabled(client):
+    election_id = _create_election(client)
+    # Need attendance + at least one office/code path is irrelevant here — we
+    # simply need an existing election with paper_count_enabled = 0 and try to
+    # join. Voting state doesn't matter since the disabled check fires first.
+    with client.session_transaction() as sess:
+        sess["used_code"] = "DUMMYCODE"
+        sess["election_id"] = election_id
+    resp = client.post("/count/join")
+    assert resp.status_code in (400, 403)

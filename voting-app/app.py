@@ -2604,9 +2604,115 @@ def voter_submit():
 
 @app.route("/confirmation")
 def voter_confirmation():
-    used_code = session.pop("used_code", None)
+    # Keep used_code in session so the paper-count assist button can read it.
+    # The code is already burned, so this is not sensitive.
+    used_code = session.get("used_code")
     resp = make_response(render_template("voter/confirmation.html", used_code=used_code))
     return no_cache(resp)
+
+
+# ---------------------------------------------------------------------------
+# Paper ballot co-counting
+# ---------------------------------------------------------------------------
+
+def _now_iso():
+    return datetime.utcnow().isoformat(timespec="seconds")
+
+
+def _short_id_from_code(code):
+    return (code or "")[-6:].upper()
+
+
+def _get_or_create_count_session(db, election_id, round_no):
+    """Find or create the count_sessions row for this (election, round).
+
+    Returns the row.
+    """
+    row = db.execute(
+        "SELECT * FROM count_sessions WHERE election_id = ? AND round_no = ?",
+        (election_id, round_no)
+    ).fetchone()
+    if row:
+        return row
+    db.execute(
+        "INSERT INTO count_sessions (election_id, round_no, status, started_at) "
+        "VALUES (?, ?, 'active', ?)",
+        (election_id, round_no, _now_iso())
+    )
+    db.commit()
+    return db.execute(
+        "SELECT * FROM count_sessions WHERE election_id = ? AND round_no = ?",
+        (election_id, round_no)
+    ).fetchone()
+
+
+def _paper_count_active_for_round(db, election):
+    """True if paper count is enabled, voting is closed, and no session is
+    persisted/cancelled for the current round.
+    """
+    if not election["paper_count_enabled"]:
+        return False
+    if election["voting_open"]:
+        return False
+    sess = db.execute(
+        "SELECT status FROM count_sessions WHERE election_id = ? AND round_no = ?",
+        (election["id"], election["current_round"])
+    ).fetchone()
+    if sess and sess["status"] in ("persisted", "cancelled"):
+        return False
+    return True
+
+
+@app.route("/count/join", methods=["POST"])
+def count_join():
+    code = session.get("used_code")
+    election_id = session.get("election_id")
+    if not code or not election_id:
+        return ("Not eligible", 403)
+    db = get_db()
+    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+    if not election:
+        return ("Election not found", 404)
+    if not election["paper_count_enabled"]:
+        return ("Paper count not enabled", 400)
+    if election["voting_open"]:
+        return ("Voting still open", 400)
+
+    sess = _get_or_create_count_session(db, election_id, election["current_round"])
+    if sess["status"] != "active":
+        return ("Session is not active", 400)
+
+    helper = db.execute(
+        "SELECT * FROM count_session_helpers WHERE session_id = ? AND voter_code = ?",
+        (sess["id"], code)
+    ).fetchone()
+    now = _now_iso()
+    if helper is None:
+        db.execute(
+            "INSERT INTO count_session_helpers "
+            "(session_id, voter_code, short_id, joined_at, last_seen_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (sess["id"], code, _short_id_from_code(code), now, now)
+        )
+        db.commit()
+        log_voter_audit(
+            election_id, code, "paper_count_helper_joined",
+            detail=_short_id_from_code(code),
+            round_number=election["current_round"]
+        )
+    else:
+        db.execute(
+            "UPDATE count_session_helpers SET last_seen_at = ? WHERE id = ?",
+            (now, helper["id"])
+        )
+        db.commit()
+    return redirect(url_for("count_helper_page", session_id=sess["id"]))
+
+
+@app.route("/count/<int:session_id>")
+def count_helper_page(session_id):
+    """Helper grid. Filled in by Task 4."""
+    return ("Helper page placeholder", 200)
 
 
 # ---------------------------------------------------------------------------
