@@ -377,8 +377,8 @@
                     </button>
                     {% else %}
                     <button type="submit" class="btn btn-success primary-cta"
-                            {% if attendance_missing %}disabled title="Set attendance under Step 1 first"{% else %}onclick="return confirm('{% if this_round_opened %}Re-open{% else %}Open{% endif %} round {{ election.current_round }}?');"{% endif %}>
-                        {% if this_round_opened %}Re-open Round {{ election.current_round }}{% else %}Open Round {{ election.current_round }}{% endif %}
+                            {% if attendance_missing %}disabled title="Set attendance under Step 1 first"{% else %}onclick="return confirm('Open/Reopen round {{ election.current_round }}?');"{% endif %}>
+                        Open/Reopen Round {{ election.current_round }}
                     </button>
                     {% endif %}
                 </form>

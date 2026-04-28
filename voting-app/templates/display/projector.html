@@ -177,8 +177,11 @@
         </div>
     </div>
 
+    {% set _remaining_init = (participants - total_ballots) if participants else 0 %}
+    {% set all_votes_in = election.voting_open and not election.show_results and participants > 0 and _remaining_init <= 0 %}
+    {% set show_instructions = election.voting_open and not election.show_results and not all_votes_in %}
     <div class="display-instructions" id="instructions-panel"
-         style="{{ '' if election.voting_open and not election.show_results else 'display:none' }}">
+         style="{{ '' if show_instructions else 'display:none' }}">
         <div class="instructions-options">
             <div class="instruction-card">
                 <div class="instruction-icon">
@@ -234,6 +237,12 @@
                 <p class="warning-highlight">Do not hand in your paper ballot if you voted online.</p>
             </div>
         </div>
+    </div>
+
+    <div id="all-votes-in-panel" style="{{ '' if all_votes_in else 'display:none' }} text-align:center; padding: 80px 40px;">
+        <div style="font-size: 96px; line-height: 1; color: var(--green); margin-bottom: 16px;">&#10003;</div>
+        <h2 style="font-size: 60px; font-weight: 700; color: var(--navy); margin: 0 0 16px;">All votes received</h2>
+        <p style="font-size: 48px; color: #555; margin: 0;">Paper votes are being counted/confirmed</p>
     </div>
 
     <div class="display-results" id="results-container">
@@ -393,7 +402,7 @@
     {# Stats bar wrapper is always in the DOM so the JS can populate it
        when voting closes (server-side `closed OR show_results` condition
        transitions). Visibility and content are managed by the JS below. #}
-    {% set stats_visible = total_ballots > 0 and not (election.voting_open and not election.show_results) %}
+    {% set stats_visible = total_ballots > 0 and (not election.voting_open or election.show_results or all_votes_in) %}
     {% set dPct = (used_codes / total_ballots * 100)|round|int if total_ballots > 0 else 0 %}
     {% set pPct = (paper_ballot_count / total_ballots * 100)|round|int if total_ballots > 0 else 0 %}
     {% set poPct = (postal_voter_count / total_ballots * 100)|round|int if total_ballots > 0 and postal_voter_count > 0 else 0 %}
@@ -524,15 +533,24 @@
 
             var container = document.getElementById('results-container');
             var instrPanel = document.getElementById('instructions-panel');
+            var allVotesPanel = document.getElementById('all-votes-in-panel');
             var summaryPanel = document.getElementById('summary-panel');
             var showCounts = data.show_results;
             var closed = !data.voting_open;
             var showingResults = data.results && (showCounts || closed);
-            var showingInstructions = data.voting_open && !showCounts;
+            // "All votes in" replaces the voting instructions once the room
+                // has finished — the how-to-vote panel becomes noise when there
+                // are no more voters left.
+            var allVotesIn = data.voting_open && !showCounts && parts > 0 && (parts - tb) <= 0;
+            var showingInstructions = data.voting_open && !showCounts && !allVotesIn;
 
-            // Show instructions when voting is open and no results displayed
+            // Show instructions when voting is open, no results displayed,
+            // and there are still voters to come.
             if (instrPanel) {
                 instrPanel.style.display = showingInstructions ? '' : 'none';
+            }
+            if (allVotesPanel) {
+                allVotesPanel.style.display = allVotesIn ? '' : 'none';
             }
             // Hide bottom stats bar when showing instructions (top summary stays visible)
             var sb = document.getElementById('stats-bar');
@@ -636,7 +654,7 @@
                 // hasn't toggled "Show Results on Projector".
                 var sb = document.getElementById('stats-bar');
                 if (sb) {
-                    if (tb > 0 && (showCounts || closed)) {
+                    if (tb > 0 && (showCounts || closed || allVotesIn)) {
                         var dPct = Math.round(data.used_codes / tb * 100);
                         var pPct = Math.round((data.paper_ballot_count || 0) / tb * 100);
                         var poPct = data.postal_voter_count > 0 ? Math.round(data.postal_voter_count / tb * 100) : 0;
