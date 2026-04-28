@@ -41,4 +41,73 @@
     <a href="{{ url_for('voter_enter_code') }}" class="btn btn-outline">Done</a>
 </div>
 {% endif %}
+{% if state == "active" %}
+<script>
+(function() {
+    const grid = document.querySelector(".count-grid");
+    if (!grid) return;
+    const tapUrl = grid.dataset.tapUrl;
+    const doneUrl = grid.dataset.doneUrl;
+    const heartbeatUrl = grid.dataset.heartbeatUrl;
+
+    function pulse(row, ok) {
+        row.classList.add(ok ? "count-row-flash-ok" : "count-row-flash-fail");
+        setTimeout(() => {
+            row.classList.remove("count-row-flash-ok");
+            row.classList.remove("count-row-flash-fail");
+        }, 150);
+    }
+
+    async function postTap(candidateId, delta, row) {
+        try {
+            const r = await fetch(tapUrl, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({candidate_id: candidateId, delta: delta})
+            });
+            pulse(row, r.ok);
+            if (!r.ok) row.classList.add("count-row-error");
+            else row.classList.remove("count-row-error");
+        } catch (e) {
+            pulse(row, false);
+            row.classList.add("count-row-error");
+        }
+    }
+
+    grid.addEventListener("click", function(ev) {
+        const plusBtn = ev.target.closest(".count-plus-btn");
+        const minusBtn = ev.target.closest(".count-minus-btn");
+        const btn = plusBtn || minusBtn;
+        if (!btn) return;
+        const row = btn.closest(".count-candidate-row");
+        if (!row) return;
+        ev.stopPropagation();
+        const candidateId = parseInt(row.dataset.candidateId, 10);
+        const delta = btn === plusBtn ? 1 : -1;
+        postTap(candidateId, delta, row);
+    });
+
+    const doneBtn = document.getElementById("count-done-btn");
+    doneBtn.addEventListener("click", async function() {
+        if (!confirm("Mark yourself as Done? You will not be able to tap again.")) return;
+        await fetch(doneUrl, {method: "POST"});
+        window.location.reload();  // server will render the Thanks screen
+    });
+
+    async function heartbeat() {
+        try {
+            const r = await fetch(heartbeatUrl);
+            if (!r.ok) return;
+            const data = await r.json();
+            if (data.session_status !== "active" || data.helper_done) {
+                window.location.reload();
+            }
+        } catch (e) {
+            // ignore
+        }
+    }
+    setInterval(heartbeat, 5000);
+})();
+</script>
+{% endif %}
 {% endblock %}
