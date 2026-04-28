@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Paper Count - {{ election.name }} - Round {{ round_no }}{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h1>Paper Count - Round {{ round_no }}</h1>
+    <a href="{{ url_for('admin_election_manage', election_id=election.id) }}">Back to Manage</a>
+</div>
+<div class="container-wide">
+    <div class="count-dashboard"
+         data-state-url="{{ url_for('admin_count_state', election_id=election.id, round_no=round_no) }}"
+         data-disregard-url="{{ url_for('admin_count_disregard', election_id=election.id, round_no=round_no) }}"
+         data-persist-url="{{ url_for('admin_count_persist', election_id=election.id, round_no=round_no) }}"
+         data-cancel-url="{{ url_for('admin_count_cancel', election_id=election.id, round_no=round_no) }}"
+         data-session-status="{{ sess.status }}">
+
+        <div class="count-dashboard-header">
+            <span id="count-summary">N helpers joined - M done</span>
+            <button type="button" id="count-cancel-btn" class="btn btn-outline btn-small">Cancel session</button>
+        </div>
+
+        <div id="count-banner" class="count-banner count-banner-grey">No data yet.</div>
+
+        <div id="count-table-host"><!-- populated by JS --></div>
+
+        <div style="margin-top: 16px;">
+            <button type="button" id="count-persist-btn" class="btn btn-primary" disabled>Persist Paper Ballot Count</button>
+        </div>
+
+        {% if sess.status == "persisted" %}
+        <div class="count-end-banner">Session persisted at {{ sess.persisted_at }}.</div>
+        {% elif sess.status == "cancelled" %}
+        <div class="count-end-banner">Session cancelled at {{ sess.cancelled_at }}.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

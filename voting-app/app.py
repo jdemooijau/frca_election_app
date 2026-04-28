@@ -2886,6 +2886,52 @@ def count_heartbeat(session_id):
 
 
 # ---------------------------------------------------------------------------
+# Admin paper count dashboard (Task 8 skeleton; endpoints stubbed)
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/election/<int:election_id>/count/<int:round_no>")
+@admin_required
+def admin_count_dashboard(election_id, round_no):
+    db = get_db()
+    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+    if not election:
+        abort(404)
+    if not election["paper_count_enabled"]:
+        abort(404)
+    sess = _get_or_create_count_session(db, election_id, round_no)
+    return render_template(
+        "admin/count.html",
+        election=election,
+        sess=sess,
+        round_no=round_no
+    )
+
+
+@app.route("/admin/election/<int:election_id>/count/<int:round_no>/state")
+@admin_required
+def admin_count_state(election_id, round_no):
+    return ("Not implemented", 501)
+
+
+@app.route("/admin/election/<int:election_id>/count/<int:round_no>/disregard", methods=["POST"])
+@admin_required
+def admin_count_disregard(election_id, round_no):
+    return ("Not implemented", 501)
+
+
+@app.route("/admin/election/<int:election_id>/count/<int:round_no>/persist", methods=["POST"])
+@admin_required
+def admin_count_persist(election_id, round_no):
+    return ("Not implemented", 501)
+
+
+@app.route("/admin/election/<int:election_id>/count/<int:round_no>/cancel", methods=["POST"])
+@admin_required
+def admin_count_cancel(election_id, round_no):
+    return ("Not implemented", 501)
+
+
+# ---------------------------------------------------------------------------
 # Projector display
 # ---------------------------------------------------------------------------
 

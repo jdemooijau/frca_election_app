@@ -372,3 +372,29 @@ def test_real_voter_submit_keeps_election_id_for_assist_button(client):
     resp = client.post("/count/join", follow_redirects=False)
     assert resp.status_code == 302
     assert resp.headers["Location"].startswith("/count/")
+
+
+# ---------------------------------------------------------------------------
+# Admin paper count dashboard skeleton (Task 8)
+# ---------------------------------------------------------------------------
+
+def test_admin_count_dashboard_renders(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    resp = client.get(f"/admin/election/{election_id}/count/1")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Paper Count - Round 1" in body
+    assert "Persist Paper Ballot Count" in body
+
+
+def test_admin_count_dashboard_404_when_disabled(client):
+    election_id = _create_election(client)
+    # Don't enable paper count
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    resp = client.get(f"/admin/election/{election_id}/count/1")
+    assert resp.status_code == 404
