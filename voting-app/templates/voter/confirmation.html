@@ -30,5 +30,18 @@
             View Live Results
         </a>
     </div>
+
+    {% if show_assist %}
+    <hr style="border: none; border-top: 1px solid #ddd; margin: 16px 0;">
+    <div style="text-align: center;">
+        <form method="POST" action="{{ url_for('count_join') }}" style="display: inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline btn-small">Assist with Paper Counting</button>
+        </form>
+        <p style="font-size: 12px; color: #888; margin-top: 6px;">
+            Help count paper ballots from your phone.
+        </p>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

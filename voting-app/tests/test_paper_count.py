@@ -284,3 +284,53 @@ def test_count_heartbeat_returns_session_status(client):
     payload = r.get_json()
     assert payload["session_status"] == "active"
     assert payload["helper_done"] is False
+
+
+def test_confirmation_shows_assist_button_when_active(client):
+    election_id, codes = _setup_paper_count_election(client)
+    # Open then close voting
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    # Set a burned-code session
+    with client.session_transaction() as sess:
+        sess["used_code"] = codes[0]
+        sess["election_id"] = election_id
+    resp = client.get("/confirmation")
+    assert resp.status_code == 200
+    assert b"Assist with Paper Counting" in resp.data
+
+
+def test_confirmation_hides_assist_when_disabled(client):
+    election_id = _create_election(client)
+    # Do NOT enable paper_count_enabled
+    client.post(f"/admin/election/{election_id}/setup", data={
+        "office_name": "Elder", "vacancies": "2", "max_selections": "2",
+        "candidate_names": "Smith\nJones\nBrown\nWhite",
+        "confirm_slate_override": "1",
+    })
+    client.post(f"/admin/election/{election_id}/codes", data={"count": "1"})
+    client.post(f"/admin/election/{election_id}/participants", data={"participants": "10"})
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    with app.app_context():
+        codes = get_db().execute(
+            "SELECT plaintext FROM codes WHERE election_id = ?", (election_id,)
+        ).fetchall()
+    with client.session_transaction() as sess:
+        sess["used_code"] = codes[0]["plaintext"]
+        sess["election_id"] = election_id
+    resp = client.get("/confirmation")
+    assert resp.status_code == 200
+    assert b"Assist with Paper Counting" not in resp.data
+
+
+def test_confirmation_hides_assist_when_voting_open(client):
+    election_id, codes = _setup_paper_count_election(client)
+    # Open voting once - leave open
+    client.post(f"/admin/election/{election_id}/voting")
+    with client.session_transaction() as sess:
+        sess["used_code"] = codes[0]
+        sess["election_id"] = election_id
+    resp = client.get("/confirmation")
+    assert resp.status_code == 200
+    assert b"Assist with Paper Counting" not in resp.data

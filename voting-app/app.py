@@ -2607,7 +2607,18 @@ def voter_confirmation():
     # Keep used_code in session so the paper-count assist button can read it.
     # The code is already burned, so this is not sensitive.
     used_code = session.get("used_code")
-    resp = make_response(render_template("voter/confirmation.html", used_code=used_code))
+    election_id = session.get("election_id")
+    show_assist = False
+    if used_code and election_id:
+        db = get_db()
+        election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+        if election and _paper_count_active_for_round(db, election):
+            show_assist = True
+    resp = make_response(render_template(
+        "voter/confirmation.html",
+        used_code=used_code,
+        show_assist=show_assist,
+    ))
     return no_cache(resp)
 
 
