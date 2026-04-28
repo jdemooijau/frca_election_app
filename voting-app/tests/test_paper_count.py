@@ -622,3 +622,120 @@ def test_hard_reset_deletes_count_data(client):
         ).fetchone()["n"]
         assert n_sess == 0
         assert n_helpers == 0
+
+
+# ---------------------------------------------------------------------------
+# Final audit: regression + feature-flag isolation (Task 15)
+# ---------------------------------------------------------------------------
+
+def test_persist_does_not_disturb_existing_vote_tables(client):
+    """Regression: persisting paper count must not modify votes / paper_votes /
+    codes tables. Drives a real digital vote first so votes and codes both have
+    rows, then runs a count session through to persist, then asserts the row
+    counts in the existing tables are unchanged.
+    """
+    election_id, codes = _setup_paper_count_election(client)
+    cands = _candidate_ids(election_id)
+
+    # Open voting and submit a real digital vote so /votes table has rows and
+    # /codes has a used=1 row.
+    client.post(f"/admin/election/{election_id}/voting")
+    resp = client.post("/vote", data={"code": codes[0]})
+    assert resp.status_code in (200, 302)
+    resp = client.post("/submit", data={
+        f"office_{_office_id(election_id)}": str(cands[0]),
+        "confirm_partial": "1",
+    })
+    assert resp.status_code in (200, 302)
+
+    # Snapshot row counts before paper-count persist
+    with app.app_context():
+        db = get_db()
+        before_votes = db.execute("SELECT COUNT(*) AS n FROM votes").fetchone()["n"]
+        before_paper = db.execute("SELECT COUNT(*) AS n FROM paper_votes").fetchone()["n"]
+        before_codes_used = db.execute(
+            "SELECT COUNT(*) AS n FROM codes WHERE used = 1"
+        ).fetchone()["n"]
+    assert before_votes >= 1, "digital vote did not insert any rows"
+    assert before_codes_used >= 1, "digital vote did not burn any code"
+
+    # Close voting
+    client.post(f"/admin/election/{election_id}/voting")
+
+    # Run a count session through to persist using a different code
+    sid = _join_count(client, election_id, codes[1])
+    client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
+    client.post(f"/count/{sid}/done", json={})
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    r = client.post(f"/admin/election/{election_id}/count/1/persist", json={
+        "totals": {str(cands[0]): 1}
+    })
+    assert r.status_code == 200
+
+    # Snapshot AFTER persist
+    with app.app_context():
+        db = get_db()
+        after_votes = db.execute("SELECT COUNT(*) AS n FROM votes").fetchone()["n"]
+        after_paper = db.execute("SELECT COUNT(*) AS n FROM paper_votes").fetchone()["n"]
+        after_codes_used = db.execute(
+            "SELECT COUNT(*) AS n FROM codes WHERE used = 1"
+        ).fetchone()["n"]
+
+    assert before_votes == after_votes, (
+        f"votes row count changed from {before_votes} to {after_votes}"
+    )
+    assert before_paper == after_paper, (
+        f"paper_votes row count changed from {before_paper} to {after_paper}"
+    )
+    assert before_codes_used == after_codes_used, (
+        f"codes used count changed from {before_codes_used} to {after_codes_used}"
+    )
+
+
+def _office_id(election_id):
+    with app.app_context():
+        row = get_db().execute(
+            "SELECT id FROM offices WHERE election_id = ? ORDER BY id LIMIT 1",
+            (election_id,)
+        ).fetchone()
+        return row["id"]
+
+
+def test_feature_is_invisible_when_disabled(client):
+    """When paper_count_enabled=0, none of the new UI/routes are accessible."""
+    election_id = _create_election(client)
+    # Do NOT enable paper_count_enabled
+    client.post(f"/admin/election/{election_id}/setup", data={
+        "office_name": "Elder", "vacancies": "2", "max_selections": "2",
+        "candidate_names": "Smith\nJones\nBrown\nWhite",
+        "confirm_slate_override": "1",
+    })
+    client.post(f"/admin/election/{election_id}/codes", data={"count": "3"})
+    client.post(f"/admin/election/{election_id}/participants", data={"participants": "10"})
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+
+    with app.app_context():
+        plain_codes = [r["plaintext"] for r in get_db().execute(
+            "SELECT plaintext FROM codes WHERE election_id = ?", (election_id,)
+        ).fetchall()]
+    with client.session_transaction() as sess:
+        sess["used_code"] = plain_codes[0]
+        sess["election_id"] = election_id
+        sess.pop("admin", None)
+
+    # /confirmation has no assist button
+    resp = client.get("/confirmation")
+    assert resp.status_code == 200
+    assert b"Assist with Paper Counting" not in resp.data
+
+    # /count/join is rejected (400 from disabled flag check)
+    resp = client.post("/count/join")
+    assert resp.status_code == 400
+
+    # Admin dashboard is 404
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    resp = client.get(f"/admin/election/{election_id}/count/1")
+    assert resp.status_code == 404
