@@ -2758,19 +2758,119 @@ def count_helper_page(session_id):
     )
 
 
+def _resolve_helper(db, session_id, voter_code):
+    """Return (sess_row, helper_row) or (None, None) if not a member."""
+    sess = db.execute(
+        "SELECT * FROM count_sessions WHERE id = ?", (session_id,)
+    ).fetchone()
+    if not sess:
+        return None, None
+    helper = db.execute(
+        "SELECT * FROM count_session_helpers WHERE session_id = ? AND voter_code = ?",
+        (session_id, voter_code)
+    ).fetchone()
+    return sess, helper
+
+
 @app.route("/count/<int:session_id>/tap", methods=["POST"])
+@csrf.exempt
 def count_tap(session_id):
-    return ("Not implemented", 501)
+    code = session.get("used_code")
+    if not code:
+        return ("Not eligible", 403)
+    db = get_db()
+    sess, helper = _resolve_helper(db, session_id, code)
+    if sess is None or helper is None:
+        return ("Not a member", 403)
+    if sess["status"] != "active":
+        return ("Session not active", 403)
+    if helper["marked_done_at"]:
+        return ("Helper already marked done", 403)
+
+    body = request.get_json(silent=True) or {}
+    try:
+        candidate_id = int(body.get("candidate_id"))
+        delta = int(body.get("delta"))
+    except (TypeError, ValueError):
+        return ("Bad payload", 400)
+    if delta not in (1, -1):
+        return ("Bad delta", 400)
+
+    cand = db.execute(
+        "SELECT c.id FROM candidates c JOIN offices o ON c.office_id = o.id "
+        "WHERE c.id = ? AND o.election_id = ?",
+        (candidate_id, sess["election_id"])
+    ).fetchone()
+    if not cand:
+        return ("Bad candidate", 400)
+
+    db.execute(
+        "INSERT OR IGNORE INTO count_session_tallies (session_id, helper_id, candidate_id, count) "
+        "VALUES (?, ?, ?, 0)",
+        (session_id, helper["id"], candidate_id)
+    )
+    if delta == 1:
+        db.execute(
+            "UPDATE count_session_tallies SET count = count + 1 "
+            "WHERE session_id = ? AND helper_id = ? AND candidate_id = ?",
+            (session_id, helper["id"], candidate_id)
+        )
+    else:
+        db.execute(
+            "UPDATE count_session_tallies SET count = MAX(count - 1, 0) "
+            "WHERE session_id = ? AND helper_id = ? AND candidate_id = ?",
+            (session_id, helper["id"], candidate_id)
+        )
+    db.execute(
+        "UPDATE count_session_helpers SET last_seen_at = ? WHERE id = ?",
+        (_now_iso(), helper["id"])
+    )
+    db.commit()
+    return ("", 200)
 
 
 @app.route("/count/<int:session_id>/done", methods=["POST"])
+@csrf.exempt
 def count_done(session_id):
-    return ("Not implemented", 501)
+    code = session.get("used_code")
+    if not code:
+        return ("Not eligible", 403)
+    db = get_db()
+    sess, helper = _resolve_helper(db, session_id, code)
+    if sess is None or helper is None:
+        return ("Not a member", 403)
+    if sess["status"] != "active":
+        return ("Session not active", 403)
+    if helper["marked_done_at"]:
+        return ("Already done", 200)
+    now = _now_iso()
+    db.execute(
+        "UPDATE count_session_helpers SET marked_done_at = ?, last_seen_at = ? WHERE id = ?",
+        (now, now, helper["id"])
+    )
+    db.commit()
+    return ("", 200)
 
 
 @app.route("/count/<int:session_id>/heartbeat", methods=["GET"])
+@csrf.exempt
 def count_heartbeat(session_id):
-    return ("Not implemented", 501)
+    code = session.get("used_code")
+    if not code:
+        return jsonify({"error": "not eligible"}), 403
+    db = get_db()
+    sess, helper = _resolve_helper(db, session_id, code)
+    if sess is None or helper is None:
+        return jsonify({"error": "not a member"}), 403
+    db.execute(
+        "UPDATE count_session_helpers SET last_seen_at = ? WHERE id = ?",
+        (_now_iso(), helper["id"])
+    )
+    db.commit()
+    return jsonify({
+        "session_status": sess["status"],
+        "helper_done": bool(helper["marked_done_at"]),
+    })
 
 
 # ---------------------------------------------------------------------------

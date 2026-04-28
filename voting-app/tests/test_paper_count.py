@@ -203,3 +203,84 @@ def test_count_helper_page_shows_candidates(client):
     assert "Jones" in body
     # The −1 pill text appears at least once per candidate
     assert body.count("−1") >= 4
+
+
+# ---------------------------------------------------------------------------
+# Tap, Done, Heartbeat endpoints (Task 5)
+# ---------------------------------------------------------------------------
+
+def _join_count(client, election_id, code):
+    with client.session_transaction() as sess:
+        sess["used_code"] = code
+        sess["election_id"] = election_id
+    resp = client.post("/count/join", follow_redirects=False)
+    return int(resp.headers["Location"].rsplit("/", 1)[-1])
+
+
+def _candidate_ids(election_id):
+    with app.app_context():
+        rows = get_db().execute(
+            "SELECT c.id FROM candidates c "
+            "JOIN offices o ON c.office_id = o.id "
+            "WHERE o.election_id = ? ORDER BY c.id",
+            (election_id,)
+        ).fetchall()
+        return [r["id"] for r in rows]
+
+
+def test_count_tap_increments_and_decrements(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    sid = _join_count(client, election_id, codes[0])
+    cands = _candidate_ids(election_id)
+    r = client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
+    assert r.status_code == 200
+    r = client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
+    assert r.status_code == 200
+    r = client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": -1})
+    assert r.status_code == 200
+    with app.app_context():
+        row = get_db().execute(
+            "SELECT count FROM count_session_tallies WHERE candidate_id = ?", (cands[0],)
+        ).fetchone()
+        assert row["count"] == 1
+
+
+def test_count_tap_clamps_at_zero(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    sid = _join_count(client, election_id, codes[0])
+    cands = _candidate_ids(election_id)
+    r = client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": -1})
+    assert r.status_code == 200
+    with app.app_context():
+        row = get_db().execute(
+            "SELECT count FROM count_session_tallies WHERE candidate_id = ?", (cands[0],)
+        ).fetchone()
+        assert row["count"] == 0
+
+
+def test_count_done_marks_helper_and_locks_taps(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    sid = _join_count(client, election_id, codes[0])
+    cands = _candidate_ids(election_id)
+    r = client.post(f"/count/{sid}/done", json={})
+    assert r.status_code == 200
+    r = client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
+    assert r.status_code == 403
+
+
+def test_count_heartbeat_returns_session_status(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    sid = _join_count(client, election_id, codes[0])
+    r = client.get(f"/count/{sid}/heartbeat")
+    assert r.status_code == 200
+    payload = r.get_json()
+    assert payload["session_status"] == "active"
+    assert payload["helper_done"] is False
