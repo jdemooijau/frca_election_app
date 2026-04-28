@@ -334,3 +334,41 @@ def test_confirmation_hides_assist_when_voting_open(client):
     resp = client.get("/confirmation")
     assert resp.status_code == 200
     assert b"Assist with Paper Counting" not in resp.data
+
+
+def test_real_voter_submit_keeps_election_id_for_assist_button(client):
+    """Regression: voter_submit must not strip election_id from session, or
+    /confirmation has no way to look up paper_count_enabled and the assist
+    button never renders. Drives the real voter flow end-to-end (POST /vote,
+    POST /submit, then admin closes voting, then GET /confirmation).
+    """
+    election_id, codes = _setup_paper_count_election(client)
+    # Open voting (single toggle - leave open so we can submit a vote).
+    client.post(f"/admin/election/{election_id}/voting")
+
+    # Real voter flow: enter code, then submit ballot.
+    resp = client.post("/vote", data={"code": codes[0]})
+    assert resp.status_code in (200, 302)
+    resp = client.post("/submit", data={"confirm_partial": "1"})
+    assert resp.status_code in (200, 302)
+    # Voter has been redirected to /confirmation. election_id MUST still be in
+    # the session at this point.
+    with client.session_transaction() as sess:
+        assert sess.get("election_id") == election_id, (
+            "voter_submit stripped election_id from session - confirmation "
+            "page cannot determine paper_count_enabled"
+        )
+        assert sess.get("used_code") == codes[0]
+
+    # Admin closes voting so paper-count assist becomes active.
+    client.post(f"/admin/election/{election_id}/voting")
+
+    # /confirmation should now show the assist button.
+    resp = client.get("/confirmation")
+    assert resp.status_code == 200
+    assert b"Assist with Paper Counting" in resp.data
+
+    # And /count/join should succeed (it also reads election_id from session).
+    resp = client.post("/count/join", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["Location"].startswith("/count/")

@@ -2595,9 +2595,10 @@ def voter_submit():
         )
         return redirect(url_for("voter_enter_code"))
 
-    # Clear session — no trace of the code
+    # Clear code_hash, but keep election_id and used_code in session so
+    # /confirmation and /count/join can render the paper-count assist button.
+    # The code is already burned, so used_code is no longer sensitive.
     session.pop("code_hash", None)
-    session.pop("election_id", None)
 
     return redirect(url_for("voter_confirmation"))
 
