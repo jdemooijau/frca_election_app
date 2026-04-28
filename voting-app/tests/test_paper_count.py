@@ -459,3 +459,50 @@ def test_state_endpoint_excludes_idle_helpers(client):
     cand_state = next(c for c in data["candidates"] if c["id"] == cands[0])
     assert cand_state["consensus"]["status"] == "ok"
     assert cand_state["consensus"]["value"] == 1
+
+
+def test_disregard_excludes_helper_from_consensus(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    cands = _candidate_ids(election_id)
+    # 3 helpers; third one wildly off
+    for i, c in enumerate(codes[:3]):
+        sid = _join_count(client, election_id, c)
+        n = 5 if i == 2 else 1
+        for _ in range(n):
+            client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
+
+    with app.app_context():
+        third = get_db().execute(
+            "SELECT id FROM count_session_helpers WHERE voter_code = ?", (codes[2],)
+        ).fetchone()
+        third_id = third["id"]
+
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    # Mismatch before
+    r = client.get(f"/admin/election/{election_id}/count/1/state")
+    cand_state = next(c for c in r.get_json()["candidates"] if c["id"] == cands[0])
+    assert cand_state["consensus"]["status"] == "mismatch"
+
+    # Disregard third
+    r = client.post(f"/admin/election/{election_id}/count/1/disregard", json={
+        "helper_id": third_id, "disregard": True
+    })
+    assert r.status_code == 200
+
+    # After disregarding the mismatched helper, only 2 helpers remain reporting on cand[0],
+    # so consensus is "insufficient" (need 3+)
+    r = client.get(f"/admin/election/{election_id}/count/1/state")
+    cand_state = next(c for c in r.get_json()["candidates"] if c["id"] == cands[0])
+    assert cand_state["consensus"]["status"] == "insufficient"
+
+    # Restore
+    r = client.post(f"/admin/election/{election_id}/count/1/disregard", json={
+        "helper_id": third_id, "disregard": False
+    })
+    assert r.status_code == 200
+    r = client.get(f"/admin/election/{election_id}/count/1/state")
+    cand_state = next(c for c in r.get_json()["candidates"] if c["id"] == cands[0])
+    assert cand_state["consensus"]["status"] == "mismatch"

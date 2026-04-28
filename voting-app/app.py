@@ -3068,8 +3068,48 @@ def admin_count_state(election_id, round_no):
 
 @app.route("/admin/election/<int:election_id>/count/<int:round_no>/disregard", methods=["POST"])
 @admin_required
+@csrf.exempt
 def admin_count_disregard(election_id, round_no):
-    return ("Not implemented", 501)
+    db = get_db()
+    sess = db.execute(
+        "SELECT * FROM count_sessions WHERE election_id = ? AND round_no = ?",
+        (election_id, round_no)
+    ).fetchone()
+    if sess is None:
+        return ("No session", 404)
+    if sess["status"] != "active":
+        return ("Session not active", 400)
+    body = request.get_json(silent=True) or {}
+    try:
+        helper_id = int(body.get("helper_id"))
+    except (TypeError, ValueError):
+        return ("Bad payload", 400)
+    disregard = bool(body.get("disregard"))
+    helper = db.execute(
+        "SELECT * FROM count_session_helpers WHERE id = ? AND session_id = ?",
+        (helper_id, sess["id"])
+    ).fetchone()
+    if helper is None:
+        return ("No such helper", 404)
+    if disregard:
+        db.execute(
+            "UPDATE count_session_helpers SET disregarded_at = ? WHERE id = ?",
+            (_now_iso(), helper_id)
+        )
+        action = "set"
+    else:
+        db.execute(
+            "UPDATE count_session_helpers SET disregarded_at = NULL WHERE id = ?",
+            (helper_id,)
+        )
+        action = "cleared"
+    db.commit()
+    log_voter_audit(
+        election_id, None, "paper_count_helper_disregarded",
+        detail=f"{helper['short_id']} {action}",
+        round_number=round_no
+    )
+    return ("", 200)
 
 
 @app.route("/admin/election/<int:election_id>/count/<int:round_no>/persist", methods=["POST"])
