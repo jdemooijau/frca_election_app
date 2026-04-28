@@ -54,8 +54,8 @@ def parse_args():
                    help="Random seed for reproducible vote distributions")
     p.add_argument("--blank-rate", "-b", type=float, default=0.0,
                    help="Probability of a blank vote per office (default: 0.0)")
-    p.add_argument("--reserve", "-r", type=int, default=10,
-                   help="Leave this many votes uncast for manual paper entry (default: 10)")
+    p.add_argument("--reserve", "-r", type=int, default=30,
+                   help="Leave this many votes uncast for manual paper entry (default: 30)")
     return p.parse_args()
 
 

@@ -390,27 +390,31 @@
         {% endif %}
     </div>
 
-    {% if total_ballots > 0 and not (election.voting_open and not election.show_results) %}
-    {% set dPct = (used_codes / total_ballots * 100)|round|int %}
-    {% set pPct = (paper_ballot_count / total_ballots * 100)|round|int %}
-    {% set poPct = (postal_voter_count / total_ballots * 100)|round|int if postal_voter_count > 0 else 0 %}
-    <div id="stats-bar" style="border-top: 2px solid var(--grey); margin-top: 10px; padding: 10px 40px 0;">
-        <div style="display: flex; height: 22px; border-radius: 11px; overflow: hidden; margin-bottom: 8px;">
+    {# Stats bar wrapper is always in the DOM so the JS can populate it
+       when voting closes (server-side `closed OR show_results` condition
+       transitions). Visibility and content are managed by the JS below. #}
+    {% set stats_visible = total_ballots > 0 and not (election.voting_open and not election.show_results) %}
+    {% set dPct = (used_codes / total_ballots * 100)|round|int if total_ballots > 0 else 0 %}
+    {% set pPct = (paper_ballot_count / total_ballots * 100)|round|int if total_ballots > 0 else 0 %}
+    {% set poPct = (postal_voter_count / total_ballots * 100)|round|int if total_ballots > 0 and postal_voter_count > 0 else 0 %}
+    <div id="stats-bar" style="border-top: 2px solid var(--grey); margin-top: 14px; padding: 14px 40px 0;{% if not stats_visible %}display:none;{% endif %}">
+        {% if stats_visible %}
+        <div style="display: flex; height: 32px; border-radius: 16px; overflow: hidden; margin-bottom: 12px;">
             <div style="width: {{ dPct }}%; background: var(--navy);"></div>
             <div style="width: {{ pPct }}%; background: var(--gold);"></div>
             {% if poPct > 0 %}
             <div style="width: {{ poPct }}%; background: var(--grey-dark);"></div>
             {% endif %}
         </div>
-        <div style="display: flex; justify-content: center; gap: 48px; font-size: 20px; font-weight: 600;">
-            <span><span style="display: inline-block; width: 16px; height: 16px; background: var(--navy); border-radius: 4px; vertical-align: middle; margin-right: 10px;"></span>{{ used_codes }} digital ({{ dPct }}%)</span>
-            <span><span style="display: inline-block; width: 16px; height: 16px; background: var(--gold); border-radius: 4px; vertical-align: middle; margin-right: 10px;"></span>{{ paper_ballot_count }} paper ({{ pPct }}%)</span>
+        <div style="display: flex; justify-content: center; gap: 56px; font-size: 28px; font-weight: 700;">
+            <span><span style="display: inline-block; width: 22px; height: 22px; background: var(--navy); border-radius: 5px; vertical-align: middle; margin-right: 12px;"></span>{{ used_codes }} digital ({{ dPct }}%)</span>
+            <span><span style="display: inline-block; width: 22px; height: 22px; background: var(--gold); border-radius: 5px; vertical-align: middle; margin-right: 12px;"></span>{{ paper_ballot_count }} paper ({{ pPct }}%)</span>
             {% if postal_voter_count > 0 %}
-            <span><span style="display: inline-block; width: 16px; height: 16px; background: var(--grey-dark); border-radius: 4px; vertical-align: middle; margin-right: 10px;"></span>{{ postal_voter_count }} postal ({{ poPct }}%)</span>
+            <span><span style="display: inline-block; width: 22px; height: 22px; background: var(--grey-dark); border-radius: 5px; vertical-align: middle; margin-right: 12px;"></span>{{ postal_voter_count }} postal ({{ poPct }}%)</span>
             {% endif %}
         </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 {% endblock %}
 
@@ -626,26 +630,33 @@
                 html += '</div>';
                 container.innerHTML = html;
 
-                // Update stats bar
+                // Update stats bar. Server-side condition is "tb > 0 AND
+                // (closed OR show_results)" — match it here so the bar
+                // appears as soon as voting closes, even if the chairman
+                // hasn't toggled "Show Results on Projector".
                 var sb = document.getElementById('stats-bar');
-                if (sb && tb > 0 && showCounts) {
-                    var dPct = Math.round(data.used_codes / tb * 100);
-                    var pPct = Math.round((data.paper_ballot_count || 0) / tb * 100);
-                    var poPct = data.postal_voter_count > 0 ? Math.round(data.postal_voter_count / tb * 100) : 0;
-                    var bar = '<div style="display:flex;height:22px;border-radius:11px;overflow:hidden;margin-bottom:8px">';
-                    bar += '<div style="width:' + dPct + '%;background:#1A3353"></div>';
-                    bar += '<div style="width:' + pPct + '%;background:#D4A843"></div>';
-                    if (poPct > 0) bar += '<div style="width:' + poPct + '%;background:#666"></div>';
-                    bar += '</div>';
-                    var dot = function(c) { return '<span style="display:inline-block;width:16px;height:16px;background:'+c+';border-radius:4px;vertical-align:middle;margin-right:10px"></span>'; };
-                    var legend = '<div style="display:flex;justify-content:center;gap:48px;font-size:20px;font-weight:600">';
-                    legend += '<span>' + dot('#1A3353') + data.used_codes + ' digital (' + dPct + '%)</span>';
-                    legend += '<span>' + dot('#D4A843') + (data.paper_ballot_count||0) + ' paper (' + pPct + '%)</span>';
-                    if (data.postal_voter_count > 0) legend += '<span>' + dot('#666') + data.postal_voter_count + ' postal (' + poPct + '%)</span>';
-                    legend += '</div>';
-                    sb.innerHTML = bar + legend;
-                } else if (sb && !showCounts) {
-                    sb.innerHTML = '';
+                if (sb) {
+                    if (tb > 0 && (showCounts || closed)) {
+                        var dPct = Math.round(data.used_codes / tb * 100);
+                        var pPct = Math.round((data.paper_ballot_count || 0) / tb * 100);
+                        var poPct = data.postal_voter_count > 0 ? Math.round(data.postal_voter_count / tb * 100) : 0;
+                        var bar = '<div style="display:flex;height:32px;border-radius:16px;overflow:hidden;margin-bottom:12px">';
+                        bar += '<div style="width:' + dPct + '%;background:#1A3353"></div>';
+                        bar += '<div style="width:' + pPct + '%;background:#D4A843"></div>';
+                        if (poPct > 0) bar += '<div style="width:' + poPct + '%;background:#666"></div>';
+                        bar += '</div>';
+                        var dot = function(c) { return '<span style="display:inline-block;width:22px;height:22px;background:'+c+';border-radius:5px;vertical-align:middle;margin-right:12px"></span>'; };
+                        var legend = '<div style="display:flex;justify-content:center;gap:56px;font-size:28px;font-weight:700">';
+                        legend += '<span>' + dot('#1A3353') + data.used_codes + ' digital (' + dPct + '%)</span>';
+                        legend += '<span>' + dot('#D4A843') + (data.paper_ballot_count||0) + ' paper (' + pPct + '%)</span>';
+                        if (data.postal_voter_count > 0) legend += '<span>' + dot('#666') + data.postal_voter_count + ' postal (' + poPct + '%)</span>';
+                        legend += '</div>';
+                        sb.innerHTML = bar + legend;
+                        sb.style.display = '';
+                    } else {
+                        sb.innerHTML = '';
+                        sb.style.display = 'none';
+                    }
                 }
             } else {
                 container.innerHTML = '';

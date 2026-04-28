@@ -508,6 +508,155 @@ class TestSecondRound:
 
 
 # ---------------------------------------------------------------------------
+# Round 2 ballot 'select N' regression tests
+# ---------------------------------------------------------------------------
+
+class TestRound2MaxSelections:
+    """The round 2 voter ballot's 'select N' must reflect remaining vacancies,
+    not silently collapse to 1. Regression for the report 'I could only tick
+    one name on the round 2 ballot'.
+    """
+
+    def _setup_one_office(self, admin_client, vacancies, num_candidates, participants):
+        admin_client.post("/admin/election/new", data={
+            "name": "Round 2 Test", "max_rounds": "3",
+        })
+        cand_names = "\n".join(f"Cand {chr(65+i)}" for i in range(num_candidates))
+        admin_client.post("/admin/election/1/setup", data={
+            "office_name": "Elder",
+            "vacancies": str(vacancies),
+            "candidate_names": cand_names,
+            "confirm_slate_override": "1",
+        })
+        admin_client.post("/admin/election/1/codes", data={"count": "20"})
+        admin_client.post(
+            "/admin/election/1/participants",
+            data={"participants": str(participants)},
+        )
+
+    def _seed_round1_digital_votes(self, vote_distribution, digital_ballots):
+        with app.app_context():
+            db = get_db()
+            cand_ids = [
+                r["id"] for r in db.execute(
+                    "SELECT id FROM candidates WHERE office_id = 1 ORDER BY sort_order"
+                ).fetchall()
+            ]
+            assert len(cand_ids) == len(vote_distribution)
+            for idx, count in enumerate(vote_distribution):
+                for _ in range(count):
+                    db.execute(
+                        "INSERT INTO votes (election_id, round_number, candidate_id, source) "
+                        "VALUES (1, 1, ?, 'digital')",
+                        (cand_ids[idx],),
+                    )
+            db.execute(
+                "UPDATE round_counts SET digital_ballot_count = ? "
+                "WHERE election_id = 1 AND round_number = 1",
+                (digital_ballots,),
+            )
+            db.commit()
+            return cand_ids
+
+    def _round2_ballot_html(self, admin_client):
+        admin_client.post("/admin/election/1/voting")  # open round 2
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO codes (election_id, code_hash) VALUES (1, ?)",
+                (hash_code("R2BALL"),),
+            )
+            db.commit()
+        admin_client.post("/vote", data={"code": "R2BALL"})
+        return admin_client.get("/ballot").data
+
+    def test_round2_select_n_when_no_one_elected(self, admin_client):
+        """3 vacancies, 6 candidates, no one passes thresholds in round 1.
+        Carrying all 6 forward must give a round 2 ballot of 'select 3'.
+        """
+        self._setup_one_office(admin_client, vacancies=3, num_candidates=6,
+                               participants=10)
+        # Each candidate gets 1 vote — well below 6b threshold of ceil(10*2/5)=4.
+        cand_ids = self._seed_round1_digital_votes(
+            [1, 1, 1, 1, 1, 1], digital_ballots=6
+        )
+        admin_client.post("/admin/election/1/voting")  # open round 1
+        admin_client.post("/admin/election/1/voting")  # close round 1
+
+        admin_client.post(
+            "/admin/election/1/next-round",
+            data={"carry_forward": [str(i) for i in cand_ids]},
+        )
+
+        with app.app_context():
+            db = get_db()
+            office = db.execute("SELECT * FROM offices WHERE id = 1").fetchone()
+            election = db.execute("SELECT * FROM elections WHERE id = 1").fetchone()
+
+        assert election["current_round"] == 2
+        assert office["vacancies"] == 3, (
+            f"Expected 3 vacancies remaining, got {office['vacancies']}"
+        )
+        assert office["max_selections"] == 3, (
+            f"Expected max_selections=3 (3 vacancies, 6 carried forward), "
+            f"got {office['max_selections']}"
+        )
+
+        body = self._round2_ballot_html(admin_client)
+        assert b"(select 3)" in body, (
+            f"Round 2 ballot should say '(select 3)'. Excerpt: "
+            f"{body[body.find(b'For Elder'):body.find(b'For Elder')+200]!r}"
+        )
+
+    def test_round2_select_n_when_one_elected(self, admin_client):
+        """3 vacancies, 6 candidates, candidate A passes both thresholds in
+        round 1. The 5 non-elected are carried forward; round 2 must say
+        'select 2' (3 vacancies - 1 filled).
+        """
+        self._setup_one_office(admin_client, vacancies=3, num_candidates=6,
+                               participants=10)
+        # 6b threshold = ceil(10*2/5) = 4. Cand A gets 5 votes, others 0.
+        # 6a threshold = 5/(2*3) ~= 0.83. Cand A passes both, others fail.
+        cand_ids = self._seed_round1_digital_votes(
+            [5, 0, 0, 0, 0, 0], digital_ballots=5
+        )
+        admin_client.post("/admin/election/1/voting")
+        admin_client.post("/admin/election/1/voting")
+
+        # Carry forward only the 5 not-elected candidates
+        admin_client.post(
+            "/admin/election/1/next-round",
+            data={"carry_forward": [str(i) for i in cand_ids[1:]]},
+        )
+
+        with app.app_context():
+            db = get_db()
+            office = db.execute("SELECT * FROM offices WHERE id = 1").fetchone()
+            elected = db.execute(
+                "SELECT name FROM candidates WHERE office_id = 1 AND elected = 1"
+            ).fetchall()
+            active = db.execute(
+                "SELECT id FROM candidates WHERE office_id = 1 AND active = 1"
+            ).fetchall()
+
+        assert len(elected) == 1, f"Expected 1 elected, got {len(elected)}"
+        assert len(active) == 5, f"Expected 5 carried-forward (active), got {len(active)}"
+        assert office["vacancies"] == 2, (
+            f"Expected 2 remaining vacancies (3 - 1 elected), got {office['vacancies']}"
+        )
+        assert office["max_selections"] == 2, (
+            f"Expected max_selections=2 (2 vacancies, 5 carried forward), "
+            f"got {office['max_selections']}"
+        )
+
+        body = self._round2_ballot_html(admin_client)
+        assert b"(select 2)" in body, (
+            f"Round 2 ballot should say '(select 2)'. Excerpt: "
+            f"{body[body.find(b'For Elder'):body.find(b'For Elder')+200]!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Member import tests
 # ---------------------------------------------------------------------------
 

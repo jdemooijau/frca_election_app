@@ -1612,13 +1612,20 @@ def generate_minutes_docx(
 
             if has_postal:
                 headers = ["Candidate", "Digital", "In-person", "Postal", "Total"]
+                col_widths = [Cm(6.0), Cm(2.5), Cm(2.5), Cm(2.5), Cm(2.5)]
             else:
                 headers = ["Candidate", "Digital", "In-person", "Total"]
+                col_widths = [Cm(7.0), Cm(3.0), Cm(3.0), Cm(3.0)]
             col_count = len(headers)
 
             table = doc.add_table(rows=1 + len(cands), cols=col_count)
             table.style = "Table Grid"
             table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            table.autofit = False
+            table.allow_autofit = False
+            for row in table.rows:
+                for ci, width in enumerate(col_widths):
+                    row.cells[ci].width = width
 
             for i, hdr in enumerate(headers):
                 cell = table.rows[0].cells[i]

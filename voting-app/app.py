@@ -1355,6 +1355,15 @@ def admin_election_manage(election_id):
     voting_ever_opened = (
         current_round > 1 or display_phase >= 3 or total_ballots_round > 0
     )
+    # Per-round signal: has THIS round ever been opened? Distinguishes a
+    # fresh round (e.g. just-advanced R2 with no ballots yet) from a round
+    # that has been opened at least once. Used for the Open vs Re-open
+    # button label and the phase-3 "walk projector through" prompt.
+    this_round_opened = (
+        bool(election["voting_open"])
+        or display_phase >= 3
+        or total_ballots_round > 0
+    )
 
     if election_complete or display_phase == 4:
         active_phase = 5
@@ -1437,6 +1446,7 @@ def admin_election_manage(election_id):
         election_complete=election_complete,
         elected_summary_by_office=elected_summary_by_office,
         voting_ever_opened=voting_ever_opened,
+        this_round_opened=this_round_opened,
     )
 
 
@@ -2760,7 +2770,8 @@ def _get_or_create_count_session(db, election_id, round_no):
     if row:
         return row
     db.execute(
-        "INSERT INTO count_sessions (election_id, round_no, status, started_at) "
+        "INSERT OR IGNORE INTO count_sessions "
+        "(election_id, round_no, status, started_at) "
         "VALUES (?, ?, 'active', ?)",
         (election_id, round_no, _now_iso())
     )
@@ -2771,19 +2782,31 @@ def _get_or_create_count_session(db, election_id, round_no):
     ).fetchone()
 
 
+PAPER_COUNT_MAX_HELPERS = 30
+
+
 def _paper_count_active_for_round(db, election):
-    """True if paper count is enabled and the current round's session has not
-    been persisted or cancelled. The button is shown regardless of voting
-    state so voters who finish early can opt in immediately.
+    """True if paper count is enabled, the current round's session has not
+    been persisted or cancelled, and the helper cap has not been hit.
+    The button is shown regardless of voting state so voters who finish early
+    can opt in immediately.
     """
     if not election["paper_count_enabled"]:
         return False
     sess = db.execute(
-        "SELECT status FROM count_sessions WHERE election_id = ? AND round_no = ?",
+        "SELECT id, status FROM count_sessions WHERE election_id = ? AND round_no = ?",
         (election["id"], election["current_round"])
     ).fetchone()
     if sess and sess["status"] in ("persisted", "cancelled"):
         return False
+    if sess:
+        helper_count = db.execute(
+            "SELECT COUNT(*) AS cnt FROM count_session_helpers "
+            "WHERE session_id = ? AND disregarded_at IS NULL",
+            (sess["id"],)
+        ).fetchone()["cnt"]
+        if helper_count >= PAPER_COUNT_MAX_HELPERS:
+            return False
     return True
 
 
@@ -2804,30 +2827,7 @@ def count_join():
     if sess["status"] != "active":
         return ("Session is not active", 400)
 
-    helper = db.execute(
-        "SELECT * FROM count_session_helpers WHERE session_id = ? AND voter_code = ?",
-        (sess["id"], code)
-    ).fetchone()
-    now = _now_iso()
-    if helper is None:
-        db.execute(
-            "INSERT INTO count_session_helpers "
-            "(session_id, voter_code, short_id, joined_at, last_seen_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (sess["id"], code, _short_id_from_code(code), now, now)
-        )
-        db.commit()
-        log_voter_audit(
-            election_id, code, "paper_count_helper_joined",
-            detail=_short_id_from_code(code),
-            round_number=election["current_round"]
-        )
-    else:
-        db.execute(
-            "UPDATE count_session_helpers SET last_seen_at = ? WHERE id = ?",
-            (now, helper["id"])
-        )
-        db.commit()
+    # Helper row is created lazily on first tap (see count_tap).
     return redirect(url_for("count_helper_page", session_id=sess["id"]))
 
 
@@ -2844,9 +2844,10 @@ def count_helper_page(session_id):
         "SELECT * FROM count_session_helpers WHERE session_id = ? AND voter_code = ?",
         (session_id, code)
     ).fetchone()
-    if not helper:
-        # Voter is not a helper in this session; bounce to voter entry.
-        return redirect(url_for("voter_enter_code"))
+    # If they haven't tapped yet, render a preview helper - the row is created
+    # lazily on first tap (see count_tap).
+    if helper is None:
+        helper = {"short_id": _short_id_from_code(code), "marked_done_at": None}
 
     # Determine end-state to render
     if sess["status"] == "persisted":
@@ -2902,10 +2903,36 @@ def count_tap(session_id):
         return ("Not eligible", 403)
     db = get_db()
     sess, helper = _resolve_helper(db, session_id, code)
-    if sess is None or helper is None:
-        return ("Not a member", 403)
+    if sess is None:
+        return ("Session not found", 404)
     if sess["status"] != "active":
         return ("Session not active", 403)
+    if helper is None:
+        # Lazy creation on first tap; the cap is enforced here.
+        helper_count = db.execute(
+            "SELECT COUNT(*) AS cnt FROM count_session_helpers "
+            "WHERE session_id = ? AND disregarded_at IS NULL",
+            (session_id,)
+        ).fetchone()["cnt"]
+        if helper_count >= PAPER_COUNT_MAX_HELPERS:
+            return ("Counting team is full", 403)
+        now = _now_iso()
+        db.execute(
+            "INSERT INTO count_session_helpers "
+            "(session_id, voter_code, short_id, joined_at, last_seen_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (session_id, code, _short_id_from_code(code), now, now)
+        )
+        db.commit()
+        log_voter_audit(
+            sess["election_id"], code, "paper_count_helper_joined",
+            detail=_short_id_from_code(code),
+            round_number=sess["round_no"]
+        )
+        helper = db.execute(
+            "SELECT * FROM count_session_helpers WHERE session_id = ? AND voter_code = ?",
+            (session_id, code)
+        ).fetchone()
     if helper["marked_done_at"]:
         return ("Helper already marked done", 403)
 
@@ -2964,8 +2991,11 @@ def count_done(session_id):
         return ("Not eligible", 403)
     db = get_db()
     sess, helper = _resolve_helper(db, session_id, code)
-    if sess is None or helper is None:
-        return ("Not a member", 403)
+    if sess is None:
+        return ("Session not found", 404)
+    if helper is None:
+        # They never tapped; nothing to mark done.
+        return ("", 200)
     if sess["status"] != "active":
         return ("Session not active", 403)
     if helper["marked_done_at"]:
@@ -2987,8 +3017,14 @@ def count_heartbeat(session_id):
         return jsonify({"error": "not eligible"}), 403
     db = get_db()
     sess, helper = _resolve_helper(db, session_id, code)
-    if sess is None or helper is None:
-        return jsonify({"error": "not a member"}), 403
+    if sess is None:
+        return jsonify({"error": "session not found"}), 404
+    if helper is None:
+        # Voter is on the page but hasn't tapped yet; nothing to update.
+        return jsonify({
+            "session_status": sess["status"],
+            "helper_done": False,
+        })
     db.execute(
         "UPDATE count_session_helpers SET last_seen_at = ? WHERE id = ?",
         (_now_iso(), helper["id"])

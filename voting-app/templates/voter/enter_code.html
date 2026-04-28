@@ -17,7 +17,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="form-group" style="margin-top: 24px;">
-            <label for="code">Enter Your Voting Code</label>
+            <label for="code">Enter your code or scan QR</label>
 
             <div aria-live="polite" class="error-region">
                 {% with messages = get_flashed_messages(with_categories=true) %}
