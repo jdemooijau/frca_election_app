@@ -1569,9 +1569,31 @@ def generate_minutes_docx(
                     f"{t6b} votes (Article 6b) to be elected."
                 )
 
-        # Vote tables per office. Round 1 with postal votes gets a
-        # 'In-person | Postal | Total' breakdown; everything else stays
-        # single-column to match the reference minutes style.
+        # Round-level ballot totals with digital / in-person / postal split
+        rd_total = rd.get("total_ballots", 0)
+        rd_digital = rd.get("used_codes", 0)
+        rd_paper = rd.get("paper_ballot_count", 0)
+        rd_postal = rd.get("postal_voter_count", 0)
+        if rd_total > 0:
+            def _pct(n):
+                return f"{(100 * n / rd_total):.1f}%"
+            if rd_postal > 0:
+                _para(
+                    f"A total of {rd_total} ballots were cast in this round: "
+                    f"{rd_digital} digital ({_pct(rd_digital)}), "
+                    f"{rd_paper} in-person ({_pct(rd_paper)}), "
+                    f"and {rd_postal} postal ({_pct(rd_postal)})."
+                )
+            else:
+                _para(
+                    f"A total of {rd_total} ballots were cast in this round: "
+                    f"{rd_digital} digital ({_pct(rd_digital)}) "
+                    f"and {rd_paper} in-person ({_pct(rd_paper)})."
+                )
+
+        # Vote tables per office. The candidate breakdown is always shown
+        # as Digital + In-person, with Postal added in round 1 when any
+        # postal votes were received.
         for o in rd["offices"]:
             p = doc.add_paragraph()
             run = p.add_run(o["name"])
@@ -1589,9 +1611,9 @@ def generate_minutes_docx(
             )
 
             if has_postal:
-                headers = ["Candidate", "In-person", "Postal", "Total"]
+                headers = ["Candidate", "Digital", "In-person", "Postal", "Total"]
             else:
-                headers = ["Candidate", "# votes"]
+                headers = ["Candidate", "Digital", "In-person", "Total"]
             col_count = len(headers)
 
             table = doc.add_table(rows=1 + len(cands), cols=col_count)
@@ -1612,13 +1634,13 @@ def generate_minutes_docx(
             for row_idx, cand in enumerate(cands):
                 row = table.rows[row_idx + 1]
                 row.cells[0].text = f"Br {cand['name']}"
+                row.cells[1].text = str(cand.get("digital", 0))
+                row.cells[2].text = str(cand.get("paper", 0))
                 if has_postal:
-                    in_person = cand.get("digital", 0) + cand.get("paper", 0)
-                    row.cells[1].text = str(in_person)
-                    row.cells[2].text = str(cand.get("postal", 0))
-                    row.cells[3].text = str(cand["total"])
+                    row.cells[3].text = str(cand.get("postal", 0))
+                    row.cells[4].text = str(cand["total"])
                 else:
-                    row.cells[1].text = str(cand["total"])
+                    row.cells[3].text = str(cand["total"])
                 for ci in range(1, col_count):
                     for paragraph in row.cells[ci].paragraphs:
                         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER

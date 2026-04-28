@@ -297,7 +297,7 @@ def test_confirmation_shows_assist_button_when_active(client):
         sess["election_id"] = election_id
     resp = client.get("/confirmation")
     assert resp.status_code == 200
-    assert b"Assist with Paper Counting" in resp.data
+    assert b"Count Votes" in resp.data
 
 
 def test_confirmation_hides_assist_when_disabled(client):
@@ -321,7 +321,7 @@ def test_confirmation_hides_assist_when_disabled(client):
         sess["election_id"] = election_id
     resp = client.get("/confirmation")
     assert resp.status_code == 200
-    assert b"Assist with Paper Counting" not in resp.data
+    assert b"Count Votes" not in resp.data
 
 
 def test_confirmation_shows_assist_even_while_voting_open(client):
@@ -337,7 +337,7 @@ def test_confirmation_shows_assist_even_while_voting_open(client):
         sess["election_id"] = election_id
     resp = client.get("/confirmation")
     assert resp.status_code == 200
-    assert b"Assist with Paper Counting" in resp.data
+    assert b"Count Votes" in resp.data
 
 
 def test_real_voter_submit_keeps_election_id_for_assist_button(client):
@@ -370,7 +370,7 @@ def test_real_voter_submit_keeps_election_id_for_assist_button(client):
     # /confirmation should now show the assist button.
     resp = client.get("/confirmation")
     assert resp.status_code == 200
-    assert b"Assist with Paper Counting" in resp.data
+    assert b"Count Votes" in resp.data
 
     # And /count/join should succeed (it also reads election_id from session).
     resp = client.post("/count/join", follow_redirects=False)
@@ -611,10 +611,12 @@ def test_hard_reset_deletes_count_data(client):
 # ---------------------------------------------------------------------------
 
 def test_persist_does_not_disturb_existing_vote_tables(client):
-    """Regression: persisting paper count must not modify votes / paper_votes /
-    codes tables. Drives a real digital vote first so votes and codes both have
-    rows, then runs a count session through to persist, then asserts the row
-    counts in the existing tables are unchanged.
+    """Regression: persisting paper count must not modify the votes table or
+    burn additional codes. Drives a real digital vote first so votes and codes
+    both have rows, runs a count session through to persist, then asserts that
+    votes and codes are unchanged. paper_votes is expected to be auto-populated
+    from the persisted count totals (one row per candidate with a non-zero
+    count).
     """
     election_id, codes = _setup_paper_count_election(client)
     cands = _candidate_ids(election_id)
@@ -667,8 +669,11 @@ def test_persist_does_not_disturb_existing_vote_tables(client):
     assert before_votes == after_votes, (
         f"votes row count changed from {before_votes} to {after_votes}"
     )
-    assert before_paper == after_paper, (
-        f"paper_votes row count changed from {before_paper} to {after_paper}"
+    # Persist auto-populates paper_votes from the count totals: we tapped 1
+    # for cands[0], so exactly one paper_votes row should have been added.
+    assert after_paper == before_paper + 1, (
+        f"expected one new paper_votes row from auto-populate, "
+        f"got {before_paper} -> {after_paper}"
     )
     assert before_codes_used == after_codes_used, (
         f"codes used count changed from {before_codes_used} to {after_codes_used}"
@@ -710,7 +715,7 @@ def test_feature_is_invisible_when_disabled(client):
     # /confirmation has no assist button
     resp = client.get("/confirmation")
     assert resp.status_code == 200
-    assert b"Assist with Paper Counting" not in resp.data
+    assert b"Count Votes" not in resp.data
 
     # /count/join is rejected (400 from disabled flag check)
     resp = client.post("/count/join")
