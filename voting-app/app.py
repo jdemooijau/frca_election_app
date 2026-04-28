@@ -3200,8 +3200,32 @@ def admin_count_persist(election_id, round_no):
 
 @app.route("/admin/election/<int:election_id>/count/<int:round_no>/cancel", methods=["POST"])
 @admin_required
+@csrf.exempt
 def admin_count_cancel(election_id, round_no):
-    return ("Not implemented", 501)
+    db = get_db()
+    sess = db.execute(
+        "SELECT * FROM count_sessions WHERE election_id = ? AND round_no = ?",
+        (election_id, round_no)
+    ).fetchone()
+    if sess is None:
+        return ("No session", 404)
+    if sess["status"] != "active":
+        return ("Session not active", 400)
+    helper_count = db.execute(
+        "SELECT COUNT(*) AS n FROM count_session_helpers WHERE session_id = ?",
+        (sess["id"],)
+    ).fetchone()["n"]
+    db.execute(
+        "UPDATE count_sessions SET status = 'cancelled', cancelled_at = ? WHERE id = ?",
+        (_now_iso(), sess["id"])
+    )
+    db.commit()
+    log_voter_audit(
+        election_id, None, "paper_count_cancelled",
+        detail=f"helpers={helper_count}",
+        round_number=round_no
+    )
+    return ("", 200)
 
 
 # ---------------------------------------------------------------------------

@@ -151,6 +151,13 @@
         loadState();
     });
 
+    cancelBtn.addEventListener("click", async function() {
+        if (!confirm("Cancel this count session? No totals will be saved.")) return;
+        const r = await fetch(root.dataset.cancelUrl, {method: "POST"});
+        if (r.ok) window.location.reload();
+        else alert("Cancel failed: " + r.status);
+    });
+
     persistBtn.addEventListener("click", function() {
         if (!lastState) return;
         const modal = document.getElementById("count-persist-modal");
