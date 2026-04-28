@@ -10,12 +10,10 @@
          data-state-url="{{ url_for('admin_count_state', election_id=election.id, round_no=round_no) }}"
          data-disregard-url="{{ url_for('admin_count_disregard', election_id=election.id, round_no=round_no) }}"
          data-persist-url="{{ url_for('admin_count_persist', election_id=election.id, round_no=round_no) }}"
-         data-cancel-url="{{ url_for('admin_count_cancel', election_id=election.id, round_no=round_no) }}"
          data-session-status="{{ sess.status }}">
 
         <div class="count-dashboard-header">
             <span id="count-summary">N helpers joined - M done</span>
-            <button type="button" id="count-cancel-btn" class="btn btn-outline btn-small">Cancel session</button>
         </div>
 
         <div id="count-banner" class="count-banner count-banner-grey">No data yet.</div>
@@ -28,8 +26,6 @@
 
         {% if sess.status == "persisted" %}
         <div class="count-end-banner">Session persisted at {{ sess.persisted_at }}.</div>
-        {% elif sess.status == "cancelled" %}
-        <div class="count-end-banner">Session cancelled at {{ sess.cancelled_at }}.</div>
         {% endif %}
 
         <dialog id="count-persist-modal" style="border: 1px solid #ccc; padding: 16px; max-width: 600px;">
@@ -49,7 +45,6 @@
     if (!root) return;
     const stateUrl = root.dataset.stateUrl;
     const persistBtn = document.getElementById("count-persist-btn");
-    const cancelBtn = document.getElementById("count-cancel-btn");
     const tableHost = document.getElementById("count-table-host");
     const banner = document.getElementById("count-banner");
     const summary = document.getElementById("count-summary");
@@ -112,7 +107,6 @@
 
         if (data.session_status !== "active") {
             persistBtn.disabled = true;
-            cancelBtn.disabled = true;
         }
     }
 
@@ -149,13 +143,6 @@
             body: JSON.stringify({helper_id: helperId, disregard: dis ? true : false}),
         });
         loadState();
-    });
-
-    cancelBtn.addEventListener("click", async function() {
-        if (!confirm("Cancel this count session? No totals will be saved.")) return;
-        const r = await fetch(root.dataset.cancelUrl, {method: "POST"});
-        if (r.ok) window.location.reload();
-        else alert("Cancel failed: " + r.status);
     });
 
     persistBtn.addEventListener("click", function() {

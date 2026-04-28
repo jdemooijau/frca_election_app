@@ -559,28 +559,6 @@ def test_persist_rejected_when_already_persisted(client):
     assert r.status_code == 400
 
 
-def test_cancel_marks_session_and_blocks_taps(client):
-    election_id, codes = _setup_paper_count_election(client)
-    client.post(f"/admin/election/{election_id}/voting")
-    client.post(f"/admin/election/{election_id}/voting")
-    sid = _join_count(client, election_id, codes[0])
-    cands = _candidate_ids(election_id)
-    client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
-
-    with client.session_transaction() as sess:
-        sess["admin"] = True
-    r = client.post(f"/admin/election/{election_id}/count/1/cancel")
-    assert r.status_code == 200
-
-    # Restore voter session
-    with client.session_transaction() as sess:
-        sess["used_code"] = codes[0]
-        sess["election_id"] = election_id
-        sess.pop("admin", None)
-    r = client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
-    assert r.status_code == 403
-
-
 # ---------------------------------------------------------------------------
 # Soft / hard reset integration (Task 13)
 # ---------------------------------------------------------------------------

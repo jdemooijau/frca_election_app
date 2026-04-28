@@ -191,10 +191,10 @@
     <form method="POST" action="{{ url_for('count_join') }}" style="margin-bottom: 10px;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 16px;">
-            Assist with Paper Counting
+            Count Votes
         </button>
         <p style="font-size: 12px; color: #666; margin: 6px 0 0; text-align: center;">
-            Help count paper ballots from your phone.
+            Count paper ballots from your phone.
         </p>
     </form>
     {% endif %}

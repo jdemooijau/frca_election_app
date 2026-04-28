@@ -54,6 +54,8 @@ def parse_args():
                    help="Random seed for reproducible vote distributions")
     p.add_argument("--blank-rate", "-b", type=float, default=0.0,
                    help="Probability of a blank vote per office (default: 0.0)")
+    p.add_argument("--reserve", "-r", type=int, default=10,
+                   help="Leave this many votes uncast for manual paper entry (default: 10)")
     return p.parse_args()
 
 
@@ -299,15 +301,16 @@ def main():
     codes = load_unused_codes(args.db)
     expected = expected_digital_voters(display_data)
 
+    reserve = max(0, args.reserve)
     if expected is None:
-        cast_count = len(codes)
-        print(f"  Codes   : {len(codes)} unused (no attendance set — will cast all)")
+        cast_count = max(0, len(codes) - reserve)
+        print(f"  Codes   : {len(codes)} unused (no attendance set), reserving {reserve} for manual paper entry, will cast {cast_count}")
     elif expected >= len(codes):
-        cast_count = len(codes)
-        print(f"  Codes   : {len(codes)} unused, expected {expected} digital voters — will cast all")
+        cast_count = max(0, len(codes) - reserve)
+        print(f"  Codes   : {len(codes)} unused, expected {expected} digital voters, reserving {reserve} for manual paper entry, will cast {cast_count}")
     else:
-        cast_count = expected
-        print(f"  Codes   : {len(codes)} unused, but only {expected} digital voters expected — will cast {expected}")
+        cast_count = max(0, expected - reserve)
+        print(f"  Codes   : {len(codes)} unused, {expected} digital voters expected, reserving {reserve} for manual paper entry, will cast {cast_count}")
 
     if cast_count == 0:
         print("  Nothing to cast.")

@@ -394,7 +394,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     {% if election.voting_open %}
                     <button type="submit" class="btn btn-danger primary-cta"
-                            onclick="return confirm('Close voting for round {{ election.current_round }}?');">
+                            onclick="return closeVotingConfirm();">
                         Close Voting
                     </button>
                     {% else %}
@@ -410,6 +410,10 @@
                     {% endif %}
                 </form>
                 <a href="{{ url_for('display') }}" target="_blank" class="btn btn-outline btn-small">Open Display</a>
+                {% if election.paper_count_enabled %}
+                <a href="{{ url_for('admin_count_dashboard', election_id=election.id, round_no=election.current_round) }}"
+                   class="btn btn-outline btn-small">Paper Count Dashboard</a>
+                {% endif %}
             </div>
 
             {# Live tally per office #}
@@ -506,7 +510,7 @@
                 <a href="{{ url_for('admin_paper_votes', election_id=election.id) }}" class="btn btn-gold primary-cta">
                     Enter Paper Votes (per candidate)
                 </a>
-                {% if election.paper_count_enabled and not election.voting_open %}
+                {% if election.paper_count_enabled %}
                 <a href="{{ url_for('admin_count_dashboard', election_id=election.id, round_no=election.current_round) }}"
                    class="btn btn-outline">
                     Paper Count Dashboard
@@ -548,7 +552,7 @@
                             <th style="text-align: center;">Postal</th>
                             {% endif %}
                             <th style="text-align: right;">Total</th>
-                            {% if office_id in thresholds %}
+                            {% if office_id in thresholds and not election.voting_open %}
                             <th style="text-align: center;">Elected</th>
                             {% endif %}
                         </tr>
@@ -564,7 +568,7 @@
                         <td style="text-align: center;">{{ cand.postal }}</td>
                         {% endif %}
                         <td style="text-align: right; font-weight: 700;">{{ cand.total }}</td>
-                        {% if office_id in thresholds %}
+                        {% if office_id in thresholds and not election.voting_open %}
                         <td style="text-align: center;">
                             {% if cand.meets_threshold %}
                             <span style="color: var(--green); font-weight: 700;">ELECTED</span>
@@ -756,6 +760,14 @@
 
 {% block scripts %}
 <script>
+function closeVotingConfirm() {
+    {% if election.paper_count_enabled %}
+    if (!confirm('Close voting for round {{ election.current_round }}?\n\nIf co-counting is still in progress, go to the Paper Count Dashboard and persist the count before closing - that will automatically fill in the paper vote tally.')) return false;
+    {% else %}
+    if (!confirm('Close voting for round {{ election.current_round }}?\n\nRemember to enter the per-candidate paper vote tally under "Enter Paper Votes" before finalising.')) return false;
+    {% endif %}
+    return true;
+}
 function togglePhase(n) {
     var card = document.getElementById('phase-' + n);
     if (!card) return;

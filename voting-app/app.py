@@ -2036,6 +2036,23 @@ def admin_election_delete(election_id):
     db.execute("DELETE FROM postal_votes WHERE election_id = ?", (election_id,))
     db.execute("DELETE FROM codes WHERE election_id = ?", (election_id,))
     db.execute(
+        "DELETE FROM count_session_results WHERE session_id IN "
+        "(SELECT id FROM count_sessions WHERE election_id = ?)",
+        (election_id,)
+    )
+    db.execute(
+        "DELETE FROM count_session_tallies WHERE session_id IN "
+        "(SELECT id FROM count_sessions WHERE election_id = ?)",
+        (election_id,)
+    )
+    db.execute(
+        "DELETE FROM count_session_helpers WHERE session_id IN "
+        "(SELECT id FROM count_sessions WHERE election_id = ?)",
+        (election_id,)
+    )
+    db.execute("DELETE FROM count_sessions WHERE election_id = ?", (election_id,))
+    db.execute("DELETE FROM office_spoilt_ballots WHERE election_id = ?", (election_id,))
+    db.execute(
         "DELETE FROM candidates WHERE office_id IN (SELECT id FROM offices WHERE election_id = ?)",
         (election_id,)
     )
@@ -2895,12 +2912,17 @@ def count_tap(session_id):
             "WHERE session_id = ? AND helper_id = ? AND candidate_id = ?",
             (session_id, helper["id"], candidate_id)
         )
+    new_count = db.execute(
+        "SELECT count FROM count_session_tallies "
+        "WHERE session_id = ? AND helper_id = ? AND candidate_id = ?",
+        (session_id, helper["id"], candidate_id)
+    ).fetchone()["count"]
     db.execute(
         "UPDATE count_session_helpers SET last_seen_at = ? WHERE id = ?",
         (_now_iso(), helper["id"])
     )
     db.commit()
-    return ("", 200)
+    return jsonify({"count": new_count})
 
 
 @app.route("/count/<int:session_id>/done", methods=["POST"])
@@ -3202,6 +3224,20 @@ def admin_count_persist(election_id, round_no):
         )
         persisted_log[cid] = {"final": final_count, "source": source}
 
+    # Auto-populate paper_votes if none have been entered yet for this round
+    existing_paper_votes = db.execute(
+        "SELECT COUNT(*) as cnt FROM paper_votes WHERE election_id = ? AND round_number = ?",
+        (election_id, round_no)
+    ).fetchone()["cnt"]
+    if existing_paper_votes == 0:
+        for cid, info in persisted_log.items():
+            if info["final"] > 0:
+                db.execute(
+                    "INSERT INTO paper_votes (election_id, round_number, candidate_id, count) "
+                    "VALUES (?, ?, ?, ?)",
+                    (election_id, round_no, cid, info["final"])
+                )
+
     admin_id = session.get("admin_id")
     db.execute(
         "UPDATE count_sessions SET status = 'persisted', persisted_at = ?, "
@@ -3218,36 +3254,6 @@ def admin_count_persist(election_id, round_no):
     log_voter_audit(
         election_id, None, "paper_count_persisted",
         detail=f"persisted={persisted_log}, disregarded={disregarded}",
-        round_number=round_no
-    )
-    return ("", 200)
-
-
-@app.route("/admin/election/<int:election_id>/count/<int:round_no>/cancel", methods=["POST"])
-@admin_required
-@csrf.exempt
-def admin_count_cancel(election_id, round_no):
-    db = get_db()
-    sess = db.execute(
-        "SELECT * FROM count_sessions WHERE election_id = ? AND round_no = ?",
-        (election_id, round_no)
-    ).fetchone()
-    if sess is None:
-        return ("No session", 404)
-    if sess["status"] != "active":
-        return ("Session not active", 400)
-    helper_count = db.execute(
-        "SELECT COUNT(*) AS n FROM count_session_helpers WHERE session_id = ?",
-        (sess["id"],)
-    ).fetchone()["n"]
-    db.execute(
-        "UPDATE count_sessions SET status = 'cancelled', cancelled_at = ? WHERE id = ?",
-        (_now_iso(), sess["id"])
-    )
-    db.commit()
-    log_voter_audit(
-        election_id, None, "paper_count_cancelled",
-        detail=f"helpers={helper_count}",
         round_number=round_no
     )
     return ("", 200)

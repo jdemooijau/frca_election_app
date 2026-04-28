@@ -21,6 +21,7 @@
                     <button type="button" class="count-plus-btn" data-delta="1">
                         <span class="count-surname">{{ cand.name }}</span>
                     </button>
+                    <span class="count-val" id="count-val-{{ cand.id }}">0</span>
                     <button type="button" class="count-minus-btn" data-delta="-1" aria-label="minus 1">−1</button>
                 </li>
                 {% endfor %}
@@ -66,8 +67,16 @@
                 body: JSON.stringify({candidate_id: candidateId, delta: delta})
             });
             pulse(row, r.ok);
-            if (!r.ok) row.classList.add("count-row-error");
-            else row.classList.remove("count-row-error");
+            if (!r.ok) {
+                row.classList.add("count-row-error");
+            } else {
+                row.classList.remove("count-row-error");
+                const data = await r.json();
+                if (typeof data.count === "number") {
+                    const el = document.getElementById("count-val-" + candidateId);
+                    if (el) el.textContent = data.count;
+                }
+            }
         } catch (e) {
             pulse(row, false);
             row.classList.add("count-row-error");

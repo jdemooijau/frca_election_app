@@ -1130,7 +1130,7 @@ tr:nth-child(even) {
     overflow: hidden;
 }
 @media (orientation: portrait) {
-    .count-grid { grid-template-columns: 1fr; }
+    .count-grid { grid-template-columns: 1fr; grid-auto-rows: 1fr; }
 }
 .count-office {
     display: flex;
@@ -1154,6 +1154,8 @@ tr:nth-child(even) {
     flex: 1;
 }
 .count-candidate-row {
+    flex: 1;
+    min-height: 0;
     display: flex;
     align-items: stretch;
     gap: 4px;
@@ -1171,6 +1173,17 @@ tr:nth-child(even) {
 }
 .count-plus-btn:active {
     background: #e0e0e0;
+}
+.count-val {
+    flex-shrink: 0;
+    width: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--navy);
 }
 .count-minus-btn {
     width: 48px;
