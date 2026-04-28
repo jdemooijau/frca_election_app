@@ -1933,6 +1933,13 @@ def admin_soft_reset(election_id):
     db.execute("UPDATE elections SET voting_open = 0, show_results = 0, display_phase = 1 WHERE id = ?",
                (election_id,))
 
+    # Cancel any active count session for the current round
+    db.execute(
+        "UPDATE count_sessions SET status = 'cancelled', cancelled_at = ? "
+        "WHERE election_id = ? AND round_no = ? AND status = 'active'",
+        (_now_iso(), election_id, current_round)
+    )
+
     db.commit()
     flash(f"Soft reset complete. Round {current_round} votes cleared, codes restored. Postal votes and setup unchanged.", "success")
     return redirect(url_for("admin_election_manage", election_id=election_id))
@@ -1982,6 +1989,27 @@ def admin_hard_reset(election_id):
             "UPDATE candidates SET active = 1, elected = 0, elected_round = NULL, relieved = 0 WHERE office_id = ?",
             (office["id"],)
         )
+
+    # Wipe all count session data for this election
+    db.execute(
+        "DELETE FROM count_session_results WHERE session_id IN "
+        "(SELECT id FROM count_sessions WHERE election_id = ?)",
+        (election_id,)
+    )
+    db.execute(
+        "DELETE FROM count_session_tallies WHERE session_id IN "
+        "(SELECT id FROM count_sessions WHERE election_id = ?)",
+        (election_id,)
+    )
+    db.execute(
+        "DELETE FROM count_session_helpers WHERE session_id IN "
+        "(SELECT id FROM count_sessions WHERE election_id = ?)",
+        (election_id,)
+    )
+    db.execute(
+        "DELETE FROM count_sessions WHERE election_id = ?",
+        (election_id,)
+    )
 
     db.commit()
     flash("Hard reset complete. All votes, codes, and postal votes cleared. Candidates reactivated. Generate new codes before voting.", "success")

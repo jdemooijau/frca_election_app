@@ -575,3 +575,50 @@ def test_cancel_marks_session_and_blocks_taps(client):
         sess.pop("admin", None)
     r = client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
     assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Soft / hard reset integration (Task 13)
+# ---------------------------------------------------------------------------
+
+def test_soft_reset_cancels_active_count_session(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    sid = _join_count(client, election_id, codes[0])
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    r = client.post(
+        f"/admin/election/{election_id}/soft-reset",
+        data={"confirm_text": "RESET", "password": "admin"},
+    )
+    assert r.status_code in (200, 302)
+    with app.app_context():
+        s = get_db().execute(
+            "SELECT * FROM count_sessions WHERE election_id = ?", (election_id,)
+        ).fetchone()
+        assert s["status"] == "cancelled"
+
+
+def test_hard_reset_deletes_count_data(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    sid = _join_count(client, election_id, codes[0])
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    r = client.post(
+        f"/admin/election/{election_id}/hard-reset",
+        data={"confirm_text": "HARD RESET", "password": "admin"},
+    )
+    assert r.status_code in (200, 302)
+    with app.app_context():
+        n_sess = get_db().execute(
+            "SELECT COUNT(*) AS n FROM count_sessions WHERE election_id = ?",
+            (election_id,)
+        ).fetchone()["n"]
+        n_helpers = get_db().execute(
+            "SELECT COUNT(*) AS n FROM count_session_helpers"
+        ).fetchone()["n"]
+        assert n_sess == 0
+        assert n_helpers == 0
