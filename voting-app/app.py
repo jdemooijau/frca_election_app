@@ -2711,8 +2711,66 @@ def count_join():
 
 @app.route("/count/<int:session_id>")
 def count_helper_page(session_id):
-    """Helper grid. Filled in by Task 4."""
-    return ("Helper page placeholder", 200)
+    code = session.get("used_code")
+    if not code:
+        return redirect(url_for("voter_enter_code"))
+    db = get_db()
+    sess = db.execute("SELECT * FROM count_sessions WHERE id = ?", (session_id,)).fetchone()
+    if not sess:
+        abort(404)
+    helper = db.execute(
+        "SELECT * FROM count_session_helpers WHERE session_id = ? AND voter_code = ?",
+        (session_id, code)
+    ).fetchone()
+    if not helper:
+        # Voter is not a helper in this session; bounce to voter entry.
+        return redirect(url_for("voter_enter_code"))
+
+    # Determine end-state to render
+    if sess["status"] == "persisted":
+        return render_template("voter/count_helper.html",
+                               state="thanks", helper=helper, sess=sess)
+    if sess["status"] == "cancelled":
+        return render_template("voter/count_helper.html",
+                               state="cancelled", helper=helper, sess=sess)
+    if helper["marked_done_at"]:
+        return render_template("voter/count_helper.html",
+                               state="thanks", helper=helper, sess=sess)
+
+    # Active state: build candidate list grouped by office
+    offices = db.execute(
+        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
+        (sess["election_id"],)
+    ).fetchall()
+    candidates_by_office = {}
+    for office in offices:
+        candidates_by_office[office["id"]] = db.execute(
+            "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
+            (office["id"],)
+        ).fetchall()
+    return render_template(
+        "voter/count_helper.html",
+        state="active",
+        helper=helper,
+        sess=sess,
+        offices=offices,
+        candidates_by_office=candidates_by_office
+    )
+
+
+@app.route("/count/<int:session_id>/tap", methods=["POST"])
+def count_tap(session_id):
+    return ("Not implemented", 501)
+
+
+@app.route("/count/<int:session_id>/done", methods=["POST"])
+def count_done(session_id):
+    return ("Not implemented", 501)
+
+
+@app.route("/count/<int:session_id>/heartbeat", methods=["GET"])
+def count_heartbeat(session_id):
+    return ("Not implemented", 501)
 
 
 # ---------------------------------------------------------------------------

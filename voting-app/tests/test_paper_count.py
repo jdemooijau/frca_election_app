@@ -182,3 +182,24 @@ def test_count_join_blocked_when_disabled(client):
         sess["election_id"] = election_id
     resp = client.post("/count/join")
     assert resp.status_code in (400, 403)
+
+
+def test_count_helper_page_shows_candidates(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")  # USE THE CORRECT ROUTE
+    client.post(f"/admin/election/{election_id}/voting")
+    with client.session_transaction() as sess:
+        sess["used_code"] = codes[0]
+        sess["election_id"] = election_id
+    join_resp = client.post("/count/join")
+    assert join_resp.status_code == 302
+    helper_resp = client.get(join_resp.headers["Location"])
+    assert helper_resp.status_code == 200
+    body = helper_resp.get_data(as_text=True)
+    # Header shows last 6 chars of code
+    assert codes[0][-6:].upper() in body
+    # Candidates appear (surnames only)
+    assert "Smith" in body
+    assert "Jones" in body
+    # The −1 pill text appears at least once per candidate
+    assert body.count("−1") >= 4
