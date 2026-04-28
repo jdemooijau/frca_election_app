@@ -56,8 +56,13 @@
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12 7 12 12 15.5 14"/>
         </svg>
-        <h2 style="font-size: 24px; color: var(--navy); margin: 0 0 8px 0;">You're connected{% if wifi_ssid %} to {{ wifi_ssid }}{% endif %}.</h2>
-        <p style="color: #444; margin: 0 0 24px 0; font-size: 16px;">Voting hasn't started yet.</p>
+        <h2 style="font-size: 24px; color: var(--navy); margin: 0 0 16px 0;">You're connected{% if wifi_ssid %} to {{ wifi_ssid }}{% endif %}.</h2>
+        <div style="background: #FFFAF0; border-left: 4px solid var(--gold);
+                    padding: 14px 18px; border-radius: 6px; text-align: left;
+                    color: var(--navy); font-size: 15px; line-height: 1.45;
+                    font-weight: 600; margin-bottom: 12px;">
+            If you have not yet signed the attendance register, please do so now.
+        </div>
         <div style="background: var(--grey-light); border-left: 4px solid var(--gold);
                     padding: 16px 20px; border-radius: 6px; text-align: left;
                     color: #444; font-size: 15px; line-height: 1.5;">

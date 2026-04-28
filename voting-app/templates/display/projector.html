@@ -305,11 +305,13 @@
                 <div class="display-candidate" style="border-top: 2px solid var(--gold); margin-top: 4px; padding-top: 8px;">
                     <span class="name" style="font-weight: 700;">Total</span>
                     <span class="votes">
-                        {{ office.votes_cast + blank + spoilt_slots }}
-                        {% if office.votes_cast + blank + spoilt_slots == possible %}
-                        <span style="color: var(--green); margin-left: 6px;">&#10003;</span>
-                        {% elif office.votes_cast > possible %}
+                        {% if office.votes_cast > possible %}
+                        <span style="color: var(--red); font-weight: 700;">{{ office.votes_cast }}</span>
+                        <span style="font-size: 0.7em; color: var(--grey-dark);"> / {{ possible }} max</span>
                         <span style="color: var(--red); margin-left: 6px;">&#10007;</span>
+                        {% else %}
+                        {{ office.votes_cast + blank + spoilt_slots }}
+                        <span style="color: var(--green); margin-left: 6px;">&#10003;</span>
                         {% endif %}
                     </span>
                 </div>
@@ -370,11 +372,13 @@
                 <div class="display-candidate" style="border-top: 2px solid var(--gold); margin-top: 4px; padding-top: 8px;">
                     <span class="name" style="font-weight: 700;">Total</span>
                     <span class="votes">
-                        {{ office.votes_cast + blank + spoilt_slots }}
-                        {% if office.votes_cast + blank + spoilt_slots == possible %}
-                        <span style="color: var(--green); margin-left: 6px;">&#10003;</span>
-                        {% elif office.votes_cast > possible %}
+                        {% if office.votes_cast > possible %}
+                        <span style="color: var(--red); font-weight: 700;">{{ office.votes_cast }}</span>
+                        <span style="font-size: 0.7em; color: var(--grey-dark);"> / {{ possible }} max</span>
                         <span style="color: var(--red); margin-left: 6px;">&#10007;</span>
+                        {% else %}
+                        {{ office.votes_cast + blank + spoilt_slots }}
+                        <span style="color: var(--green); margin-left: 6px;">&#10003;</span>
                         {% endif %}
                     </span>
                 </div>
@@ -600,13 +604,20 @@
                             html += '</div>';
                         }
                         if (possible > 0) {
-                            var total = vc + Math.max(blank, 0) + spoiltSlots;
-                            var tick = '';
-                            if (total === possible) tick = ' <span style="color:#27AE60;margin-left:6px">&#10003;</span>';
-                            else if (vc > possible) tick = ' <span style="color:#C0392B;margin-left:6px">&#10007;</span>';
                             html += '<div class="display-candidate" style="border-top:2px solid #D4A843;margin-top:4px;padding-top:8px">';
                             html += '<span class="name" style="font-weight:700">Total</span>';
-                            html += '<span class="votes">' + total + tick + '</span>';
+                            if (vc > possible) {
+                                html += '<span class="votes">' +
+                                    '<span style="color:#C0392B;font-weight:700">' + vc + '</span>' +
+                                    '<span style="font-size:0.7em;color:#666"> / ' + possible + ' max</span>' +
+                                    ' <span style="color:#C0392B;margin-left:6px">&#10007;</span>' +
+                                    '</span>';
+                            } else {
+                                var total = vc + Math.max(blank, 0) + spoiltSlots;
+                                html += '<span class="votes">' + total +
+                                    ' <span style="color:#27AE60;margin-left:6px">&#10003;</span>' +
+                                    '</span>';
+                            }
                             html += '</div>';
                         }
                     }

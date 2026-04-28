@@ -7,21 +7,23 @@
     <a href="{{ url_for('admin_election_manage', election_id=election.id) }}">Back</a>
 </div>
 
-<div class="container">
-    <p style="margin: 16px 0; color: #666;">
-        Tick the candidates from each postal letter, then press <strong>Record Letter</strong>.
-        When finished, press <strong>Apply to Postal Votes</strong> to transfer the tallied totals.
-    </p>
-
-    <div style="background: var(--navy); color: var(--white); padding: 16px; border-radius: var(--border-radius); text-align: center; margin-bottom: 24px;">
-        <div style="font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Letters Processed</div>
-        <div id="letter-count" style="font-size: 48px; font-weight: 700;">0</div>
+<div class="container-wide postal-tally">
+    <div class="postal-tally-topbar">
+        <p style="margin: 0; color: #666; flex: 1; min-width: 240px;">
+            Tick candidates from each postal letter, then press <strong>Record Letter</strong>.
+            When finished, press <strong>Apply to Postal Votes</strong>.
+        </p>
+        <div class="postal-letter-counter">
+            <div class="postal-letter-counter-label">Letters Processed</div>
+            <div id="letter-count" class="postal-letter-counter-value">0</div>
+        </div>
     </div>
 
-    <!-- Ballot area -->
+    <!-- Ballot area: offices side by side -->
+    <div class="postal-office-grid">
     {% for item in office_candidates %}
     {% if item.candidates %}
-    <div class="ballot-office" data-office-id="{{ item.office.id }}" data-max="{{ item.office.max_selections }}">
+    <div class="ballot-office postal-office-card" data-office-id="{{ item.office.id }}" data-max="{{ item.office.max_selections }}">
         <h2 class="ballot-office-title">{{ item.office.name }}</h2>
         <p class="ballot-max-notice">
             Select {{ item.office.max_selections }}
@@ -29,46 +31,29 @@
         </p>
 
         {% for cand in item.candidates %}
-        <label class="ballot-option" for="tally_{{ cand.id }}">
+        <label class="ballot-option postal-ballot-option" for="tally_{{ cand.id }}">
             <input type="checkbox"
                    id="tally_{{ cand.id }}"
                    class="tally-checkbox"
                    data-office-id="{{ item.office.id }}"
                    data-cand-id="{{ cand.id }}">
             <span class="ballot-option-text">{{ cand.name }}</span>
+            <span class="postal-cand-count" id="count_{{ cand.id }}">0</span>
         </label>
         {% endfor %}
     </div>
     {% endif %}
     {% endfor %}
-
-    <button type="button" id="btn-record" class="btn btn-primary" style="width: 100%; font-size: 22px; padding: 16px;">
-        Record Letter
-    </button>
-
-    <!-- Running tally -->
-    <div id="tally-summary" style="margin-top: 32px;">
-        <h2 style="margin-bottom: 16px;">Running Tally</h2>
-        {% for item in office_candidates %}
-        {% if item.candidates %}
-        <div class="card">
-            <div class="card-header">{{ item.office.name }}</div>
-            <table style="width: 100%; font-size: 18px;">
-                {% for cand in item.candidates %}
-                <tr>
-                    <td style="padding: 8px 0;">{{ cand.name }}</td>
-                    <td id="count_{{ cand.id }}" style="text-align: right; font-weight: 700; padding: 8px 0; font-size: 22px;">0</td>
-                </tr>
-                {% endfor %}
-            </table>
-        </div>
-        {% endif %}
-        {% endfor %}
     </div>
 
-    <a id="btn-apply" class="btn btn-gold" style="display: block; width: 100%; text-align: center; font-size: 20px; padding: 16px; margin-top: 24px;">
-        Apply to Postal Votes
-    </a>
+    <div class="postal-tally-actions">
+        <button type="button" id="btn-record" class="btn btn-primary" style="font-size: 20px; padding: 14px;">
+            Record Letter
+        </button>
+        <a id="btn-apply" class="btn btn-gold" style="font-size: 18px; padding: 14px;">
+            Apply to Postal Votes
+        </a>
+    </div>
 </div>
 {% endblock %}
 

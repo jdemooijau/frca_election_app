@@ -7,50 +7,50 @@
     <a href="{{ url_for('admin_election_manage', election_id=election.id) }}">Back</a>
 </div>
 
-<div class="container">
+<div class="container-wide">
     {% if locked %}
     <div class="flash flash-info">
-        Postal votes are locked — voting has started or a subsequent round is in progress.
+        Postal votes are locked - voting has started or a subsequent round is in progress.
         These totals are read-only.
     </div>
     {% endif %}
 
-    <p style="margin: 16px 0; color: #666;">
-        Enter the aggregate postal vote totals from letters received by the secretary of council.
-        Postal votes apply to round 1 only and must be entered before voting opens.
-    </p>
-
     <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-        <div class="form-group">
-            <label for="postal_voter_count">Total Brothers Submitting Postal Votes</label>
-            <input type="number" id="postal_voter_count" name="postal_voter_count"
-                   value="{{ election.postal_voter_count or 0 }}" min="0"
-                   style="font-size: 24px; text-align: center;"
-                   {% if locked %}disabled{% endif %}>
-            <p style="font-size: 14px; color: #666; margin-top: 4px;">
-                This count is added to the in-person participant count for Article 6b threshold.
+        <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin: 12px 0 16px;">
+            <p style="margin:0; color:#666; flex:1; min-width:240px;">
+                Enter aggregate postal vote totals from letters received by the secretary of council.
+                Round 1 only, before voting opens.
             </p>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <label for="postal_voter_count" style="margin:0; font-size:14px;">Brothers submitting</label>
+                <input type="number" id="postal_voter_count" name="postal_voter_count"
+                       value="{{ election.postal_voter_count or 0 }}" min="0"
+                       style="width:90px; font-size:20px; text-align:center; padding:6px;"
+                       {% if locked %}disabled{% endif %}>
+            </div>
         </div>
 
+        <div class="postal-office-grid">
         {% for item in office_candidates %}
-        <div class="card" data-max="{{ item.office.max_selections }}">
-            <div class="card-header">{{ item.office.name }}</div>
+        <div class="postal-office-card" data-max="{{ item.office.max_selections }}">
+            <div class="card-header" style="margin-bottom:8px; padding-bottom:6px; font-size:18px;">{{ item.office.name }}</div>
             {% for cand in item.candidates %}
-            <div class="form-group">
-                <label for="postal_{{ cand.id }}">{{ cand.name }}</label>
+            <div style="display:flex; align-items:center; gap:10px; padding:4px 0; border-bottom:1px solid #f0f0f0;">
+                <label for="postal_{{ cand.id }}" style="flex:1; margin:0; font-weight:500; font-size:15px;">{{ cand.name }}</label>
                 <input type="number" id="postal_{{ cand.id }}" name="postal_{{ cand.id }}"
                        value="{{ cand.postal_count }}" min="0"
-                       style="font-size: 20px; text-align: center;"
+                       style="width:70px; font-size:18px; text-align:center; padding:6px;"
                        {% if locked %}disabled{% endif %}>
             </div>
             {% endfor %}
         </div>
         {% endfor %}
+        </div>
 
         {% if not locked %}
-        <button type="submit" class="btn btn-primary">Save Postal Votes</button>
+        <button type="submit" class="btn btn-primary" style="margin-top:16px;">Save Postal Votes</button>
         {% endif %}
     </form>
 </div>

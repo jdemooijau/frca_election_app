@@ -219,20 +219,29 @@ def _capture_all():
             page.wait_for_load_state("networkidle")
             print("  -> advanced to Election Rules")
 
-        next_open = page.locator('button:has-text("Next: Open Voting")')
-        if next_open.count() > 0:
-            next_open.click()
+        # The single open-round button now lives in the Round N card.
+        # First expand it (it's collapsed when active_phase != 3), then click.
+        phase3_header = page.locator('#phase-3 > header')
+        if phase3_header.count() > 0:
+            body = page.locator('#phase-3 .body')
+            if body.count() > 0 and body.first.evaluate('el => el.hasAttribute("hidden")'):
+                phase3_header.first.click()
+                page.wait_for_timeout(150)
+
+        open_round = page.locator('#phase-3 button:has-text("Open Round")')
+        if open_round.count() > 0:
+            open_round.first.click()
             page.wait_for_load_state("networkidle")
-            print("  -> opened voting")
+            print("  -> opened round")
         else:
-            # Fallback: open via the Phase 3 form (when display_phase already 3)
-            ov = page.locator('button:has-text("Open Voting")').first
-            if ov.count() > 0:
-                ov.click()
+            # Legacy fallback in case the round button isn't found.
+            legacy = page.locator('button:has-text("Open Voting")').first
+            if legacy.count() > 0:
+                legacy.click()
                 page.wait_for_load_state("networkidle")
-                print("  -> opened voting via fallback")
+                print("  -> opened voting via legacy fallback")
             else:
-                print("  !! could not find an 'Open Voting' button — voting may not be open")
+                print("  !! could not find an 'Open Round' button - voting may not be open")
         shot(page, "12_manage_voting_open")
 
         # 9. Voter enter code (mobile)
@@ -299,9 +308,12 @@ def _capture_all():
         page.wait_for_load_state("networkidle")
         shot(page, "18_manage_votes_live")
 
-        # Close voting (accept the confirm() dialog)
-        page.on("dialog", lambda d: d.accept())
-        page.click('button:has-text("Close Voting")')
+        # Close voting (accept the confirm() dialog). The button is now
+        # labelled "Close Round N" and lives in the Round N - Voting card.
+        close_btn = page.locator('#phase-3 button:has-text("Close Round")').first
+        if close_btn.count() == 0:
+            close_btn = page.locator('button:has-text("Close Voting")').first
+        close_btn.click()
         page.wait_for_load_state("networkidle")
 
         shot(page, "19_manage_results_closed")

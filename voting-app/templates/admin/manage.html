@@ -305,16 +305,24 @@
                     just now, enter it here <em>before</em> opening voting — postal
                     votes that arrive after voting opens cannot be added.
                 </p>
-                <a href="{{ url_for('admin_postal_votes', election_id=election.id) }}"
-                   class="btn btn-outline btn-small">
-                    {% if postal_voter_count > 0 %}Add or adjust postal votes{% else %}Enter postal votes{% endif %}
-                </a>
+                <div class="btn-row">
+                    <a href="{{ url_for('admin_postal_votes', election_id=election.id) }}"
+                       class="btn btn-outline btn-small">
+                        {% if postal_voter_count > 0 %}Add or adjust postal votes{% else %}Enter postal votes{% endif %}
+                    </a>
+                    <a href="{{ url_for('admin_postal_tally', election_id=election.id) }}"
+                       class="btn btn-outline btn-small">Postal Tally Helper</a>
+                </div>
             </div>
 
-            {# ===== STEP 3: ADVANCE PROJECTOR + OPEN VOTING ===== #}
+            {# ===== STEP 3: WALK PROJECTOR THROUGH WELCOME → RULES ===== #}
             <h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Step 3 — Projector display</h3>
+            <p style="font-size: 13px; color: #555; margin: 0 0 8px;">
+                Walk the projector through Welcome and Election Rules with the
+                meeting. When ready, open the round in <em>Round {{ election.current_round }} — Voting</em> below.
+            </p>
             <div style="display: flex; align-items: center; gap: 0; margin-bottom: 12px;">
-                {% set proj_phases = [(1, "Welcome"), (2, "Election Rules"), (3, "Voting")] %}
+                {% set proj_phases = [(1, "Welcome"), (2, "Election Rules")] %}
                 {% for num, label in proj_phases %}
                 <div style="flex: 1; text-align: center; padding: 8px 4px; font-size: 13px; font-weight: 600;
                             {{ 'background: var(--navy); color: var(--white);' if phase == num else 'background: var(--grey-light); color: #999;' }}
@@ -326,36 +334,24 @@
             </div>
 
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 4px;">
-                {% if phase > 1 %}
+                {% if phase == 2 %}
                 <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="direction" value="prev">
-                    <button type="submit" class="btn btn-outline btn-small">&larr; Back</button>
+                    <button type="submit" class="btn btn-outline btn-small">&larr; Back to Welcome</button>
                 </form>
                 {% endif %}
-                {% if phase < 3 %}
+                {% if phase < 2 %}
                 <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=election.id) }}" class="inline-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="direction" value="next">
-                    {% if phase == 1 %}
                     <button type="submit" class="btn btn-gold primary-cta">Next: Election Rules &rarr;</button>
-                    {% elif phase == 2 %}
-                    <button type="submit" class="btn btn-success primary-cta"
-                            {% if attendance_missing %}disabled title="Set attendance under Step 1 first"{% else %}onclick="return confirm('Open voting for round {{ election.current_round }}?');"{% endif %}>
-                        Next: Open Voting &rarr;
-                    </button>
-                    {% endif %}
                 </form>
                 {% endif %}
                 <a href="{{ url_for('display') }}" target="_blank" class="btn btn-outline btn-small" style="margin-left: auto;">
                     Open Display
                 </a>
             </div>
-            {% if attendance_missing and phase == 2 %}
-            <p style="margin: 8px 0 0; font-size: 13px; color: #C0392B; font-weight: 600;">
-                &#9888; Attendance is still 0. Set it under Step 1 above before opening voting.
-            </p>
-            {% endif %}
         </div>
     </div>
 
@@ -370,6 +366,37 @@
             <span class="state">{{ phase_summary[3] }}</span>
         </header>
         <div class="body" {% if p3_state != 'active' %}hidden{% endif %}>
+            {# ===== Single open/close round button (source of truth) ===== #}
+            <div style="margin-bottom: 14px;">
+                <form method="POST" action="{{ url_for('admin_toggle_voting', election_id=election.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if election.voting_open %}
+                    <button type="submit" class="btn btn-danger primary-cta"
+                            onclick="return closeVotingConfirm();">
+                        Close Round {{ election.current_round }}
+                    </button>
+                    {% else %}
+                    <button type="submit" class="btn btn-success primary-cta"
+                            {% if attendance_missing %}disabled title="Set attendance under Step 1 first"{% else %}onclick="return confirm('{% if voting_ever_opened %}Re-open{% else %}Open{% endif %} round {{ election.current_round }}?');"{% endif %}>
+                        {% if voting_ever_opened %}Re-open Round {{ election.current_round }}{% else %}Open Round {{ election.current_round }}{% endif %}
+                    </button>
+                    {% endif %}
+                </form>
+                {% if not election.voting_open and attendance_missing %}
+                <p style="margin: 8px 0 0; font-size: 13px; color: #C0392B; font-weight: 600;">
+                    &#9888; Attendance is still 0. Set it under Step 1 (Opening the meeting) above before opening the round.
+                </p>
+                {% endif %}
+            </div>
+
+            {% if not voting_ever_opened %}
+            <p style="font-size: 14px; color: #555; margin: 0;">
+                Walk the projector through <strong>Welcome</strong> and
+                <strong>Election Rules</strong> in <em>Opening the meeting</em>
+                above, then click <strong>Open Round {{ election.current_round }}</strong>
+                to start voting.
+            </p>
+            {% else %}
             <div class="phase-status-strip" style="margin-bottom: 14px;">
                 <span>Ballots received: <strong>{{ total_ballots }}</strong></span>
                 <span>&middot;</span>
@@ -390,17 +417,6 @@
             {% endif %}
 
             <div class="btn-row" style="flex-wrap: wrap; margin-bottom: 14px;">
-                <form method="POST" action="{{ url_for('admin_toggle_voting', election_id=election.id) }}" class="inline-form">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    {% if election.voting_open %}
-                    <button type="submit" class="btn btn-danger primary-cta"
-                            onclick="return closeVotingConfirm();">
-                        Close Voting
-                    </button>
-                    {% else %}
-                    <button type="submit" class="btn btn-success btn-small">Open Voting</button>
-                    {% endif %}
-                </form>
                 <form method="POST" action="{{ url_for('admin_toggle_results', election_id=election.id) }}" class="inline-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     {% if election.show_results %}
@@ -457,6 +473,33 @@
                     </tr>
                     {% endif %}
                     {% endfor %}
+                    {% set office_max = item.office.max_selections or 1 %}
+                    {% set office_possible = total_ballots * office_max %}
+                    {% set office_sum = item.candidates | selectattr('active') | sum(attribute='total') %}
+                    {% if office_possible > 0 %}
+                    <tr style="border-top: 2px solid var(--gold);">
+                        <td style="font-weight: 700;">Total</td>
+                        <td style="text-align: right; font-weight: 700;">
+                            {% if office_sum > office_possible %}
+                            <span style="color: var(--red);">{{ office_sum }}</span>
+                            <span style="font-size: 0.85em; color: var(--grey-dark);"> / {{ office_possible }} max</span>
+                            <span style="color: var(--red); margin-left: 4px;">&#10007;</span>
+                            {% else %}
+                            {{ office_sum }} <span style="color: var(--green);">&#10003;</span>
+                            {% endif %}
+                        </td>
+                        {% if office_id in thresholds %}<td colspan="2"></td>{% endif %}
+                    </tr>
+                    {% if office_sum > office_possible %}
+                    <tr>
+                        <td colspan="{% if office_id in thresholds %}4{% else %}2{% endif %}"
+                            style="font-size: 12px; color: var(--red); padding-top: 4px;">
+                            &#9888; Vote total exceeds {{ total_ballots }} ballots × {{ office_max }} selections.
+                            Recount paper ballots and re-enter under <em>Enter Paper Votes</em>.
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endif %}
                     </tbody>
                 </table>
             </div>
@@ -469,12 +512,14 @@
                     View voter audit log &rarr;
                 </a>
             </p>
+            {% endif %}{# voting_ever_opened (inner) #}
         </div>
     </div>
 
     <!-- =================================================================
          PHASE 4 — Round N — Counting & decide
          ================================================================= -->
+    {% if voting_ever_opened %}
     {% set p4_state = 'active' if active_phase == 4 else ('done' if phase_done[4] else 'pending') %}
     <div class="phase-card {{ p4_state }}" id="phase-4">
         <header onclick="togglePhase(4)">
@@ -631,6 +676,7 @@
             {% endif %}
         </div>
     </div>
+    {% endif %}{# voting_ever_opened #}
 
     <!-- =================================================================
          PHASE 5 — Final results

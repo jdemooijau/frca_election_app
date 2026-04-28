@@ -172,6 +172,17 @@
         box-sizing: border-box;
         margin-top: 16px;
     }
+    .attendance-notice {
+        background: #FFFAF0;
+        border-left: 4px solid var(--gold);
+        color: var(--navy);
+        padding: 10px 12px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        font-size: 14px;
+        line-height: 1.35;
+        font-weight: 600;
+    }
 </style>
 {% endblock %}
 
@@ -185,6 +196,12 @@
                 {{ "OPEN" if election.voting_open else "CLOSED" }}
             </span>
         </div>
+    </div>
+
+    {% set _phase = election.display_phase or 1 %}
+    <div class="attendance-notice" id="attendance-notice"
+         style="{% if _phase >= 3 %}display:none;{% endif %}">
+        If you have not yet signed the attendance register, please do so now.
     </div>
 
     {% if show_assist %}
@@ -305,6 +322,12 @@
             if (status) {
                 status.textContent = data.voting_open ? 'OPEN' : 'CLOSED';
                 status.className = 'status ' + (data.voting_open ? 'open' : 'closed');
+            }
+
+            var notice = document.getElementById('attendance-notice');
+            if (notice) {
+                var phase = data.display_phase || 1;
+                notice.style.display = (phase < 3) ? '' : 'none';
             }
 
             var anomaly = document.getElementById('ballot-anomaly');

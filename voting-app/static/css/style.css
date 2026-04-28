@@ -1107,6 +1107,7 @@ tr:nth-child(even) {
     padding: 6px 8px;
     box-sizing: border-box;
     height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
 }
@@ -1114,19 +1115,35 @@ tr:nth-child(even) {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 13px;
+    gap: 8px;
+    font-size: 12px;
     color: #666;
-    padding: 0 4px 4px;
+    padding: 2px 4px 4px;
+    flex-shrink: 0;
 }
-.count-helper-id {
-    font-family: monospace;
-    letter-spacing: 1px;
+.count-helper-header .btn {
+    min-height: 0;
+    padding: 4px 12px;
+    font-size: 13px;
+    line-height: 1.2;
+}
+.count-helper-hint {
+    flex: 1;
+    background: #d8f3d8;
+    color: #1d6d1d;
+    border: 1px solid #b7e3b7;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
 }
 .count-grid {
     flex: 1;
+    min-height: 0;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    gap: 6px;
     overflow: hidden;
 }
 @media (orientation: portrait) {
@@ -1135,14 +1152,16 @@ tr:nth-child(even) {
 .count-office {
     display: flex;
     flex-direction: column;
+    min-height: 0;
     overflow: hidden;
 }
 .count-office-title {
-    font-size: 12px;
+    font-size: 11px;
     color: #888;
-    margin: 0 0 4px;
+    margin: 0 0 3px;
     text-align: center;
     letter-spacing: 1px;
+    flex-shrink: 0;
 }
 .count-candidate-list {
     list-style: none;
@@ -1150,8 +1169,10 @@ tr:nth-child(even) {
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
     flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 .count-candidate-row {
     flex: 1;
@@ -1164,19 +1185,34 @@ tr:nth-child(even) {
 .count-plus-btn {
     flex: 1;
     text-align: left;
-    background: #f4f4f4;
-    border: 1px solid #ddd;
+    background: #d8f3d8;
+    border: 1px solid #8bc78b;
     border-radius: 6px;
-    padding: 10px 12px;
+    padding: 6px 10px;
+    font-family: inherit;
     font-size: 16px;
+    line-height: 1.2;
+    color: #1d6d1d;
+    font-weight: 600;
     cursor: pointer;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .count-plus-btn:active {
-    background: #e0e0e0;
+    background: #b7e3b7;
+}
+.count-surname {
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 1.2;
+    font-weight: 600;
+    color: #1d6d1d;
 }
 .count-val {
     flex-shrink: 0;
-    width: 42px;
+    width: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1184,12 +1220,17 @@ tr:nth-child(even) {
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     color: var(--navy);
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
 }
 .count-minus-btn {
     width: 48px;
     background: #fdecec;
     border: 1px solid #f0c4c4;
     color: #b52424;
+    font-family: inherit;
+    font-size: 16px;
     font-weight: 700;
     border-radius: 6px;
     cursor: pointer;
@@ -1300,6 +1341,90 @@ tr:nth-child(even) {
     font-size: 13px;
 }
 .count-persist-mismatch { background: #fff3d8; }
+
+/* ============================================================
+   Postal vote tally (admin)
+   ============================================================ */
+.postal-tally-topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 12px 0 16px;
+    flex-wrap: wrap;
+}
+.postal-letter-counter {
+    background: var(--navy);
+    color: var(--white);
+    padding: 8px 20px;
+    border-radius: var(--border-radius);
+    text-align: center;
+    min-width: 160px;
+}
+.postal-letter-counter-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.postal-letter-counter-value {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.1;
+}
+.postal-office-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.postal-office-card {
+    margin-bottom: 0;
+    border: 1px solid var(--grey);
+    border-radius: var(--border-radius);
+    padding: 12px 14px;
+    background: var(--white);
+}
+.postal-office-card .ballot-office-title {
+    font-size: 18px;
+    margin-bottom: 2px;
+}
+.postal-office-card .ballot-max-notice {
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+.postal-ballot-option {
+    min-height: 40px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    gap: 8px;
+}
+.postal-ballot-option .ballot-option-text {
+    font-size: 15px;
+    flex: 1;
+}
+.postal-ballot-option input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    margin-right: 8px;
+}
+.postal-cand-count {
+    min-width: 28px;
+    text-align: right;
+    font-weight: 700;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+    color: var(--navy);
+}
+.postal-tally-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.postal-tally-actions .btn {
+    flex: 1;
+    width: auto;
+    min-width: 200px;
+}
 .count-end-banner {
     padding: 8px 12px;
     background: #eee;

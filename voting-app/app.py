@@ -1074,8 +1074,11 @@ def admin_toggle_voting(election_id):
             (election_id,)
         )
     else:
+        # Opening voting must also bring the projector to phase 3.
+        # Voters key off (voting_open AND display_phase >= 3); leaving phase
+        # at 1 or 2 would set voting_open without voters seeing the code form.
         db.execute(
-            "UPDATE elections SET voting_open = 1 WHERE id = ?",
+            "UPDATE elections SET voting_open = 1, display_phase = 3 WHERE id = ?",
             (election_id,)
         )
     db.commit()
@@ -1349,20 +1352,27 @@ def admin_election_manage(election_id):
     if election["voting_open"] and display_phase != 4:
         election_complete = False
 
+    voting_ever_opened = (
+        current_round > 1 or display_phase >= 3 or total_ballots_round > 0
+    )
+
     if election_complete or display_phase == 4:
         active_phase = 5
     elif election["voting_open"]:
         active_phase = 3
     elif total_ballots_round > 0 or election["show_results"]:
         active_phase = 4
+    elif (
+        in_person_participants > 0
+        and display_phase >= 2
+        and not voting_ever_opened
+    ):
+        # Attendance set + projector reached Rules - ready to Open Round.
+        active_phase = 3
     elif display_phase in (1, 2):
         active_phase = 2
     else:
         active_phase = 1
-
-    voting_ever_opened = (
-        current_round > 1 or display_phase >= 3 or total_ballots_round > 0
-    )
     next_round_started = active_phase == 5 or current_round > 1
 
     phase_done = {
@@ -1384,12 +1394,16 @@ def admin_election_manage(election_id):
             else "Welcome → Rules → Voting"
         ),
         3: (
-            f"Round {current_round} closed — {total_ballots_round} ballots received"
+            f"Round {current_round} closed - {total_ballots_round} ballots received"
             if not election["voting_open"] and total_ballots_round > 0
             else (
                 f"Round {current_round} voting open"
                 if election["voting_open"]
-                else "Voting not yet opened"
+                else (
+                    f"Ready to open round {current_round}"
+                    if active_phase == 3
+                    else "Voting not yet opened"
+                )
             )
         ),
         4: (
@@ -1422,6 +1436,7 @@ def admin_election_manage(election_id):
         phase_summary=phase_summary,
         election_complete=election_complete,
         elected_summary_by_office=elected_summary_by_office,
+        voting_ever_opened=voting_ever_opened,
     )
 
 
@@ -1586,80 +1601,86 @@ def admin_paper_votes(election_id):
 
     current_round = election["current_round"]
 
+    def _safe_int(s):
+        s = (s or "").strip()
+        return int(s) if s.isdigit() else 0
+
+    posted_paper = {}   # cand_id -> count (used to repopulate form on error)
+    posted_spoilt = {}  # office_id -> spoilt count
+
     if request.method == "POST":
-        # Process paper vote entries
         offices = db.execute(
             "SELECT * FROM offices WHERE election_id = ?", (election_id,)
         ).fetchall()
 
+        # 1. Parse all form values without touching the DB yet.
+        per_office_candidates = {}
         for office in offices:
-            candidates = db.execute(
+            cands = db.execute(
                 "SELECT * FROM candidates WHERE office_id = ? AND active = 1",
                 (office["id"],)
             ).fetchall()
+            per_office_candidates[office["id"]] = cands
+            for cand in cands:
+                posted_paper[cand["id"]] = _safe_int(request.form.get(f"paper_{cand['id']}"))
+            posted_spoilt[office["id"]] = _safe_int(request.form.get(f"spoilt_{office['id']}"))
 
-            for cand in candidates:
-                field_name = f"paper_{cand['id']}"
-                count_str = request.form.get(field_name, "0").strip()
-                count = int(count_str) if count_str.isdigit() else 0
-
-                # Delete any existing paper votes for this candidate/round
-                db.execute(
-                    "DELETE FROM paper_votes WHERE election_id = ? AND round_number = ? AND candidate_id = ?",
-                    (election_id, current_round, cand["id"])
-                )
-                if count > 0:
-                    db.execute(
-                        "INSERT INTO paper_votes (election_id, round_number, candidate_id, count) VALUES (?, ?, ?, ?)",
-                        (election_id, current_round, cand["id"], count)
-                    )
-
-            # Spoilt-ballot count for this office (per-office, per-round).
-            # Spoilt is distinct from blank: a spoilt ballot is wrongly
-            # filled (Article 7) and contributes nothing to any candidate;
-            # a blank ballot is a deliberate abstention. Both are excluded
-            # from "valid votes cast" under Reading A, but tracking spoilt
-            # separately gives a clearer audit record.
-            spoilt_str = request.form.get(f"spoilt_{office['id']}", "0").strip()
-            spoilt = int(spoilt_str) if spoilt_str.isdigit() else 0
-            db.execute(
-                "INSERT INTO office_spoilt_ballots "
-                "(election_id, round_number, office_id, count) "
-                "VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(election_id, round_number, office_id) "
-                "DO UPDATE SET count = excluded.count",
-                (election_id, current_round, office["id"], spoilt),
-            )
-
-        db.commit()
-
-        # Validate totals against paper ballot count.
-        # Empty form fields come through as '' which int() rejects — match
-        # the same parsing as the save loop above (digits-only -> int, else 0).
-        def _safe_int(s):
-            s = (s or "").strip()
-            return int(s) if s.isdigit() else 0
-
+        # 2. Validate per-office. Allow under-voting (blanks) but reject
+        #    totals that exceed mathematically possible valid votes.
+        #    valid_ballots = paper_ballot_count - spoilt_count
+        #    max_valid_votes = valid_ballots * max_selections
         _, paper_ballot_count, _ = get_round_counts(election_id, current_round)
+        errors = []
         if paper_ballot_count > 0:
             for office in offices:
-                total_votes = sum(
-                    _safe_int(request.form.get(f"paper_{c['id']}", "0"))
-                    for c in db.execute(
-                        "SELECT * FROM candidates WHERE office_id = ? AND active = 1", (office["id"],)
-                    ).fetchall()
-                )
-                max_possible = paper_ballot_count * office["max_selections"]
-                if total_votes > max_possible:
-                    flash(
-                        f"Warning: {office['name']} has {total_votes} paper votes but only "
-                        f"{paper_ballot_count} ballots × {office['max_selections']} selections = {max_possible} maximum. "
-                        f"Please check your counts.",
-                        "error"
+                cands = per_office_candidates[office["id"]]
+                office_total = sum(posted_paper[c["id"]] for c in cands)
+                spoilt = posted_spoilt[office["id"]]
+                valid_ballots = max(0, paper_ballot_count - spoilt)
+                max_valid = valid_ballots * office["max_selections"]
+                if office_total > max_valid:
+                    errors.append(
+                        f"{office['name']}: {office_total} votes entered but max is "
+                        f"{max_valid} ({valid_ballots} valid ballots × {office['max_selections']} selections). "
+                        f"Recount the paper ballots and try again."
                     )
 
-        flash("Paper vote totals saved.", "success")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        if errors:
+            for msg in errors:
+                flash(msg, "error")
+            # Fall through to GET render path; posted_paper / posted_spoilt
+            # repopulate the form with the user's entries so they can see
+            # exactly what was wrong rather than starting from scratch.
+        else:
+            # 3. Save - all offices passed validation.
+            for office in offices:
+                cands = per_office_candidates[office["id"]]
+                for cand in cands:
+                    db.execute(
+                        "DELETE FROM paper_votes WHERE election_id = ? AND round_number = ? AND candidate_id = ?",
+                        (election_id, current_round, cand["id"])
+                    )
+                    count = posted_paper[cand["id"]]
+                    if count > 0:
+                        db.execute(
+                            "INSERT INTO paper_votes (election_id, round_number, candidate_id, count) VALUES (?, ?, ?, ?)",
+                            (election_id, current_round, cand["id"], count)
+                        )
+                # Spoilt is distinct from blank: a spoilt ballot is wrongly
+                # filled (Article 7), excluded from valid votes; a blank ballot
+                # is a deliberate abstention. Tracking spoilt per-office gives
+                # a clearer audit record.
+                db.execute(
+                    "INSERT INTO office_spoilt_ballots "
+                    "(election_id, round_number, office_id, count) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(election_id, round_number, office_id) "
+                    "DO UPDATE SET count = excluded.count",
+                    (election_id, current_round, office["id"], posted_spoilt[office["id"]]),
+                )
+            db.commit()
+            flash("Paper vote totals saved.", "success")
+            return redirect(url_for("admin_election_manage", election_id=election_id))
 
     offices = db.execute(
         "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
@@ -1674,15 +1695,25 @@ def admin_paper_votes(election_id):
             "WHERE c.office_id = ? AND c.active = 1 ORDER BY surname_sort_key(c.name)",
             (current_round, election_id, office["id"])
         ).fetchall()
+        # Convert to mutable dicts so we can override paper_count with the
+        # user's posted values when re-rendering after a validation failure.
+        candidates = [dict(c) for c in candidates]
+        if posted_paper:
+            for c in candidates:
+                if c["id"] in posted_paper:
+                    c["paper_count"] = posted_paper[c["id"]]
         spoilt_row = db.execute(
             "SELECT count FROM office_spoilt_ballots "
             "WHERE election_id = ? AND round_number = ? AND office_id = ?",
             (election_id, current_round, office["id"]),
         ).fetchone()
+        spoilt_count = spoilt_row["count"] if spoilt_row else 0
+        if posted_spoilt and office["id"] in posted_spoilt:
+            spoilt_count = posted_spoilt[office["id"]]
         office_candidates.append({
             "office": office,
             "candidates": candidates,
-            "spoilt_count": spoilt_row["count"] if spoilt_row else 0,
+            "spoilt_count": spoilt_count,
         })
 
     return render_template(
