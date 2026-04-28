@@ -2638,15 +2638,22 @@ def voter_confirmation():
     used_code = session.get("used_code")
     election_id = session.get("election_id")
     show_assist = False
+    waiting_for_count = False
     if used_code and election_id:
         db = get_db()
         election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
-        if election and _paper_count_active_for_round(db, election):
-            show_assist = True
+        if election:
+            if _paper_count_active_for_round(db, election):
+                show_assist = True
+            elif election["paper_count_enabled"] and election["voting_open"]:
+                # Voter is still on /confirmation while voting is open. Auto-refresh
+                # so the assist button surfaces as soon as the chairman closes voting.
+                waiting_for_count = True
     resp = make_response(render_template(
         "voter/confirmation.html",
         used_code=used_code,
         show_assist=show_assist,
+        waiting_for_count=waiting_for_count,
     ))
     return no_cache(resp)
 
@@ -3496,6 +3503,20 @@ def display_phone():
     election, ctx = _build_display_data()
     if not election:
         return render_template("display/waiting.html")
+
+    # Surface the "Assist with Paper Counting" button on the live results page
+    # for any voter whose burned-code session is still around. Voters typically
+    # navigate here after submitting their vote, so this is where they can
+    # opt in once the chairman closes voting for the round.
+    show_assist = False
+    used_code = session.get("used_code")
+    sess_election_id = session.get("election_id")
+    if used_code and sess_election_id == election["id"]:
+        db = get_db()
+        if _paper_count_active_for_round(db, election):
+            show_assist = True
+    ctx["show_assist"] = show_assist
+
     phase = election["display_phase"] or 1
     if phase == 4:
         if election["show_results"]:
