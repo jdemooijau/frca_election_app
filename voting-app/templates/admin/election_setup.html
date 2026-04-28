@@ -30,6 +30,24 @@
     </details>
     {% endif %}
 
+    <details class="card" style="margin-bottom: 14px;">
+        <summary style="cursor: pointer; font-weight: 600;">Election settings</summary>
+        <form method="POST" action="{{ url_for('admin_election_settings', election_id=election.id) }}" style="margin-top: 12px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" name="paper_count_enabled" value="1"
+                       {% if election.paper_count_enabled %}checked{% endif %}>
+                <span>
+                    <strong>Enable paper count helper</strong>
+                    <span style="display: block; font-size: 13px; color: #666;">
+                        Volunteers can opt in to co-count paper ballots on their phones during the chairman's read-out.
+                    </span>
+                </span>
+            </label>
+            <button type="submit" class="btn btn-outline btn-small" style="margin-top: 8px;">Save settings</button>
+        </form>
+    </details>
+
     <!-- Existing offices -->
     {% if offices %}
     <h2 style="margin-bottom: 12px;">Offices</h2>

@@ -870,6 +870,31 @@ def admin_election_setup(election_id):
     )
 
 
+@app.route("/admin/election/<int:election_id>/settings", methods=["POST"])
+@admin_required
+def admin_election_settings(election_id):
+    """Update election-level toggles (paper_count_enabled, etc.).
+
+    Allowed only before voting opens for the election.
+    """
+    db = get_db()
+    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+    if not election:
+        abort(404)
+    if election["voting_open"]:
+        flash("Cannot change settings while voting is open.", "error")
+        return redirect(url_for("admin_election_setup", election_id=election_id))
+
+    paper_count_enabled = 1 if request.form.get("paper_count_enabled") == "1" else 0
+    db.execute(
+        "UPDATE elections SET paper_count_enabled = ? WHERE id = ?",
+        (paper_count_enabled, election_id)
+    )
+    db.commit()
+    flash("Settings updated.", "success")
+    return redirect(url_for("admin_election_setup", election_id=election_id))
+
+
 @app.route("/admin/election/<int:election_id>/office/<int:office_id>/delete", methods=["POST"])
 @admin_required
 def admin_office_delete(election_id, office_id):

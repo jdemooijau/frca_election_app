@@ -64,3 +64,44 @@ def test_count_session_results_table_exists(client):
             "SELECT name FROM sqlite_master WHERE type='table' AND name='count_session_results'"
         ).fetchone()
         assert rows is not None
+
+
+def _create_election(client):
+    """Helper: log in as admin and create an election. Returns election_id."""
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    resp = client.post("/admin/election/new", data={
+        "name": "Test", "max_rounds": "2", "election_date": "2026-04-28"
+    })
+    assert resp.status_code in (200, 302)
+    with app.app_context():
+        row = get_db().execute("SELECT id FROM elections ORDER BY id DESC LIMIT 1").fetchone()
+        return row["id"]
+
+
+def test_paper_count_toggle_via_settings_post(client):
+    election_id = _create_election(client)
+    # Default off
+    with app.app_context():
+        row = get_db().execute(
+            "SELECT paper_count_enabled FROM elections WHERE id = ?", (election_id,)
+        ).fetchone()
+        assert row["paper_count_enabled"] == 0
+    # Enable
+    resp = client.post(f"/admin/election/{election_id}/settings", data={
+        "paper_count_enabled": "1"
+    })
+    assert resp.status_code in (200, 302)
+    with app.app_context():
+        row = get_db().execute(
+            "SELECT paper_count_enabled FROM elections WHERE id = ?", (election_id,)
+        ).fetchone()
+        assert row["paper_count_enabled"] == 1
+    # Disable
+    resp = client.post(f"/admin/election/{election_id}/settings", data={})
+    assert resp.status_code in (200, 302)
+    with app.app_context():
+        row = get_db().execute(
+            "SELECT paper_count_enabled FROM elections WHERE id = ?", (election_id,)
+        ).fetchone()
+        assert row["paper_count_enabled"] == 0
