@@ -1099,3 +1099,198 @@ tr:nth-child(even) {
     margin: 12px 0;
     font-size: 14px;
 }
+
+/* ============================================================
+   Paper count helper (voter-side grid)
+   ============================================================ */
+.count-helper-page {
+    padding: 6px 8px;
+    box-sizing: border-box;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+.count-helper-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: #666;
+    padding: 0 4px 4px;
+}
+.count-helper-id {
+    font-family: monospace;
+    letter-spacing: 1px;
+}
+.count-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    overflow: hidden;
+}
+@media (orientation: portrait) {
+    .count-grid { grid-template-columns: 1fr; }
+}
+.count-office {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.count-office-title {
+    font-size: 12px;
+    color: #888;
+    margin: 0 0 4px;
+    text-align: center;
+    letter-spacing: 1px;
+}
+.count-candidate-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+.count-candidate-row {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    transition: background 100ms ease;
+}
+.count-plus-btn {
+    flex: 1;
+    text-align: left;
+    background: #f4f4f4;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 16px;
+    cursor: pointer;
+}
+.count-plus-btn:active {
+    background: #e0e0e0;
+}
+.count-minus-btn {
+    width: 48px;
+    background: #fdecec;
+    border: 1px solid #f0c4c4;
+    color: #b52424;
+    font-weight: 700;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.count-minus-btn:active {
+    background: #fad6d6;
+}
+.count-row-flash-ok {
+    background: #d8f3d8 !important;
+}
+.count-row-flash-fail {
+    background: #f3d8d8 !important;
+}
+.count-row-error .count-plus-btn {
+    border-color: #b52424;
+}
+.count-end-screen {
+    text-align: center;
+    padding: 48px 16px;
+}
+.count-end-screen .checkmark {
+    font-size: 56px;
+    color: #2a8a2a;
+}
+
+/* ============================================================
+   Admin count dashboard
+   ============================================================ */
+.count-dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+.count-banner {
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+.count-banner-green { background: #d8f3d8; color: #1d6d1d; }
+.count-banner-amber { background: #fff3d8; color: #7d6420; }
+.count-banner-red   { background: #f3d8d8; color: #8d2424; }
+.count-banner-grey  { background: #eee; color: #555; }
+
+.count-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 12px;
+}
+.count-table th, .count-table td {
+    border: 1px solid #ddd;
+    padding: 6px 8px;
+    text-align: left;
+    font-size: 14px;
+}
+.count-table .count-office-row th {
+    background: #f4f4f4;
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: #666;
+}
+.count-helper-col {
+    text-align: center !important;
+    font-family: monospace;
+    font-size: 12px;
+    min-width: 90px;
+}
+.count-helper-disregarded {
+    opacity: 0.4;
+    text-decoration: line-through;
+}
+.count-helper-flagged {
+    background: #fff3d8;
+}
+.count-flag-chip {
+    display: block;
+    font-size: 10px;
+    color: #7d6420;
+    background: #fde9b6;
+    padding: 1px 4px;
+    border-radius: 8px;
+    margin-top: 2px;
+}
+.count-helper-disregard-btn,
+.count-helper-restore-btn {
+    font-size: 11px;
+    padding: 2px 6px;
+    margin-top: 4px;
+    cursor: pointer;
+}
+.count-cell-disregarded { color: #aaa; }
+.count-cell-ok { background: #d8f3d8; color: #1d6d1d; font-weight: 600; }
+.count-cell-mismatch { background: #f3d8d8; color: #8d2424; font-weight: 600; }
+.count-cell-pending { color: #999; }
+.count-stale {
+    font-size: 10px;
+    color: #999;
+    display: block;
+}
+.count-persist-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+.count-persist-table td, .count-persist-table th {
+    border: 1px solid #ddd;
+    padding: 4px 8px;
+    font-size: 13px;
+}
+.count-persist-mismatch { background: #fff3d8; }
+.count-end-banner {
+    padding: 8px 12px;
+    background: #eee;
+    border-radius: 6px;
+    margin-top: 12px;
+    color: #555;
+}
