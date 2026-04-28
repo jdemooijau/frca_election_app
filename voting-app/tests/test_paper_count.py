@@ -398,3 +398,64 @@ def test_admin_count_dashboard_404_when_disabled(client):
         sess["admin"] = True
     resp = client.get(f"/admin/election/{election_id}/count/1")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# State endpoint + consensus calculation (Task 9)
+# ---------------------------------------------------------------------------
+
+def test_state_endpoint_returns_consensus(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    sids = []
+    cands = _candidate_ids(election_id)
+    for c in codes[:3]:
+        sids.append(_join_count(client, election_id, c))
+        client.post(f"/count/{sids[-1]}/tap", json={"candidate_id": cands[0], "delta": 1})
+        client.post(f"/count/{sids[-1]}/tap", json={"candidate_id": cands[0], "delta": 1})
+    sid = sids[0]
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    r = client.get(f"/admin/election/{election_id}/count/1/state")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["helper_count"] == 3
+    cand_state = next(c for c in data["candidates"] if c["id"] == cands[0])
+    assert cand_state["consensus"]["status"] == "ok"
+    assert cand_state["consensus"]["value"] == 2
+
+
+def test_state_endpoint_marks_mismatch(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    cands = _candidate_ids(election_id)
+    for i, c in enumerate(codes[:3]):
+        sid = _join_count(client, election_id, c)
+        n = 2 if i == 2 else 1
+        for _ in range(n):
+            client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    r = client.get(f"/admin/election/{election_id}/count/1/state")
+    data = r.get_json()
+    cand_state = next(c for c in data["candidates"] if c["id"] == cands[0])
+    assert cand_state["consensus"]["status"] == "mismatch"
+
+
+def test_state_endpoint_excludes_idle_helpers(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    cands = _candidate_ids(election_id)
+    for c in codes[:3]:
+        sid = _join_count(client, election_id, c)
+        client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    r = client.get(f"/admin/election/{election_id}/count/1/state")
+    data = r.get_json()
+    cand_state = next(c for c in data["candidates"] if c["id"] == cands[0])
+    assert cand_state["consensus"]["status"] == "ok"
+    assert cand_state["consensus"]["value"] == 1

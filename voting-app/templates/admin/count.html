@@ -33,4 +33,118 @@
         {% endif %}
     </div>
 </div>
+<script>
+(function() {
+    const root = document.querySelector(".count-dashboard");
+    if (!root) return;
+    const stateUrl = root.dataset.stateUrl;
+    const persistBtn = document.getElementById("count-persist-btn");
+    const cancelBtn = document.getElementById("count-cancel-btn");
+    const tableHost = document.getElementById("count-table-host");
+    const banner = document.getElementById("count-banner");
+    const summary = document.getElementById("count-summary");
+    let lastState = null;
+    let pollPaused = false;
+
+    async function loadState() {
+        if (pollPaused) return;
+        try {
+            const r = await fetch(stateUrl);
+            if (!r.ok) return;
+            const data = await r.json();
+            lastState = data;
+            render(data);
+        } catch (e) {}
+    }
+
+    function render(data) {
+        summary.textContent = `${data.helper_count} active helpers - ${data.done_count} done`;
+        banner.className = "count-banner count-banner-" + data.banner;
+        banner.textContent = bannerText(data);
+
+        const byOffice = {};
+        for (const c of data.candidates) {
+            if (!byOffice[c.office_id]) byOffice[c.office_id] = {name: c.office_name, candidates: []};
+            byOffice[c.office_id].candidates.push(c);
+        }
+        let html = "";
+        const helperHeaders = data.helpers.map(h => {
+            const cls = ["count-helper-col"];
+            if (h.disregarded) cls.push("count-helper-disregarded");
+            if (h.out_of_sync) cls.push("count-helper-flagged");
+            const flag = h.out_of_sync && !h.disregarded ? '<span class="count-flag-chip">out of sync</span>' : "";
+            const btn = h.disregarded
+                ? `<button class="count-helper-restore-btn" data-helper-id="${h.id}">Restore</button>`
+                : `<button class="count-helper-disregard-btn" data-helper-id="${h.id}">Disregard</button>`;
+            const stale = isStale(h.last_seen_at) ? '<span class="count-stale">(stale)</span>' : "";
+            return `<th class="${cls.join(' ')}">${h.short_id} ${flag} ${stale}<br>${btn}</th>`;
+        }).join("");
+        html += `<table class="count-table"><thead><tr><th>Candidate</th>${helperHeaders}<th>Consensus</th></tr></thead><tbody>`;
+        for (const offId of Object.keys(byOffice)) {
+            const off = byOffice[offId];
+            html += `<tr class="count-office-row"><th colspan="${data.helpers.length + 2}">${escapeHtml(off.name)}</th></tr>`;
+            for (const c of off.candidates) {
+                const cells = data.helpers.map(h => {
+                    const v = c.per_helper[h.short_id];
+                    return `<td class="${h.disregarded ? 'count-cell-disregarded' : ''}">${v == null ? "" : v}</td>`;
+                }).join("");
+                let consensusCell = "";
+                if (c.consensus.status === "ok") consensusCell = `<td class="count-cell-ok">&#10003; ${c.consensus.value}</td>`;
+                else if (c.consensus.status === "mismatch") consensusCell = `<td class="count-cell-mismatch">&#10007; Mismatch</td>`;
+                else consensusCell = `<td class="count-cell-pending">-</td>`;
+                html += `<tr><td>${escapeHtml(c.name)}</td>${cells}${consensusCell}</tr>`;
+            }
+        }
+        html += "</tbody></table>";
+        tableHost.innerHTML = html;
+
+        persistBtn.disabled = (data.helper_count === 0 && data.candidates.every(c => c.consensus.status === "no_data"));
+
+        if (data.session_status !== "active") {
+            persistBtn.disabled = true;
+            cancelBtn.disabled = true;
+        }
+    }
+
+    function isStale(iso) {
+        if (!iso) return false;
+        const then = new Date(iso + "Z");
+        return (Date.now() - then.getTime()) > 30000;
+    }
+    function bannerText(d) {
+        if (d.banner === "green") return "All candidates agree (" + d.done_count + " of " + d.helper_count + " helpers, all marked done)";
+        if (d.banner === "red") {
+            const mismatched = d.candidates.filter(c => c.consensus.status === "mismatch").map(c => c.name);
+            return "Mismatch on: " + mismatched.join(", ");
+        }
+        if (d.banner === "amber") return "Counting in progress.";
+        return "No active helpers.";
+    }
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+    }
+
+    loadState();
+    setInterval(loadState, 1000);
+
+    tableHost.addEventListener("click", async function(ev) {
+        const dis = ev.target.closest(".count-helper-disregard-btn");
+        const res = ev.target.closest(".count-helper-restore-btn");
+        const btn = dis || res;
+        if (!btn) return;
+        const helperId = parseInt(btn.dataset.helperId, 10);
+        await fetch(root.dataset.disregardUrl, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({helper_id: helperId, disregard: dis ? true : false}),
+        });
+        loadState();
+    });
+
+    window.__paperCount = {
+        loadState, pausePolling: () => pollPaused = true, resumePolling: () => pollPaused = false,
+        getState: () => lastState
+    };
+})();
+</script>
 {% endblock %}

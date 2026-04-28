@@ -2635,6 +2635,43 @@ def _short_id_from_code(code):
     return (code or "")[-6:].upper()
 
 
+def _compute_consensus_for_candidate(active_counts):
+    """Return a dict describing per-candidate consensus state."""
+    if not active_counts:
+        return {"status": "no_data"}
+    if len(active_counts) < 3:
+        return {"status": "insufficient", "values": active_counts}
+    if all(c == active_counts[0] for c in active_counts):
+        return {"status": "ok", "value": active_counts[0]}
+    return {"status": "mismatch", "values": active_counts}
+
+
+def _helper_is_active(db, helper_id):
+    """Active = has at least one tally row (any +1 or -1 was registered)."""
+    row = db.execute(
+        "SELECT 1 FROM count_session_tallies WHERE helper_id = ? LIMIT 1",
+        (helper_id,)
+    ).fetchone()
+    return row is not None
+
+
+def _flag_out_of_sync(per_helper_counts, candidate_modes):
+    """Return short_ids whose counts differ from the per-candidate mode on
+    >30% of candidates with a defined mode.
+    """
+    flagged = set()
+    candidates_with_mode = [c for c, m in candidate_modes.items() if m is not None]
+    if not candidates_with_mode:
+        return flagged
+    for sid, counts in per_helper_counts.items():
+        diffs = sum(
+            1 for c in candidates_with_mode if counts.get(c, 0) != candidate_modes[c]
+        )
+        if diffs / len(candidates_with_mode) > 0.30:
+            flagged.add(sid)
+    return flagged
+
+
 def _get_or_create_count_session(db, election_id, round_no):
     """Find or create the count_sessions row for this (election, round).
 
@@ -2910,7 +2947,123 @@ def admin_count_dashboard(election_id, round_no):
 @app.route("/admin/election/<int:election_id>/count/<int:round_no>/state")
 @admin_required
 def admin_count_state(election_id, round_no):
-    return ("Not implemented", 501)
+    db = get_db()
+    sess = db.execute(
+        "SELECT * FROM count_sessions WHERE election_id = ? AND round_no = ?",
+        (election_id, round_no)
+    ).fetchone()
+    if sess is None:
+        return jsonify({
+            "helpers": [],
+            "candidates": [],
+            "helper_count": 0,
+            "done_count": 0,
+            "session_status": "none",
+        })
+
+    helpers = db.execute(
+        "SELECT * FROM count_session_helpers WHERE session_id = ? ORDER BY joined_at",
+        (sess["id"],)
+    ).fetchall()
+    helper_rows = []
+    active_helper_ids = []
+    for h in helpers:
+        is_active = _helper_is_active(db, h["id"])
+        helper_rows.append({
+            "id": h["id"],
+            "short_id": h["short_id"],
+            "active": is_active,
+            "disregarded": h["disregarded_at"] is not None,
+            "done": h["marked_done_at"] is not None,
+            "last_seen_at": h["last_seen_at"],
+        })
+        if is_active and h["disregarded_at"] is None:
+            active_helper_ids.append(h["id"])
+
+    counts_rows = db.execute(
+        "SELECT helper_id, candidate_id, count FROM count_session_tallies WHERE session_id = ?",
+        (sess["id"],)
+    ).fetchall()
+    counts_by_hc = {}
+    for r in counts_rows:
+        counts_by_hc.setdefault(r["helper_id"], {})[r["candidate_id"]] = r["count"]
+
+    offices = db.execute(
+        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
+        (election_id,)
+    ).fetchall()
+    candidate_states = []
+    candidate_modes = {}
+    from collections import Counter
+    for office in offices:
+        cands = db.execute(
+            "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
+            (office["id"],)
+        ).fetchall()
+        for c in cands:
+            active_counts = [
+                counts_by_hc.get(hid, {}).get(c["id"], 0)
+                for hid in active_helper_ids
+                if c["id"] in counts_by_hc.get(hid, {})
+            ]
+            consensus = _compute_consensus_for_candidate(active_counts)
+            per_helper = {
+                h["short_id"]: counts_by_hc.get(h["id"], {}).get(c["id"])
+                for h in helpers
+            }
+            mode_val = None
+            if active_counts:
+                cnt = Counter(active_counts)
+                top, freq = cnt.most_common(1)[0]
+                if freq * 2 > len(active_counts):
+                    mode_val = top
+            candidate_modes[c["id"]] = mode_val
+            candidate_states.append({
+                "id": c["id"],
+                "name": c["name"],
+                "office_id": office["id"],
+                "office_name": office["name"],
+                "per_helper": per_helper,
+                "consensus": consensus,
+            })
+
+    per_helper_counts = {
+        h["short_id"]: counts_by_hc.get(h["id"], {})
+        for h in helpers
+        if _helper_is_active(db, h["id"]) and h["disregarded_at"] is None
+    }
+    flagged = _flag_out_of_sync(per_helper_counts, candidate_modes)
+    for h in helper_rows:
+        h["out_of_sync"] = h["short_id"] in flagged
+
+    active_count = sum(
+        1 for h in helper_rows if h["active"] and not h["disregarded"]
+    )
+    done_count = sum(
+        1 for h in helper_rows if h["done"] and h["active"] and not h["disregarded"]
+    )
+
+    if active_count == 0:
+        banner = "grey"
+    elif any(c["consensus"]["status"] == "mismatch" for c in candidate_states):
+        banner = "red"
+    elif (
+        active_count >= 3
+        and done_count == active_count
+        and all(c["consensus"]["status"] in ("ok", "no_data") for c in candidate_states)
+    ):
+        banner = "green"
+    else:
+        banner = "amber"
+
+    return jsonify({
+        "session_status": sess["status"],
+        "helpers": helper_rows,
+        "candidates": candidate_states,
+        "helper_count": active_count,
+        "done_count": done_count,
+        "banner": banner,
+    })
 
 
 @app.route("/admin/election/<int:election_id>/count/<int:round_no>/disregard", methods=["POST"])
