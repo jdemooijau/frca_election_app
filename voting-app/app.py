@@ -141,6 +141,7 @@ def _init_db_on(db):
             paper_ballot_count INTEGER NOT NULL DEFAULT 0,
             postal_voter_count INTEGER NOT NULL DEFAULT 0,
             display_phase INTEGER NOT NULL DEFAULT 1,
+            paper_count_enabled INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
         );
 
@@ -265,6 +266,56 @@ def _init_db_on(db):
         CREATE INDEX IF NOT EXISTS idx_voter_audit_code ON voter_audit_log(code);
     """)
 
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS count_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            election_id INTEGER NOT NULL,
+            round_no INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            started_at TEXT NOT NULL,
+            persisted_at TEXT,
+            persisted_by_admin_id INTEGER,
+            cancelled_at TEXT,
+            UNIQUE(election_id, round_no),
+            FOREIGN KEY (election_id) REFERENCES elections(id)
+        );
+        CREATE TABLE IF NOT EXISTS count_session_helpers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            voter_code TEXT NOT NULL,
+            short_id TEXT NOT NULL,
+            joined_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            marked_done_at TEXT,
+            disregarded_at TEXT,
+            UNIQUE(session_id, voter_code),
+            FOREIGN KEY (session_id) REFERENCES count_sessions(id)
+        );
+        CREATE TABLE IF NOT EXISTS count_session_tallies (
+            session_id INTEGER NOT NULL,
+            helper_id INTEGER NOT NULL,
+            candidate_id INTEGER NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (session_id, helper_id, candidate_id),
+            FOREIGN KEY (session_id) REFERENCES count_sessions(id),
+            FOREIGN KEY (helper_id) REFERENCES count_session_helpers(id),
+            FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+        );
+        CREATE TABLE IF NOT EXISTS count_session_results (
+            session_id INTEGER NOT NULL,
+            candidate_id INTEGER NOT NULL,
+            final_count INTEGER NOT NULL,
+            source TEXT NOT NULL,
+            PRIMARY KEY (session_id, candidate_id),
+            FOREIGN KEY (session_id) REFERENCES count_sessions(id),
+            FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_count_sessions_election ON count_sessions(election_id, round_no);
+        CREATE INDEX IF NOT EXISTS idx_count_session_helpers_session ON count_session_helpers(session_id);
+        CREATE INDEX IF NOT EXISTS idx_count_session_tallies_session ON count_session_tallies(session_id);
+    """)
+    db.commit()
+
     # Insert default settings if not present
     defaults = {
         "congregation_name": "Free Reformed Church",
@@ -369,12 +420,68 @@ def _migrate_db_on(db):
         "ALTER TABLE candidates ADD COLUMN elected_round INTEGER",
         "ALTER TABLE offices ADD COLUMN original_vacancies INTEGER",
         "ALTER TABLE elections DROP COLUMN participants",
+        "ALTER TABLE elections ADD COLUMN paper_count_enabled INTEGER NOT NULL DEFAULT 0",
     ]
     for sql in migrations:
         try:
             db.execute(sql)
         except sqlite3.OperationalError:
             pass  # Column already exists
+
+    # Add paper-count co-counting tables for existing databases. Idempotent
+    # via CREATE TABLE IF NOT EXISTS; wrapped in try/except as a safety net.
+    try:
+        db.executescript("""
+            CREATE TABLE IF NOT EXISTS count_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                election_id INTEGER NOT NULL,
+                round_no INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                started_at TEXT NOT NULL,
+                persisted_at TEXT,
+                persisted_by_admin_id INTEGER,
+                cancelled_at TEXT,
+                UNIQUE(election_id, round_no),
+                FOREIGN KEY (election_id) REFERENCES elections(id)
+            );
+            CREATE TABLE IF NOT EXISTS count_session_helpers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                voter_code TEXT NOT NULL,
+                short_id TEXT NOT NULL,
+                joined_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                marked_done_at TEXT,
+                disregarded_at TEXT,
+                UNIQUE(session_id, voter_code),
+                FOREIGN KEY (session_id) REFERENCES count_sessions(id)
+            );
+            CREATE TABLE IF NOT EXISTS count_session_tallies (
+                session_id INTEGER NOT NULL,
+                helper_id INTEGER NOT NULL,
+                candidate_id INTEGER NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (session_id, helper_id, candidate_id),
+                FOREIGN KEY (session_id) REFERENCES count_sessions(id),
+                FOREIGN KEY (helper_id) REFERENCES count_session_helpers(id),
+                FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+            );
+            CREATE TABLE IF NOT EXISTS count_session_results (
+                session_id INTEGER NOT NULL,
+                candidate_id INTEGER NOT NULL,
+                final_count INTEGER NOT NULL,
+                source TEXT NOT NULL,
+                PRIMARY KEY (session_id, candidate_id),
+                FOREIGN KEY (session_id) REFERENCES count_sessions(id),
+                FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_count_sessions_election ON count_sessions(election_id, round_no);
+            CREATE INDEX IF NOT EXISTS idx_count_session_helpers_session ON count_session_helpers(session_id);
+            CREATE INDEX IF NOT EXISTS idx_count_session_tallies_session ON count_session_tallies(session_id);
+        """)
+        db.commit()
+    except sqlite3.OperationalError:
+        pass
 
     # Back-fill original_vacancies from vacancies for rows that never got it.
     # For elections already advanced past round 1, office.vacancies is already
