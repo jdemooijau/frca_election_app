@@ -17,7 +17,7 @@ import secrets
 import string
 import hashlib
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 from urllib.parse import urlparse
 
@@ -2616,7 +2616,7 @@ def voter_confirmation():
 # ---------------------------------------------------------------------------
 
 def _now_iso():
-    return datetime.utcnow().isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
 
 
 def _short_id_from_code(code):

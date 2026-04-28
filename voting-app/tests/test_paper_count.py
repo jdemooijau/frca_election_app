@@ -144,7 +144,7 @@ def test_count_join_creates_session_and_helper(client):
         sess.pop("admin", None)
     resp = client.post("/count/join", follow_redirects=False)
     assert resp.status_code == 302
-    assert "/count/" in resp.headers["Location"]
+    assert resp.headers["Location"].startswith("/count/")
     with app.app_context():
         sess_row = get_db().execute(
             "SELECT * FROM count_sessions WHERE election_id = ?", (election_id,)
@@ -174,7 +174,7 @@ def test_count_join_idempotent(client):
 
 def test_count_join_blocked_when_disabled(client):
     election_id = _create_election(client)
-    # Need attendance + at least one office/code path is irrelevant here — we
+    # Need attendance + at least one office/code path is irrelevant here: we
     # simply need an existing election with paper_count_enabled = 0 and try to
     # join. Voting state doesn't matter since the disabled check fires first.
     with client.session_transaction() as sess:
