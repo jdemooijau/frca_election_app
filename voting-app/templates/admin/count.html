@@ -31,6 +31,16 @@
         {% elif sess.status == "cancelled" %}
         <div class="count-end-banner">Session cancelled at {{ sess.cancelled_at }}.</div>
         {% endif %}
+
+        <dialog id="count-persist-modal" style="border: 1px solid #ccc; padding: 16px; max-width: 600px;">
+            <h3 style="margin-top: 0;">Persist Paper Ballot Count</h3>
+            <p>Confirm the final totals. Mismatched or low-confidence rows are highlighted - edit if needed.</p>
+            <table id="count-persist-table" class="count-persist-table"></table>
+            <div style="margin-top: 12px; text-align: right;">
+                <button type="button" id="count-persist-modal-cancel" class="btn btn-outline">Cancel</button>
+                <button type="button" id="count-persist-modal-confirm" class="btn btn-primary">Persist</button>
+            </div>
+        </dialog>
     </div>
 </div>
 <script>
@@ -139,6 +149,53 @@
             body: JSON.stringify({helper_id: helperId, disregard: dis ? true : false}),
         });
         loadState();
+    });
+
+    persistBtn.addEventListener("click", function() {
+        if (!lastState) return;
+        const modal = document.getElementById("count-persist-modal");
+        const tbl = document.getElementById("count-persist-table");
+        let rows = "";
+        for (const c of lastState.candidates) {
+            let suggested = 0;
+            let cls = "count-persist-mismatch";
+            if (c.consensus.status === "ok") { suggested = c.consensus.value; cls = ""; }
+            else if (c.consensus.status === "insufficient" && c.consensus.values.length) {
+                suggested = Math.max(...c.consensus.values);
+            } else if (c.consensus.status === "mismatch") {
+                const counts = {};
+                for (const v of c.consensus.values) counts[v] = (counts[v]||0) + 1;
+                const mode = Object.entries(counts).sort((a,b) => b[1]-a[1])[0];
+                suggested = parseInt(mode[0], 10);
+            }
+            rows += `<tr class="${cls}"><td>${escapeHtml(c.name)}</td><td><input type="number" min="0" data-cand="${c.id}" value="${suggested}" style="width: 80px;"></td><td>${c.consensus.status}</td></tr>`;
+        }
+        tbl.innerHTML = `<thead><tr><th>Candidate</th><th>Final</th><th>Status</th></tr></thead><tbody>${rows}</tbody>`;
+        pollPaused = true;
+        modal.showModal();
+    });
+
+    document.getElementById("count-persist-modal-cancel").addEventListener("click", function() {
+        document.getElementById("count-persist-modal").close();
+        pollPaused = false;
+    });
+
+    document.getElementById("count-persist-modal-confirm").addEventListener("click", async function() {
+        const inputs = document.querySelectorAll("#count-persist-table input[data-cand]");
+        const totals = {};
+        for (const i of inputs) totals[i.dataset.cand] = parseInt(i.value, 10) || 0;
+        const r = await fetch(root.dataset.persistUrl, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({totals: totals}),
+        });
+        if (r.ok) {
+            document.getElementById("count-persist-modal").close();
+            window.location.reload();
+        } else {
+            alert("Persist failed: " + r.status);
+            pollPaused = false;
+        }
     });
 
     window.__paperCount = {

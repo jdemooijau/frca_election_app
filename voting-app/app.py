@@ -3114,8 +3114,88 @@ def admin_count_disregard(election_id, round_no):
 
 @app.route("/admin/election/<int:election_id>/count/<int:round_no>/persist", methods=["POST"])
 @admin_required
+@csrf.exempt
 def admin_count_persist(election_id, round_no):
-    return ("Not implemented", 501)
+    db = get_db()
+    sess = db.execute(
+        "SELECT * FROM count_sessions WHERE election_id = ? AND round_no = ?",
+        (election_id, round_no)
+    ).fetchone()
+    if sess is None:
+        return ("No session", 404)
+    if sess["status"] != "active":
+        return ("Session not active", 400)
+
+    body = request.get_json(silent=True) or {}
+    totals = body.get("totals") or {}
+    if not isinstance(totals, dict):
+        return ("Bad payload", 400)
+
+    helpers = db.execute(
+        "SELECT * FROM count_session_helpers WHERE session_id = ? "
+        "AND disregarded_at IS NULL",
+        (sess["id"],)
+    ).fetchall()
+    active_helper_ids = [h["id"] for h in helpers if _helper_is_active(db, h["id"])]
+    counts_rows = db.execute(
+        "SELECT helper_id, candidate_id, count FROM count_session_tallies WHERE session_id = ?",
+        (sess["id"],)
+    ).fetchall()
+    counts_by_hc = {}
+    for r in counts_rows:
+        counts_by_hc.setdefault(r["helper_id"], {})[r["candidate_id"]] = r["count"]
+
+    all_cands = db.execute(
+        "SELECT c.id FROM candidates c JOIN offices o ON c.office_id = o.id "
+        "WHERE o.election_id = ?",
+        (election_id,)
+    ).fetchall()
+
+    persisted_log = {}
+    for c in all_cands:
+        cid = c["id"]
+        active_counts = [counts_by_hc.get(hid, {}).get(cid, 0) for hid in active_helper_ids
+                         if cid in counts_by_hc.get(hid, {})]
+        consensus = _compute_consensus_for_candidate(active_counts)
+        admin_value = totals.get(str(cid))
+        if consensus["status"] == "ok" and (admin_value is None or int(admin_value) == consensus["value"]):
+            final_count = consensus["value"]
+            source = "consensus"
+        else:
+            if admin_value is None:
+                final_count = 0
+            else:
+                try:
+                    final_count = int(admin_value)
+                except (TypeError, ValueError):
+                    return (f"Bad total for candidate {cid}", 400)
+            source = "admin_override"
+        db.execute(
+            "INSERT INTO count_session_results (session_id, candidate_id, final_count, source) "
+            "VALUES (?, ?, ?, ?)",
+            (sess["id"], cid, final_count, source)
+        )
+        persisted_log[cid] = {"final": final_count, "source": source}
+
+    admin_id = session.get("admin_id")
+    db.execute(
+        "UPDATE count_sessions SET status = 'persisted', persisted_at = ?, "
+        "persisted_by_admin_id = ? WHERE id = ?",
+        (_now_iso(), admin_id, sess["id"])
+    )
+    db.commit()
+
+    disregarded = [h["short_id"] for h in db.execute(
+        "SELECT short_id FROM count_session_helpers "
+        "WHERE session_id = ? AND disregarded_at IS NOT NULL",
+        (sess["id"],)
+    ).fetchall()]
+    log_voter_audit(
+        election_id, None, "paper_count_persisted",
+        detail=f"persisted={persisted_log}, disregarded={disregarded}",
+        round_number=round_no
+    )
+    return ("", 200)
 
 
 @app.route("/admin/election/<int:election_id>/count/<int:round_no>/cancel", methods=["POST"])

@@ -506,3 +506,50 @@ def test_disregard_excludes_helper_from_consensus(client):
     r = client.get(f"/admin/election/{election_id}/count/1/state")
     cand_state = next(c for c in r.get_json()["candidates"] if c["id"] == cands[0])
     assert cand_state["consensus"]["status"] == "mismatch"
+
+
+def test_persist_writes_results_and_marks_session(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    cands = _candidate_ids(election_id)
+    for c in codes[:3]:
+        sid = _join_count(client, election_id, c)
+        client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
+        client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
+        client.post(f"/count/{sid}/done", json={})
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    r = client.post(f"/admin/election/{election_id}/count/1/persist", json={
+        "totals": {str(cands[0]): 2}
+    })
+    assert r.status_code == 200
+    with app.app_context():
+        sess = get_db().execute(
+            "SELECT * FROM count_sessions WHERE election_id = ?", (election_id,)
+        ).fetchone()
+        assert sess["status"] == "persisted"
+        results = get_db().execute(
+            "SELECT * FROM count_session_results WHERE session_id = ?", (sess["id"],)
+        ).fetchall()
+        cand0 = next(r for r in results if r["candidate_id"] == cands[0])
+        assert cand0["final_count"] == 2
+
+
+def test_persist_rejected_when_already_persisted(client):
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    sid = _join_count(client, election_id, codes[0])
+    cands = _candidate_ids(election_id)
+    client.post(f"/count/{sid}/tap", json={"candidate_id": cands[0], "delta": 1})
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    r = client.post(f"/admin/election/{election_id}/count/1/persist", json={
+        "totals": {str(cands[0]): 1}
+    })
+    assert r.status_code == 200
+    r = client.post(f"/admin/election/{election_id}/count/1/persist", json={
+        "totals": {str(cands[0]): 1}
+    })
+    assert r.status_code == 400
