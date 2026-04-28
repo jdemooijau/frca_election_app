@@ -44,12 +44,4 @@
     </div>
     {% endif %}
 </div>
-
-{% if waiting_for_count %}
-<script>
-    // Voting still open and paper-count is enabled. Reload every 15s so the
-    // assist button appears as soon as the chairman closes voting.
-    setTimeout(function() { window.location.reload(); }, 15000);
-</script>
-{% endif %}
 {% endblock %}

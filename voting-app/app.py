@@ -2638,22 +2638,15 @@ def voter_confirmation():
     used_code = session.get("used_code")
     election_id = session.get("election_id")
     show_assist = False
-    waiting_for_count = False
     if used_code and election_id:
         db = get_db()
         election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
-        if election:
-            if _paper_count_active_for_round(db, election):
-                show_assist = True
-            elif election["paper_count_enabled"] and election["voting_open"]:
-                # Voter is still on /confirmation while voting is open. Auto-refresh
-                # so the assist button surfaces as soon as the chairman closes voting.
-                waiting_for_count = True
+        if election and _paper_count_active_for_round(db, election):
+            show_assist = True
     resp = make_response(render_template(
         "voter/confirmation.html",
         used_code=used_code,
         show_assist=show_assist,
-        waiting_for_count=waiting_for_count,
     ))
     return no_cache(resp)
 
@@ -2731,12 +2724,11 @@ def _get_or_create_count_session(db, election_id, round_no):
 
 
 def _paper_count_active_for_round(db, election):
-    """True if paper count is enabled, voting is closed, and no session is
-    persisted/cancelled for the current round.
+    """True if paper count is enabled and the current round's session has not
+    been persisted or cancelled. The button is shown regardless of voting
+    state so voters who finish early can opt in immediately.
     """
     if not election["paper_count_enabled"]:
-        return False
-    if election["voting_open"]:
         return False
     sess = db.execute(
         "SELECT status FROM count_sessions WHERE election_id = ? AND round_no = ?",
@@ -2759,8 +2751,6 @@ def count_join():
         return ("Election not found", 404)
     if not election["paper_count_enabled"]:
         return ("Paper count not enabled", 400)
-    if election["voting_open"]:
-        return ("Voting still open", 400)
 
     sess = _get_or_create_count_session(db, election_id, election["current_round"])
     if sess["status"] != "active":

@@ -324,16 +324,20 @@ def test_confirmation_hides_assist_when_disabled(client):
     assert b"Assist with Paper Counting" not in resp.data
 
 
-def test_confirmation_hides_assist_when_voting_open(client):
+def test_confirmation_shows_assist_even_while_voting_open(client):
+    """The assist button is visible whenever paper_count_enabled is on and the
+    session is not yet persisted/cancelled. Voting state does not gate it,
+    so voters who finish early can opt in without waiting for voting to close.
+    """
     election_id, codes = _setup_paper_count_election(client)
-    # Open voting once - leave open
+    # Open voting and leave open
     client.post(f"/admin/election/{election_id}/voting")
     with client.session_transaction() as sess:
         sess["used_code"] = codes[0]
         sess["election_id"] = election_id
     resp = client.get("/confirmation")
     assert resp.status_code == 200
-    assert b"Assist with Paper Counting" not in resp.data
+    assert b"Assist with Paper Counting" in resp.data
 
 
 def test_real_voter_submit_keeps_election_id_for_assist_button(client):
