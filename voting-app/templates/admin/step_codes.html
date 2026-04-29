@@ -1,0 +1,136 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}Codes &amp; printing - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}Codes &amp; printing{% endblock %}
+{% block step_heading %}Generate codes and print materials{% endblock %}
+{% block step_content %}
+
+{# ============= Code status (from codes.html) ============= #}
+<div class="card">
+    <div class="card-header">Code Status</div>
+    <div class="stat-grid">
+        <div class="stat-box">
+            <div class="number">{{ total_codes }}</div>
+            <div class="label">Total Codes</div>
+        </div>
+        <div class="stat-box">
+            <div class="number">{{ used_codes }}</div>
+            <div class="label">Used</div>
+        </div>
+        <div class="stat-box">
+            <div class="number">{{ total_codes - used_codes }}</div>
+            <div class="label">Available</div>
+        </div>
+    </div>
+
+    {% if total_codes > 0 %}
+    <details style="margin-top: 16px;">
+        <summary style="cursor: pointer; color: var(--red); font-weight: 600;">
+            Delete all codes (regenerate)
+        </summary>
+        <div style="margin-top: 12px; padding: 14px 16px; border: 1px solid var(--red); border-radius: 8px; background: #fff7f6;">
+            <p style="font-size: 14px; color: #6B1A12; margin-bottom: 12px;">
+                <strong>Warning.</strong> Codes may already be on printed slips
+                or QR-coded handouts. If you regenerate without reprinting,
+                every printed code will fail at the door on election day.
+                {% if used_codes > 0 %}<br><br>
+                <strong>{{ used_codes }} of these codes have already been used.</strong>
+                Deleting is blocked while votes exist.{% endif %}
+            </p>
+            <form method="POST" action="{{ url_for('admin_codes_delete', election_id=sidebar_state.election.id) }}"
+                  onsubmit="return confirm('Delete ALL {{ total_codes }} codes for {{ sidebar_state.election.name }}? This cannot be undone.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label>Type the election name to confirm: <strong>{{ sidebar_state.election.name }}</strong></label>
+                    <input type="text" name="confirm_name" autocomplete="off"
+                           placeholder="{{ sidebar_state.election.name }}"
+                           {% if used_codes > 0 %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Admin password</label>
+                    <input type="password" name="password" autocomplete="off"
+                           placeholder="Re-enter password"
+                           {% if used_codes > 0 %}disabled{% endif %}>
+                </div>
+                <button type="submit" class="btn btn-danger btn-small"
+                        {% if used_codes > 0 %}disabled{% endif %}>Delete All Codes</button>
+            </form>
+        </div>
+    </details>
+    {% endif %}
+</div>
+
+{% if total_codes == 0 %}
+<div class="card">
+    <div class="card-header">Generate Codes</div>
+    <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
+        No codes yet. Codes are normally created automatically the first
+        time you visit this step after setting up offices.
+    </p>
+    <form method="POST" action="{{ url_for('admin_codes', election_id=sidebar_state.election.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label>Number of Codes</label>
+            <input type="number" name="count" value="{{ default_count }}" min="1" max="999">
+            {% if member_count > 0 %}
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                Based on {{ member_count }} members &times; {{ sidebar_state.election.max_rounds }} rounds + spares
+            </p>
+            {% endif %}
+        </div>
+        <button type="submit" class="btn btn-gold">Generate Codes</button>
+    </form>
+</div>
+{% endif %}
+
+{% if generated_codes %}
+<div class="card">
+    <div class="card-header">Generated Codes (save or print now!)</div>
+    <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
+        These are shown only once. Use the Code Slips PDF to print them.
+    </p>
+    <div style="columns: 3; column-gap: 16px; font-family: monospace; font-size: 16px;">
+        {% for code in generated_codes %}
+        <div style="break-inside: avoid; padding: 4px 0;">{{ code }}</div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{# ============= Print & prepare (from manage.html Phase 1) ============= #}
+<h3 style="margin: 18px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Print &amp; prepare</h3>
+<div class="btn-row" style="flex-wrap: wrap; margin-bottom: 16px;">
+    <a href="{{ url_for('admin_printer_pack_zip', election_id=sidebar_state.election.id) }}" class="btn btn-gold btn-small">
+        Printer Pack ZIP (recommended)
+    </a>
+    <a href="{{ url_for('admin_attendance_pdf') }}" class="btn btn-outline btn-small">Attendance Register PDF</a>
+</div>
+<details>
+    <summary style="cursor: pointer; font-size: 13px; color: #666;">More formats (individual PDFs)</summary>
+    <div class="btn-row" style="flex-wrap: wrap; margin-top: 8px;">
+        <a href="{{ url_for('admin_counter_sheet_pdf', election_id=sidebar_state.election.id) }}" class="btn btn-outline btn-small">Counter Sheet PDF</a>
+        <a href="{{ url_for('admin_dual_sided_ballots_pdf', election_id=sidebar_state.election.id) }}" class="btn btn-outline btn-small">Dual-Sided Ballots PDF</a>
+        <a href="{{ url_for('admin_paper_ballot_pdf', election_id=sidebar_state.election.id, round_number=sidebar_state.election.current_round) }}" class="btn btn-outline btn-small">Paper Ballot PDF</a>
+        <a href="{{ url_for('admin_codes_pdf', election_id=sidebar_state.election.id) }}" class="btn btn-outline btn-small">Code Slips PDF</a>
+    </div>
+</details>
+
+{# ============= Early postal votes (from manage.html Phase 1 bottom) ============= #}
+<h3 style="margin: 18px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Postal votes (early)</h3>
+<p style="font-size: 14px; color: #555; margin-bottom: 8px;">
+    {% if postal_voter_count > 0 %}
+    {{ postal_voter_count }} postal vote{{ '' if postal_voter_count == 1 else 's' }} entered.
+    {% else %}
+    No postal votes entered yet. You can also enter them on the day from <em>Attendance &amp; postal</em> (last-chance entry).
+    {% endif %}
+</p>
+<div class="btn-row">
+    <a href="{{ url_for('admin_postal_votes', election_id=sidebar_state.election.id) }}" class="btn btn-outline btn-small">Enter Postal Votes (Round 1)</a>
+    <a href="{{ url_for('admin_postal_tally', election_id=sidebar_state.election.id) }}" class="btn btn-outline btn-small">Postal Tally Helper</a>
+</div>
+
+<div style="margin-top: 18px;">
+    <a href="{{ url_for('admin_step_attendance', election_id=sidebar_state.election.id) }}" class="btn btn-primary">
+        Next: Attendance &amp; postal (election day) &rarr;
+    </a>
+</div>
+{% endblock %}

@@ -840,6 +840,63 @@ def admin_step_settings(election_id):
                            election=election, sidebar_state=sidebar_state)
 
 
+@app.route("/admin/election/<int:election_id>/step/codes", methods=["GET"], endpoint="admin_step_codes")
+@admin_required
+def admin_step_codes(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+
+    # Smart default mirrors legacy admin_codes GET: (members + 10) * max_rounds.
+    member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+    per_round = member_count + 10 if member_count > 0 else 100
+    default_count = per_round * election["max_rounds"]
+
+    total_codes = db.execute(
+        "SELECT COUNT(*) FROM codes WHERE election_id = ?", (election_id,)
+    ).fetchone()[0]
+
+    # Auto-generate on first visit once offices have been set up. Mirrors
+    # the existing /admin/election/<id>/codes GET behavior.
+    generated_codes = []
+    if total_codes == 0:
+        offices_exist = db.execute(
+            "SELECT 1 FROM offices WHERE election_id = ? LIMIT 1",
+            (election_id,)
+        ).fetchone() is not None
+        if offices_exist:
+            generated_codes = generate_codes(election_id, default_count)
+            flash(
+                f"Auto-generated {len(generated_codes)} voting codes "
+                f"({member_count} members × {election['max_rounds']} rounds + spares). "
+                "Print the code slips next.",
+                "success"
+            )
+            total_codes = len(generated_codes)
+
+    used_codes = db.execute(
+        "SELECT COUNT(*) FROM codes WHERE election_id = ? AND used = 1",
+        (election_id,)
+    ).fetchone()[0]
+    postal_voter_count = election["postal_voter_count"] or 0
+
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/step_codes.html",
+        election=election,
+        total_codes=total_codes,
+        used_codes=used_codes,
+        generated_codes=generated_codes,
+        member_count=member_count,
+        default_count=default_count,
+        postal_voter_count=postal_voter_count,
+        sidebar_state=sidebar_state,
+    )
+
+
 _register_step_stubs()
 
 

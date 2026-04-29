@@ -143,3 +143,18 @@ def test_step_settings_renders_paper_count_toggle(admin_client):
     body = rv.get_data(as_text=True)
     assert "paper count" in body.lower() or "paper_count_enabled" in body
     assert "wizard-sidebar" in body
+
+
+def test_step_codes_shows_status_and_printer_pack(admin_client):
+    admin_client.post("/admin/election/new", data={"name": "E", "max_rounds": "2"})
+    admin_client.post("/admin/election/1/setup", data={
+        "office_name": "Elder", "vacancies": "1", "max_selections": "1",
+        "candidate_names": "A\nB\nC", "confirm_slate_override": "1",
+    })
+    admin_client.post("/admin/election/1/codes", data={"count": "10"})
+    rv = admin_client.get("/admin/election/1/step/codes")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Total Codes" in body or "10" in body
+    assert "Printer Pack" in body
+    assert "wizard-sidebar" in body
