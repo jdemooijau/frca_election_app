@@ -98,3 +98,14 @@ def test_sidebar_state_attendance_done_when_participants_set(admin_client):
     round_group = next(g for g in state["groups"] if g["label"].startswith("Round"))
     states = {it["slug"]: it["state"] for it in round_group["items"]}
     assert states["attendance"] == "done"
+
+
+def test_step_details_renders_form(admin_client):
+    admin_client.post("/admin/election/new", data={"name": "Details Test", "max_rounds": "2"})
+    rv = admin_client.get("/admin/election/1/step/details")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Details Test" in body
+    assert "Election details" in body
+    # Sidebar should be present
+    assert "wizard-sidebar" in body

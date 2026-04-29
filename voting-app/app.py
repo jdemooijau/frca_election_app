@@ -735,6 +735,45 @@ def _register_step_stubs():
         )
 
 
+@app.route("/admin/election/<int:election_id>/step/details", methods=["GET"], endpoint="admin_step_details")
+@admin_required
+def _admin_step_details(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/step_details.html",
+        election=election,
+        sidebar_state=sidebar_state,
+    )
+
+
+@app.route("/admin/election/<int:election_id>/step/details/save", methods=["POST"])
+@admin_required
+def admin_step_details_save(election_id):
+    db = get_db()
+    name = request.form.get("name", "").strip()
+    election_date = request.form.get("election_date", "").strip()
+    try:
+        max_rounds = max(1, min(5, int(request.form.get("max_rounds", "2"))))
+    except ValueError:
+        max_rounds = 2
+    if not name:
+        flash("Name is required.", "error")
+        return redirect(url_for("admin_step_details", election_id=election_id))
+    db.execute(
+        "UPDATE elections SET name = ?, election_date = ?, max_rounds = ? WHERE id = ?",
+        (name, election_date, max_rounds, election_id),
+    )
+    db.commit()
+    flash("Saved.", "success")
+    return redirect(url_for("admin_step_details", election_id=election_id))
+
+
 _register_step_stubs()
 
 
