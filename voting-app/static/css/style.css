@@ -1470,3 +1470,78 @@ tr:nth-child(even) {
     margin-top: 12px;
     color: #555;
 }
+
+/* ============== Wizard shell ============== */
+.wizard-shell-body { background: #f5f5f7; }
+.wizard-shell {
+    display: flex;
+    gap: 16px;
+    max-width: 1280px;
+    margin: 16px auto;
+    padding: 0 16px;
+}
+.wizard-sidebar {
+    flex: 0 0 220px;
+    background: #f8f9fa;
+    border: 1px solid var(--grey);
+    border-radius: 8px;
+    padding: 12px;
+    align-self: flex-start;
+    position: sticky;
+    top: 16px;
+    font-size: 13px;
+}
+.wizard-sidebar-head {
+    padding-bottom: 10px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--grey);
+}
+.wizard-sidebar-ename { font-weight: 700; color: var(--navy); font-size: 14px; }
+.wizard-sidebar-meta { font-size: 11px; color: #6c757d; margin-top: 2px; }
+.wizard-sidebar-back {
+    display: inline-block; margin-top: 6px;
+    font-size: 11px; color: #6c757d; text-decoration: none;
+}
+.wizard-sidebar-back:hover { text-decoration: underline; }
+.wizard-sidebar-group-label {
+    font-size: 10px; text-transform: uppercase; color: #6c757d;
+    margin: 10px 6px 4px; letter-spacing: 0.5px; font-weight: 700;
+}
+.wizard-sidebar-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 4px; margin-bottom: 2px;
+    color: #495057; font-size: 13px; text-decoration: none;
+}
+.wizard-sidebar-item:hover { background: #eef0f3; }
+.wizard-sidebar-item .ico { width: 14px; text-align: center; color: #ced4da; }
+.wizard-sidebar-item.done { color: #0f5132; }
+.wizard-sidebar-item.done .ico { color: #198754; }
+.wizard-sidebar-item.current {
+    background: var(--navy); color: var(--gold); font-weight: 700;
+}
+.wizard-sidebar-item.current .ico { color: var(--gold); }
+.wizard-sidebar-item.locked { color: #adb5bd; cursor: not-allowed; }
+.wizard-sidebar-collapsed {
+    color: #6c757d; font-size: 11px; padding: 4px 8px; font-style: italic;
+}
+.wizard-main {
+    flex: 1; min-width: 0;
+    background: #fff; border: 1px solid var(--grey); border-radius: 8px;
+    padding: 18px 22px;
+}
+.wizard-main-head {
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+.wizard-step-tag {
+    display: inline-block; padding: 2px 10px; background: var(--gold);
+    color: var(--navy); border-radius: 12px; font-size: 11px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.wizard-step-heading { margin: 6px 0 0; color: var(--navy); font-size: 22px; }
+
+@media (max-width: 900px) {
+    .wizard-shell { flex-direction: column; }
+    .wizard-sidebar { flex: 0 0 auto; position: static; }
+}
