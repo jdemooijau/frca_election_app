@@ -118,3 +118,19 @@ def test_step_members_renders_with_sidebar(admin_client):
     body = rv.get_data(as_text=True)
     assert "Import Members" in body  # existing CSV upload form copy
     assert "wizard-sidebar" in body
+
+
+def test_step_offices_renders_existing_office_with_candidates(admin_client):
+    admin_client.post("/admin/election/new", data={"name": "E", "max_rounds": "2"})
+    admin_client.post("/admin/election/1/setup", data={
+        "office_name": "Elder", "vacancies": "1", "max_selections": "1",
+        "candidate_names": "A\nB\nC", "confirm_slate_override": "1",
+    })
+    rv = admin_client.get("/admin/election/1/step/offices")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Elder" in body
+    # at least one candidate name visible
+    assert "A" in body or "B" in body
+    assert "wizard-sidebar" in body
+    assert "Add Office" in body

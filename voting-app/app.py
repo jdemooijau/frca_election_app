@@ -797,6 +797,35 @@ def admin_step_members(election_id):
     )
 
 
+@app.route("/admin/election/<int:election_id>/step/offices", methods=["GET"], endpoint="admin_step_offices")
+@admin_required
+def admin_step_offices(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    offices = db.execute(
+        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
+        (election_id,)
+    ).fetchall()
+    candidates_by_office = {}
+    for office in offices:
+        candidates_by_office[office["id"]] = db.execute(
+            "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
+            (office["id"],)
+        ).fetchall()
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/step_offices.html",
+        election=election,
+        offices=offices,
+        candidates_by_office=candidates_by_office,
+        sidebar_state=sidebar_state,
+    )
+
+
 _register_step_stubs()
 
 
@@ -1085,7 +1114,7 @@ def admin_election_setup(election_id):
                     "error"
                 )
                 return render_template(
-                    "admin/election_setup.html",
+                    "admin/step_offices.html",
                     election=election,
                     offices=db.execute(
                         "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
@@ -1104,7 +1133,8 @@ def admin_election_setup(election_id):
                     prefill_office=office_name,
                     prefill_vacancies=vacancies,
                     prefill_max_selections=max_selections,
-                    prefill_candidates=candidate_names
+                    prefill_candidates=candidate_names,
+                    sidebar_state=compute_sidebar_state(election_id),
                 )
 
             # Get next sort order
@@ -1134,7 +1164,7 @@ def admin_election_setup(election_id):
             else:
                 flash(f"Office '{office_name}' added with {len(cand_list)} candidates.", "success")
 
-        return redirect(url_for("admin_election_setup", election_id=election_id))
+        return redirect(url_for("admin_step_offices", election_id=election_id))
 
     offices = db.execute(
         "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
@@ -1189,7 +1219,7 @@ def admin_office_delete(election_id, office_id):
     db.execute("DELETE FROM offices WHERE id = ? AND election_id = ?", (office_id, election_id))
     db.commit()
     flash("Office removed.", "success")
-    return redirect(url_for("admin_election_setup", election_id=election_id))
+    return redirect(url_for("admin_step_offices", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/codes", methods=["GET", "POST"])
@@ -2476,7 +2506,7 @@ def admin_load_sample_offices(election_id):
             "Remove them first if you want to start over.",
             "error",
         )
-        return redirect(url_for("admin_election_setup", election_id=election_id))
+        return redirect(url_for("admin_step_offices", election_id=election_id))
 
     member_names = _load_member_names(db)
     candidate_names = generate_demo_names(count=10, member_names=member_names)
@@ -2513,7 +2543,7 @@ def admin_load_sample_offices(election_id):
         "Sample offices loaded: Elder (3 vacancies, 6 candidates) and Deacon (2 vacancies, 4 candidates).",
         "success",
     )
-    return redirect(url_for("admin_election_setup", election_id=election_id))
+    return redirect(url_for("admin_step_offices", election_id=election_id))
 
 
 @app.route("/admin/members", methods=["GET", "POST"])
