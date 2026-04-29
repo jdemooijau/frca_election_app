@@ -10,8 +10,11 @@
     election with the result as it stands.
 </p>
 
-{% if not election.voting_open and not election_complete %}
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+{% if election.voting_open %}
+<p style="color: #666;">Voting is still open. Close the round on <em>Voting</em> first.</p>
+{% else %}
+<div style="display: grid; grid-template-columns: {% if election_complete %}1fr{% else %}1fr 1fr{% endif %}; gap: 14px;">
+    {% if not election_complete %}
     <div style="border: 1px solid var(--grey); border-radius: 8px; padding: 14px;">
         <h4 style="margin: 0 0 8px; color: var(--navy);">Start Round {{ election.current_round + 1 }}</h4>
         <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
@@ -42,24 +45,30 @@
             </button>
         </form>
     </div>
+    {% endif %}
 
     <div style="border: 1px solid var(--grey); border-radius: 8px; padding: 14px;">
-        <h4 style="margin: 0 0 8px; color: var(--navy);">Finalise the election</h4>
+        <h4 style="margin: 0 0 8px; color: var(--navy);">
+            {% if election_complete %}Election complete &mdash; finalise{% else %}Finalise the election{% endif %}
+        </h4>
         <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
+            {% if election_complete %}
+            All vacancies are filled. Switch the projector and phone displays to
+            the Final Results screen, then continue to <em>Final results</em>
+            in the sidebar.
+            {% else %}
             Conclude with the result as it stands. The projector and phone
             displays will switch to the Final Results screen.
+            {% endif %}
         </p>
         <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=sidebar_state.election.id) }}" class="inline-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="target" value="4">
-            <button type="submit" class="btn btn-primary btn-small">Show Final Results &rarr;</button>
+            <button type="submit" class="btn btn-{% if election_complete %}gold{% else %}primary{% endif %} btn-small">
+                Show Final Results &rarr;
+            </button>
         </form>
     </div>
 </div>
-{% else %}
-<p style="color: #666;">
-    {% if election.voting_open %}Voting is still open. Close the round on <em>Voting</em> first.
-    {% elif election_complete %}Election complete. Continue to <em>Final results</em>.{% endif %}
-</p>
 {% endif %}
 {% endblock %}
