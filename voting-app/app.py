@@ -935,6 +935,13 @@ def admin_step_welcome(election_id):
     )
 
 
+@app.route("/admin/election/<int:election_id>/step/voting", methods=["GET"], endpoint="admin_step_voting")
+@admin_required
+def admin_step_voting(election_id):
+    payload = _build_manage_view_payload(election_id)
+    return render_template("admin/step_voting.html", **payload)
+
+
 _register_step_stubs()
 
 
@@ -1490,12 +1497,13 @@ def admin_toggle_voting(election_id):
             )
             return redirect(url_for("admin_election_manage", election_id=election_id))
 
-    # Closing voting auto-reveals the results panel on the projector so the
-    # chairman doesn't need a second click. The clean ELECTED-only summary
-    # is still a separate manual step (advance display phase to 4).
+    # Closing voting only sets voting_open = 0. The chairman explicitly
+    # decides when to reveal tallies on the projector via the
+    # "Show Results on Projector" button (admin_toggle_results), or by
+    # advancing display_phase to 4 for the final summary view.
     if new_state == 0:
         db.execute(
-            "UPDATE elections SET voting_open = 0, show_results = 1 WHERE id = ?",
+            "UPDATE elections SET voting_open = 0 WHERE id = ?",
             (election_id,)
         )
     else:
@@ -1625,9 +1633,8 @@ def admin_set_display_phase(election_id):
     return redirect(url_for("admin_election_manage", election_id=election_id))
 
 
-@app.route("/admin/election/<int:election_id>/manage")
-@admin_required
-def admin_election_manage(election_id):
+def _build_manage_view_payload(election_id):
+    """Build the context dict used by manage.html and the wizard step 8-11 views."""
     db = get_db()
     election = db.execute(
         "SELECT * FROM elections WHERE id = ?", (election_id,)
@@ -1693,7 +1700,7 @@ def admin_election_manage(election_id):
         (election_id,)
     ).fetchone()[0]
 
-    # Article 6 threshold calculations — per-round counts
+    # Article 6 threshold calculations: per-round counts
     in_person_participants, paper_ballot_count, digital_ballot_count = get_round_counts(election_id, current_round)
     postal_voter_count = (election["postal_voter_count"] or 0) if current_round == 1 else 0
 
@@ -1735,7 +1742,7 @@ def admin_election_manage(election_id):
 
     # Phase-driven flow detection for the manage page (see
     # docs/superpowers/specs/2026-04-21-manage-page-phase-flow-design.md).
-    total_ballots_round = used_codes + paper_ballot_count + postal_voter_count
+    total_ballots = used_codes + paper_ballot_count + postal_voter_count
     display_phase = election["display_phase"] or 1
 
     # Aggregate elected brothers across rounds (DB-persisted plus live
@@ -1785,7 +1792,7 @@ def admin_election_manage(election_id):
         election_complete = False
 
     voting_ever_opened = (
-        current_round > 1 or display_phase >= 3 or total_ballots_round > 0
+        current_round > 1 or display_phase >= 3 or total_ballots > 0
     )
     # Per-round signal: has THIS round ever been opened? Distinguishes a
     # fresh round (e.g. just-advanced R2 with no ballots yet) from a round
@@ -1794,32 +1801,31 @@ def admin_election_manage(election_id):
     this_round_opened = (
         bool(election["voting_open"])
         or display_phase >= 3
-        or total_ballots_round > 0
+        or total_ballots > 0
     )
 
     if election_complete or display_phase == 4:
         active_phase = 5
     elif election["voting_open"]:
         active_phase = 3
-    elif total_ballots_round > 0 or election["show_results"]:
+    elif total_ballots > 0 or election["show_results"]:
         active_phase = 4
     elif (
         in_person_participants > 0
         and display_phase >= 2
         and not voting_ever_opened
     ):
-        # Attendance set + projector reached Rules - ready to Open Round.
+        # Attendance set + projector reached Rules: ready to Open Round.
         active_phase = 3
     elif display_phase in (1, 2):
         active_phase = 2
     else:
         active_phase = 1
-    next_round_started = active_phase == 5 or current_round > 1
 
     phase_done = {
         1: total_codes > 0,
         2: voting_ever_opened,
-        3: not election["voting_open"] and total_ballots_round > 0,
+        3: not election["voting_open"] and total_ballots > 0,
         4: election_complete,
         5: False,
     }
@@ -1835,8 +1841,8 @@ def admin_election_manage(election_id):
             else "Welcome → Rules → Voting"
         ),
         3: (
-            f"Round {current_round} closed - {total_ballots_round} ballots received"
-            if not election["voting_open"] and total_ballots_round > 0
+            f"Round {current_round} closed - {total_ballots} ballots received"
+            if not election["voting_open"] and total_ballots > 0
             else (
                 f"Round {current_round} voting open"
                 if election["voting_open"]
@@ -1859,27 +1865,35 @@ def admin_election_manage(election_id):
         ),
     }
 
-    return render_template(
-        "admin/manage.html",
-        election=election,
-        results=results,
-        total_codes=total_codes,
-        used_codes=used_codes,
-        in_person_participants=in_person_participants,
-        participants=participants,
-        paper_ballot_count=paper_ballot_count,
-        postal_voter_count=postal_voter_count,
-        valid_votes_cast=valid_votes_cast,
-        thresholds=thresholds,
-        current_round=current_round,
-        active_phase=active_phase,
-        phase_done=phase_done,
-        phase_summary=phase_summary,
-        election_complete=election_complete,
-        elected_summary_by_office=elected_summary_by_office,
-        voting_ever_opened=voting_ever_opened,
-        this_round_opened=this_round_opened,
-    )
+    return {
+        "election": election,
+        "results": results,
+        "total_codes": total_codes,
+        "used_codes": used_codes,
+        "in_person_participants": in_person_participants,
+        "participants": participants,
+        "paper_ballot_count": paper_ballot_count,
+        "postal_voter_count": postal_voter_count,
+        "valid_votes_cast": valid_votes_cast,
+        "total_ballots": total_ballots,
+        "thresholds": thresholds,
+        "current_round": current_round,
+        "active_phase": active_phase,
+        "phase_done": phase_done,
+        "phase_summary": phase_summary,
+        "election_complete": election_complete,
+        "elected_summary_by_office": elected_summary_by_office,
+        "voting_ever_opened": voting_ever_opened,
+        "this_round_opened": this_round_opened,
+        "sidebar_state": compute_sidebar_state(election_id),
+    }
+
+
+@app.route("/admin/election/<int:election_id>/manage")
+@admin_required
+def admin_election_manage(election_id):
+    payload = _build_manage_view_payload(election_id)
+    return render_template("admin/manage.html", **payload)
 
 
 @app.route("/admin/election/<int:election_id>/participants", methods=["POST"])

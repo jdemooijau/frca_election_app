@@ -199,3 +199,24 @@ def test_step_welcome_shows_projector_advance(election_with_codes):
     body = rv.get_data(as_text=True)
     assert "Welcome" in body or "Election Rules" in body
     assert "wizard-sidebar" in body
+
+
+def test_close_voting_does_not_auto_reveal_results(election_with_codes):
+    # Open voting
+    election_with_codes.post("/admin/election/1/voting")
+    # Close voting
+    election_with_codes.post("/admin/election/1/voting")
+    # show_results should remain 0
+    from app import get_db
+    with app.app_context():
+        db = get_db()
+        row = db.execute("SELECT show_results FROM elections WHERE id = 1").fetchone()
+    assert row["show_results"] == 0, "Closing voting must not auto-reveal results on the projector"
+
+
+def test_step_voting_shows_open_close_button(election_with_codes):
+    rv = election_with_codes.get("/admin/election/1/step/voting")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Round" in body and "Open" in body
+    assert "wizard-sidebar" in body

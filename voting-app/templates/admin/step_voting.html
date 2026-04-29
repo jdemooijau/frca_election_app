@@ -1,0 +1,187 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}Voting - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}Round {{ sidebar_state.election.current_round }} - Voting{% endblock %}
+{% block step_heading %}Open the round, monitor ballots, close when ready{% endblock %}
+{% block step_content %}
+
+<div style="margin-bottom: 14px;">
+    <form method="POST" action="{{ url_for('admin_toggle_voting', election_id=sidebar_state.election.id) }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if election.voting_open %}
+        <button type="submit" class="btn btn-danger" onclick="return confirm('Close voting for round {{ election.current_round }}?');">
+            Close Round {{ election.current_round }}
+        </button>
+        {% else %}
+        <button type="submit" class="btn btn-success"
+                onclick="return confirm('Open/Reopen round {{ election.current_round }}?');">
+            Open Round {{ election.current_round }}
+        </button>
+        {% endif %}
+    </form>
+</div>
+
+{% if this_round_opened %}
+<div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline; font-size: 14px; color: #555; margin-bottom: 14px;">
+    <span>Ballots received: <strong>{{ total_ballots }}</strong></span>
+    <span>&middot;</span>
+    <span>Brothers participating: <strong>{{ participants }}</strong></span>
+    {% if participants > 0 %}
+    <span>&middot;</span>
+    <span>Still to vote: <strong>{{ (participants - total_ballots) if (participants - total_ballots) > 0 else 0 }}</strong></span>
+    {% endif %}
+</div>
+
+{% set anomaly = participants > 0 and total_ballots > participants %}
+{% if anomaly %}
+<div style="padding: 10px 14px; background: #FFEAE8; border-left: 4px solid #C0392B; color: #6B1A12; border-radius: 6px; margin-bottom: 14px; font-size: 14px;">
+    <strong>&#9888; Ballot anomaly:</strong>
+    {{ total_ballots }} ballots received but only {{ participants }} brother{{ '' if participants == 1 else 's' }} marked as participating.
+    Likely causes: the attendance register was miscounted, or a voter voted online and also handed in a paper ballot.
+</div>
+{% endif %}
+
+<div class="btn-row" style="flex-wrap: wrap; margin-bottom: 14px;">
+    <form method="POST" action="{{ url_for('admin_toggle_results', election_id=sidebar_state.election.id) }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if election.show_results %}
+        <button type="submit" class="btn btn-outline btn-small">Hide Results on Projector</button>
+        {% else %}
+        <button type="submit" class="btn btn-gold btn-small">Show Results on Projector</button>
+        {% endif %}
+    </form>
+    <a href="{{ url_for('display') }}" target="_blank" class="btn btn-outline btn-small">Open Display</a>
+    {% if election.paper_count_enabled %}
+    <a href="{{ url_for('admin_count_dashboard', election_id=sidebar_state.election.id, round_no=sidebar_state.election.current_round) }}"
+       target="_blank" rel="noopener" class="btn btn-outline btn-small">Paper Count Dashboard</a>
+    {% endif %}
+</div>
+
+<p style="font-size: 13px;">
+    <a href="{{ url_for('admin_voter_log', election_id=sidebar_state.election.id) }}" style="color: #666;">View voter audit log &rarr;</a>
+</p>
+{% endif %}{# this_round_opened #}
+
+{% if this_round_opened and results %}
+<div style="margin: 18px 0; padding: 16px 18px; background: white; border: 1px solid var(--grey); border-radius: 8px;">
+    <h3 style="margin: 0 0 12px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">
+        Round {{ election.current_round }} tally
+    </h3>
+    {% for item in results %}
+    {% set office_id = item.office.id %}
+    {% set has_thresholds = office_id in thresholds %}
+    {% set show_elected = has_thresholds %}
+    <div style="margin-bottom: 14px;">
+        <strong style="color: var(--navy);">{{ item.office.name }}</strong>
+        <span style="font-size: 13px; color: #666;">
+            ({{ item.office.vacancies or item.office.max_selections }}
+            {% if (item.office.vacancies or item.office.max_selections) == 1 %}vacancy{% else %}vacancies{% endif %})
+        </span>
+        {% if has_thresholds %}
+        {% set t = thresholds[office_id] %}
+        <p style="font-size: 13px; color: #555; margin: 4px 0;">
+            Article 6a: need &gt; {{ "%.2f"|format(t.threshold_6a) }}
+            &nbsp;&middot;&nbsp; Article 6b: need &ge; {{ t.threshold_6b }}
+        </p>
+        {% endif %}
+        <table style="width: 100%; margin-top: 6px;">
+            <thead>
+                <tr>
+                    <th style="text-align: left;">Candidate</th>
+                    <th style="text-align: center;">Digital</th>
+                    <th style="text-align: center;">Paper</th>
+                    {% if postal_voter_count > 0 %}
+                    <th style="text-align: center;">Postal</th>
+                    {% endif %}
+                    <th style="text-align: right;">Total</th>
+                    {% if has_thresholds %}
+                    <th style="text-align: center;">6a</th>
+                    <th style="text-align: center;">6b</th>
+                    {% endif %}
+                    {% if show_elected %}
+                    <th style="text-align: center;">Elected</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+            {% for cand in item.candidates %}
+            {% if cand.active %}
+            <tr>
+                <td>{{ cand.name }}</td>
+                <td style="text-align: center;">{{ cand.digital }}</td>
+                <td style="text-align: center;">{{ cand.paper }}</td>
+                {% if postal_voter_count > 0 %}
+                <td style="text-align: center;">{{ cand.postal }}</td>
+                {% endif %}
+                <td style="text-align: right; font-weight: 700;">{{ cand.total }}</td>
+                {% if has_thresholds %}
+                <td style="text-align: center;">
+                    {% if cand.passes_6a %}<span style="color: var(--green);">&#10003;</span>
+                    {% else %}<span style="color: var(--red); opacity: 0.6;">&#10007;</span>{% endif %}
+                </td>
+                <td style="text-align: center;">
+                    {% if cand.passes_6b %}<span style="color: var(--green);">&#10003;</span>
+                    {% else %}<span style="color: var(--red); opacity: 0.6;">&#10007;</span>{% endif %}
+                </td>
+                {% endif %}
+                {% if show_elected %}
+                <td style="text-align: center;">
+                    {% if cand.meets_threshold %}
+                        {% if election.voting_open %}
+                        <span style="color: #B8860B; font-weight: 700; font-size: 12px; white-space: nowrap;">TO BE ELECTED</span>
+                        {% else %}
+                        <span style="color: var(--green); font-weight: 700;">ELECTED</span>
+                        {% endif %}
+                    {% else %}
+                    <span style="color: #999;">&mdash;</span>
+                    {% endif %}
+                </td>
+                {% endif %}
+            </tr>
+            {% endif %}
+            {% endfor %}
+            {% set office_max = item.office.max_selections or 1 %}
+            {% set office_possible = total_ballots * office_max %}
+            {% set office_sum = item.candidates | selectattr('active') | sum(attribute='total') %}
+            {% if office_possible > 0 %}
+            <tr style="border-top: 2px solid var(--gold);">
+                <td style="font-weight: 700;">Total</td>
+                <td></td>
+                <td></td>
+                {% if postal_voter_count > 0 %}<td></td>{% endif %}
+                <td style="text-align: right; font-weight: 700;">
+                    {% if office_sum > office_possible %}
+                    <span style="color: var(--red);">{{ office_sum }}</span>
+                    <span style="font-size: 0.85em; color: var(--grey-dark);"> / {{ office_possible }} max</span>
+                    <span style="color: var(--red); margin-left: 4px;">&#10007;</span>
+                    {% else %}
+                    {{ office_sum }} <span style="color: var(--green);">&#10003;</span>
+                    {% endif %}
+                </td>
+                {% if has_thresholds %}<td></td><td></td>{% endif %}
+                {% if show_elected %}<td></td>{% endif %}
+            </tr>
+            {% if office_sum > office_possible %}
+            <tr>
+                <td colspan="99"
+                    style="font-size: 12px; color: var(--red); padding-top: 4px;">
+                    &#9888; Vote total exceeds {{ total_ballots }} ballots &times; {{ office_max }} selections.
+                    Recount paper ballots and re-enter under <em>Enter Paper Votes</em>.
+                </td>
+            </tr>
+            {% endif %}
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if not election.voting_open and this_round_opened %}
+<div style="margin-top: 18px;">
+    <a href="{{ url_for('admin_step_count', election_id=sidebar_state.election.id) }}" class="btn btn-primary">
+        Next: Count &amp; tally &rarr;
+    </a>
+</div>
+{% endif %}
+{% endblock %}
