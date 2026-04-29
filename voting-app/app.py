@@ -917,6 +917,24 @@ def admin_step_attendance(election_id):
     )
 
 
+@app.route("/admin/election/<int:election_id>/step/welcome", methods=["GET"], endpoint="admin_step_welcome")
+@admin_required
+def admin_step_welcome(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/step_welcome.html",
+        election=election,
+        phase=election["display_phase"] or 1,
+        sidebar_state=sidebar_state,
+    )
+
+
 _register_step_stubs()
 
 
@@ -1597,6 +1615,13 @@ def admin_set_display_phase(election_id):
         phase_names = {1: "Welcome", 2: "Election Rules", 3: "Voting", 4: "Final Results"}
         flash(f"Projector display: {phase_names[new_phase]}", "success")
 
+    referrer = request.referrer or ""
+    if "/step/welcome" in referrer:
+        return redirect(url_for("admin_step_welcome", election_id=election_id))
+    if "/step/decide" in referrer:
+        return redirect(url_for("admin_step_decide", election_id=election_id))
+    if "/step/final" in referrer:
+        return redirect(url_for("admin_step_final", election_id=election_id))
     return redirect(url_for("admin_election_manage", election_id=election_id))
 
 
