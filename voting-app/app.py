@@ -2845,8 +2845,18 @@ def count_helper_page(session_id):
         (session_id, code)
     ).fetchone()
     # If they haven't tapped yet, render a preview helper - the row is created
-    # lazily on first tap (see count_tap).
+    # lazily on first tap (see count_tap). But first check the cap so a 31st
+    # arriver gets a clear "team is full" page instead of a silently broken
+    # grid (the visibility gate hides the button, but there's a small race).
     if helper is None:
+        helper_count = db.execute(
+            "SELECT COUNT(*) AS cnt FROM count_session_helpers "
+            "WHERE session_id = ? AND disregarded_at IS NULL",
+            (session_id,)
+        ).fetchone()["cnt"]
+        if helper_count >= PAPER_COUNT_MAX_HELPERS:
+            return render_template("voter/count_helper.html", state="full",
+                                   helper={"short_id": ""}, sess=sess)
         helper = {"short_id": _short_id_from_code(code), "marked_done_at": None}
 
     # Determine end-state to render

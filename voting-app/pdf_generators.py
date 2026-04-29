@@ -19,6 +19,9 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
+
+from name_formatting import shorten_to_fit
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -357,10 +360,14 @@ def generate_counter_sheet_pdf(election_name, congregation_name, offices_data,
                 c.showPage()
                 y = height - 20 * mm
 
-            # Candidate name
+            # Candidate name -- shortened to fit between the left margin
+            # and the start of the tally grid (with a small visual buffer).
             c.setFillColor(NAVY)
             c.setFont("Helvetica-Bold", 10)
-            c.drawString(margin, y, cand["name"])
+            name_max_w = tally_start - margin - 4 * mm
+            display_name = shorten_to_fit(
+                cand["name"], name_max_w, "Helvetica-Bold", 10)
+            c.drawString(margin, y, display_name)
 
             # Total box (right side)
             c.setStrokeColor(NAVY)
@@ -444,25 +451,153 @@ def generate_paper_ballot_pdf(election_name, round_number, office_data,
     c = canvas.Canvas(buf, pagesize=A4)
     width, height = A4
 
-    # Side-by-side office layout: split offices into two columns
-    mid = (len(office_data) + 1) // 2
-    left_offices = office_data[:mid]
-    right_offices = office_data[mid:]
+    n_offices = len(office_data)
+    max_cands_in_office = (
+        max(len(o["candidates"]) for o in office_data) if office_data else 0
+    )
+
+    # Single office uses the full ballot width; multiple offices split
+    # left/right within the tile.
+    two_office_cols = n_offices >= 2
+
+    # Tile geometry (mm) — needed up front to compute the scale cap from
+    # actual text widths.
+    page_w_mm = 210
+    margin_mm = 8
+    col_gap_mm = 6
+    sub_gap_mm = 3
+    col_w_mm = (page_w_mm - 2 * margin_mm - col_gap_mm) / 2  # 94mm
+    if two_office_cols:
+        sub_w_mm = (col_w_mm - sub_gap_mm) / 2  # 45.5mm
+    else:
+        sub_w_mm = col_w_mm - 4  # ~90mm (single office, with side padding)
+
+    # Compute the largest scale that keeps every candidate name and office
+    # title inside its sub-column, AND fits 6 ballots per A4. The cand row
+    # is: checkbox(3*scale mm) + 3mm gap + name. The office title is left-
+    # aligned and must fit sub_w_mm. We aim for 6 ballots per A4 (3 rows
+    # by 2 cols) so the printer can plan sheet count as ceil(ballots / 6).
+    text_caps = [99.0]
+    for item in office_data:
+        office = item["office"]
+        title = f"For {office['name']} (select {office['max_selections']})"
+        title_w_mm = stringWidth(title, "Helvetica-Bold", 7) / mm
+        if title_w_mm > 0:
+            text_caps.append(sub_w_mm / title_w_mm)
+        for cand in item["candidates"]:
+            name_w_mm = stringWidth(cand["name"], "Helvetica", 7.5) / mm
+            if name_w_mm > 0:
+                # name_w * scale + box(3*scale) + 5mm padding <= sub_w
+                text_caps.append((sub_w_mm - 5) / (name_w_mm + 3))
+    text_fit_cap = min(text_caps)
+
+    # Page-fit cap (target 6 ballots per A4 — 3 rows of 2 cols, ballot_h<=91mm)
+    # ballot_h ≈ 14 + scale*(6.85 + 5*max_cands_in_office)
+    # 14 + scale*(...)  <= 91  →  scale <= 77 / (6.85 + 5*max_cands)
+    if max_cands_in_office > 0:
+        page_fit_cap = 77 / (6.85 + 5 * max_cands_in_office)
+    else:
+        page_fit_cap = 99.0
+
+    # Apply the smaller cap with a small safety margin (so text doesn't
+    # touch the tile edge), and clamp to a reasonable range. 0.97 keeps
+    # enough margin for descender/spacing while letting the font fill the
+    # available width.
+    scale = min(text_fit_cap, page_fit_cap) * 0.97
+    scale = max(1.0, min(scale, 5.0))
+
+    if two_office_cols:
+        mid = (n_offices + 1) // 2
+        left_offices = office_data[:mid]
+        right_offices = office_data[mid:]
+    else:
+        left_offices = office_data
+        right_offices = []
+
+    # Heading row (title, optional round-2 warning) stays at base sizes
+    # regardless of body scale — otherwise long election names overflow the
+    # tile width into the adjacent ballot.
+    title_pt = 9
+    warning_pt = 6.5
+    # Body elements scale together so checkboxes, names, and gaps grow
+    # proportionally.
+    box_mm = 3 * scale
+    row_mm = 5 * scale
+    office_header_mm = 4 * scale
+    office_pad_mm = 1 * scale
+    office_title_pt = 7 * scale
+    cand_pt = 7.5 * scale
+    # Fixed breathing room below the last candidate of an office. Without
+    # this, drawing decrements `row_mm` after every candidate including the
+    # last one, which (when row_mm is stretched) becomes a big empty band
+    # at the bottom of the tile.
+    tail_mm = 4
 
     def _col_body_height(offices):
         h = 0
         for item in offices:
-            h += 4 * mm + len(item["candidates"]) * 5 * mm + 1 * mm
+            n = len(item["candidates"])
+            if n == 0:
+                h += (office_header_mm + office_pad_mm) * mm
+            else:
+                h += (office_header_mm + (n - 1) * row_mm + tail_mm + office_pad_mm) * mm
         return h
 
     body_height = max(_col_body_height(left_offices),
                       _col_body_height(right_offices) if right_offices else 0)
 
-    header_height = 14 * mm
+    # The body office-title ascender grows with scale, so reserve enough
+    # clearance under the heading to keep "For Elder (select X)" from
+    # crowding the election title.
+    # Always reserve EXTRA breathing room above the body so the first
+    # candidate doesn't sit right under the heading, regardless of how
+    # densely packed the body is.
+    EXTRA_ABOVE_BODY_MM = 5
+    heading_to_body_gap = (
+        max(4, 1.85 * scale + 3) + EXTRA_ABOVE_BODY_MM
+    ) * mm
+    # Header height = top inset + (round-2 warning slot) + heading-to-body gap.
+    # Subtitle has been removed.
+    header_height = 5 * mm + heading_to_body_gap
     if round_number > 1:
-        header_height += 5 * mm
+        header_height += 4 * mm
     padding = 6 * mm
-    ballot_h = header_height + body_height + padding
+    natural_ballot_h = header_height + body_height + padding
+    # Standardize at 6 ballots per A4 so the printer can plan sheet count
+    # as ceil(ballots / 6) regardless of slate shape. Fixed target is
+    # ((usable_h + row_gap) / 3) - row_gap = 91mm.
+    TARGET_BALLOT_H_MM = 91
+    ballot_h = max(natural_ballot_h, TARGET_BALLOT_H_MM * mm)
+    # First, increase office_header_mm (the gap between "For Elder (select N)"
+    # and the first candidate) — more extra for fewer candidates, capped so
+    # the body still fits inside the tile.
+    natural_row_mm = row_mm  # save for cap below
+    target_body_h_mm = (ballot_h - header_height - padding) / mm
+    if max_cands_in_office > 0:
+        natural_body_no_extras_mm = (
+            office_header_mm
+            + max(0, max_cands_in_office - 1) * natural_row_mm
+            + tail_mm + office_pad_mm
+        )
+        max_office_extra_mm = max(0, target_body_h_mm - natural_body_no_extras_mm)
+        # Sparse → bigger extra. N=2 → 8mm, N=4 → 6mm, N=6 → 4mm, N=8 → 3mm.
+        desired_office_extra_mm = max(3, 10 - max_cands_in_office)
+        office_header_mm += min(desired_office_extra_mm, max_office_extra_mm)
+
+    # Then stretch the inter-candidate row spacing (only the gaps BETWEEN
+    # candidates, not the trailing space) to fill what's left, capped at
+    # 1.5x natural so we don't end up with comically large gaps. Any
+    # residual slack gets centered evenly above and below.
+    if max_cands_in_office > 1:
+        candidate_room_mm = target_body_h_mm - office_header_mm - tail_mm - office_pad_mm
+        stretched_row_mm = candidate_room_mm / (max_cands_in_office - 1)
+        cap_row_mm = 1.5 * natural_row_mm
+        row_mm = min(max(natural_row_mm, stretched_row_mm), cap_row_mm)
+    # Recompute body_height with the chosen office_header and row spacing.
+    body_height = max(_col_body_height(left_offices),
+                      _col_body_height(right_offices) if right_offices else 0)
+    # Centered residual slack — split evenly above and below the body.
+    vcenter_offset = max(0, (ballot_h - (header_height + body_height + padding)) / 2)
 
     # Grid layout: 2 columns, as many rows as fit
     margin = 8 * mm
@@ -474,7 +609,10 @@ def generate_paper_ballot_pdf(election_name, round_number, office_data,
     ballots_per_page = rows_per_page * 2
 
     sub_gap = 3 * mm
-    sub_w = (col_w - sub_gap) / 2
+    if two_office_cols:
+        sub_w = (col_w - sub_gap) / 2
+    else:
+        sub_w = col_w - 4 * mm  # full width minus inset padding
 
     # Generate enough pages
     total_ballots = max(member_count + 10, 30) if member_count > 0 else 30
@@ -498,28 +636,28 @@ def generate_paper_ballot_pdf(election_name, round_number, office_data,
             c.rect(x, ballot_top - ballot_h, col_w, ballot_h)
             c.setDash()
 
-            # Content
+            # Content \u2014 heading row uses base font sizes regardless of body
+            # scale. The heading-to-body gap is scale-aware so the body
+            # office title doesn't crowd the heading at large scales.
+            # vcenter_offset shifts everything down so the body sits in the
+            # middle of the padded tile instead of being flushed to the top.
             cx = x + col_w / 2
-            y = ballot_top - 5 * mm
+            y = ballot_top - 5 * mm - vcenter_offset
 
             # Title
             c.setFillColor(NAVY)
-            c.setFont("Helvetica-Bold", 9)
+            c.setFont("Helvetica-Bold", title_pt)
             c.drawCentredString(cx, y, election_name)
-            y -= 4 * mm
-
-            c.setFont("Helvetica", 7)
-            c.setFillColor(HexColor("#666666"))
-            c.drawCentredString(cx, y, f"Paper Ballot \u2014 Round {round_number}")
-            y -= 4 * mm
 
             if round_number > 1:
-                c.setFont("Helvetica-Bold", 6.5)
+                y -= 4 * mm
+                c.setFont("Helvetica-Bold", warning_pt)
                 c.setFillColor(HexColor("#C0392B"))
                 c.drawCentredString(cx, y, "Vote ONLY for candidates announced by the chairman")
-                y -= 4 * mm
 
-            # Draw offices side by side
+            y -= heading_to_body_gap
+
+            # Draw offices side by side (or single column for one office)
             body_y = y
             for ci, offices in enumerate([left_offices, right_offices]):
                 if not offices:
@@ -532,22 +670,29 @@ def generate_paper_ballot_pdf(election_name, round_number, office_data,
                     candidates = item["candidates"]
 
                     c.setFillColor(NAVY)
-                    c.setFont("Helvetica-Bold", 7)
+                    c.setFont("Helvetica-Bold", office_title_pt)
                     c.drawString(ox, oy,
                                  f"For {office['name']} (select {office['max_selections']})")
-                    oy -= 4 * mm
+                    oy -= office_header_mm * mm
 
-                    for cand in candidates:
+                    name_max_w = sub_w - (box_mm + 5) * mm
+                    last_idx = len(candidates) - 1
+                    for ci_, cand in enumerate(candidates):
                         c.setStrokeColor(NAVY)
                         c.setFillColor(HexColor("#FFFFFF"))
-                        c.rect(ox + 1 * mm, oy - 0.5 * mm, 3 * mm, 3 * mm)
+                        c.rect(ox + 1 * mm, oy - 0.5 * mm, box_mm * mm, box_mm * mm)
 
                         c.setFillColor(NAVY)
-                        c.setFont("Helvetica", 7.5)
-                        c.drawString(ox + 6 * mm, oy, cand["name"])
-                        oy -= 5 * mm
+                        c.setFont("Helvetica", cand_pt)
+                        display_name = shorten_to_fit(
+                            cand["name"], name_max_w, "Helvetica", cand_pt)
+                        c.drawString(ox + (box_mm + 3) * mm, oy, display_name)
+                        # Advance row_mm only BETWEEN candidates; after the
+                        # last one, advance just `tail_mm` so we don't leave
+                        # a row-sized empty band at the bottom of the office.
+                        oy -= (row_mm if ci_ < last_idx else tail_mm) * mm
 
-                    oy -= 1 * mm
+                    oy -= office_pad_mm * mm
 
             ballot_index += 1
 
@@ -734,6 +879,7 @@ def _draw_ballot_card(c, x, top_y, card_w, card_h, election_name,
                          f"For {office['name']} (select {office['max_selections']})")
             oy -= 5.5 * mm
 
+            name_max_w = sub_w - 9.5 * mm
             for cand in candidates:
                 c.setStrokeColor(HexColor("#000000"))
                 c.setFillColor(HexColor("#FFFFFF"))
@@ -741,7 +887,9 @@ def _draw_ballot_card(c, x, top_y, card_w, card_h, election_name,
 
                 c.setFillColor(HexColor("#000000"))
                 c.setFont("Helvetica", 10)
-                c.drawString(ox + 7.5 * mm, oy, cand["name"])
+                display_name = shorten_to_fit(
+                    cand["name"], name_max_w, "Helvetica", 10)
+                c.drawString(ox + 7.5 * mm, oy, display_name)
                 oy -= 6 * mm
 
             oy -= 1 * mm

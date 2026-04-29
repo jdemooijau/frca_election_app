@@ -2,6 +2,8 @@
 
 A self-contained offline voting app for office bearer elections in Free Reformed Churches of Australia. Designed to run on a single laptop in the church hall with a local WiFi router. No internet required.
 
+> **Not sure where to begin?** See [where_to_start.md](where_to_start.md) for a signpost that points you to the right document based on your role (council member, technical volunteer, etc.).
+
 ## For other congregations considering this app
 
 **This is one congregation's interpretation of the Election Rules. Verify against your own.**
@@ -135,3 +137,7 @@ Everything is self-contained. No CDNs, no internet dependencies, no external ser
 MIT License. See [LICENSE](LICENSE).
 
 Built for office bearer elections in Free Reformed Churches of Australia. Released under the MIT License in the hope that it may serve any FRCA congregation, and any other organisation with similar needs.
+
+## Contact
+
+Jan de Mooij

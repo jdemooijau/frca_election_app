@@ -41,6 +41,11 @@
     <h2>Counting was cancelled.</h2>
     <a href="{{ url_for('voter_enter_code') }}" class="btn btn-outline">Done</a>
 </div>
+{% elif state == "full" %}
+<div class="count-end-screen">
+    <h2>No more counter pages available - thanks for trying</h2>
+    <a href="{{ url_for('voter_enter_code') }}" class="btn btn-outline">Done</a>
+</div>
 {% endif %}
 {% if state == "active" %}
 <script>

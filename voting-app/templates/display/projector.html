@@ -108,6 +108,15 @@
         display: block;
         margin-bottom: 6px;
     }
+    .all-votes-panel {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 80px 40px;
+    }
+    .all-votes-panel h2 { text-align: center; }
+    .all-votes-panel p { text-align: center; }
 </style>
 {% endblock %}
 
@@ -239,10 +248,24 @@
         </div>
     </div>
 
-    <div id="all-votes-in-panel" style="{{ '' if all_votes_in else 'display:none' }} text-align:center; padding: 80px 40px;">
+    <div id="all-votes-in-panel" class="all-votes-panel" {% if not all_votes_in %}style="display:none"{% endif %}>
         <div style="font-size: 96px; line-height: 1; color: var(--green); margin-bottom: 16px;">&#10003;</div>
         <h2 style="font-size: 60px; font-weight: 700; color: var(--navy); margin: 0 0 16px;">All votes received</h2>
         <p style="font-size: 48px; color: #555; margin: 0;">Paper votes are being counted/confirmed</p>
+
+        {% if election.paper_count_enabled %}
+        <div style="margin-top: 60px; padding-top: 40px; border-top: 2px solid var(--grey); max-width: 1100px; width: 100%; display: flex; flex-direction: column; align-items: center;">
+            <p style="font-size: 36px; color: var(--navy); margin: 0 0 28px; line-height: 1.4;">
+                Help count from your phone. On your live results page, tap:
+            </p>
+            <div style="padding: 22px 56px; background: var(--navy); color: #fff; border-radius: 14px; font-size: 38px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 4px 0 var(--navy-dark);">
+                Count Votes
+            </div>
+            <p style="font-size: 26px; color: #888; margin: 28px 0 0;">
+                Limited to the first 30 counter helpers
+            </p>
+        </div>
+        {% endif %}
     </div>
 
     <div class="display-results" id="results-container">
