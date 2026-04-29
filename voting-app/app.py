@@ -499,9 +499,13 @@ def compute_sidebar_state(election_id):
 
     # Current step = lowest-numbered reachable, not-done step. If all done,
     # fall back to the last step in WIZARD_STEPS (currently "minutes").
+    # Members is app-global; don't auto-land the user there. They can still
+    # navigate to it from the sidebar; it just shouldn't be the default
+    # landing step from /admin/election/<id>/manage redirects or
+    # admin_election_open.
     current_step = next(
         (slug for slug, _label, _group in WIZARD_STEPS
-         if status[slug][1] and not status[slug][0]),
+         if slug != "members" and status[slug][1] and not status[slug][0]),
         WIZARD_STEPS[-1][0],
     )
 
@@ -547,14 +551,6 @@ def compute_sidebar_state(election_id):
         "current_step": current_step,
         "groups": groups,
     }
-
-
-def _make_step_stub(slug):
-    """Stub route used to make url_for() resolve before real routes exist."""
-    def _stub(election_id):
-        return f"step {slug} not yet implemented", 501
-    _stub.__name__ = f"admin_step_{slug}"
-    return _stub
 
 
 def set_round_counts(election_id, round_number, participants, paper_ballot_count):
@@ -714,25 +710,6 @@ def admin_required(f):
             return redirect(url_for("admin_login"))
         return f(*args, **kwargs)
     return decorated
-
-
-def _register_step_stubs():
-    """Register stub views for any step slug whose real view hasn't been
-    defined yet. Idempotent: real `admin_step_<slug>` views registered
-    earlier in the module are left intact. Tasks 3-14 add real views
-    above this call; this function only fills the gaps so url_for()
-    resolves for slugs not yet implemented."""
-    for slug, _label, _group in WIZARD_STEPS:
-        endpoint = f"admin_step_{slug}"
-        if endpoint in app.view_functions:
-            continue
-        view = _make_step_stub(slug)
-        app.add_url_rule(
-            f"/admin/election/<int:election_id>/step/{slug}",
-            endpoint=endpoint,
-            view_func=admin_required(view),
-            methods=["GET"],
-        )
 
 
 @app.route("/admin/election/<int:election_id>/step/details", methods=["GET"], endpoint="admin_step_details")
@@ -972,9 +949,6 @@ def admin_step_minutes(election_id):
         abort(404)
     sidebar_state = compute_sidebar_state(election_id)
     return render_template("admin/step_minutes.html", election=election, sidebar_state=sidebar_state)
-
-
-_register_step_stubs()
 
 
 def hash_code(code):
@@ -1241,104 +1215,84 @@ def admin_election_setup(election_id):
     if not election:
         abort(404)
 
-    if request.method == "POST":
-        office_name = request.form.get("office_name", "").strip()
-        vacancies = int(request.form.get("vacancies", 1))
-        max_selections = int(request.form.get("max_selections", 0)) or vacancies
-        candidate_names = request.form.get("candidate_names", "").strip()
-        confirm_slate = request.form.get("confirm_slate_override")
+    office_name = request.form.get("office_name", "").strip()
+    vacancies = int(request.form.get("vacancies", 1))
+    max_selections = int(request.form.get("max_selections", 0)) or vacancies
+    candidate_names = request.form.get("candidate_names", "").strip()
+    confirm_slate = request.form.get("confirm_slate_override")
 
-        if not office_name:
-            flash("Office name is required.", "error")
-        elif not candidate_names:
-            flash("At least one candidate is required.", "error")
-        elif vacancies < 1:
-            flash("Vacancies must be at least 1.", "error")
-        else:
-            # Count candidates
-            cand_list = [n.strip() for n in candidate_names.split("\n") if n.strip()]
-            expected_slate = 2 * vacancies
+    if not office_name:
+        flash("Office name is required.", "error")
+    elif not candidate_names:
+        flash("At least one candidate is required.", "error")
+    elif vacancies < 1:
+        flash("Vacancies must be at least 1.", "error")
+    else:
+        # Count candidates
+        cand_list = [n.strip() for n in candidate_names.split("\n") if n.strip()]
+        expected_slate = 2 * vacancies
 
-            # Article 2 slate validation
-            if len(cand_list) != expected_slate and not confirm_slate:
-                flash(
-                    f"Article 2 requires a slate of {expected_slate} candidates for {vacancies} "
-                    f"{'vacancy' if vacancies == 1 else 'vacancies'} (twice the number of vacancies). "
-                    f"You have {len(cand_list)} candidates. "
-                    f"Article 13 permits deviation — confirm below to proceed.",
-                    "error"
-                )
-                return render_template(
-                    "admin/step_offices.html",
-                    election=election,
-                    offices=db.execute(
-                        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
-                        (election_id,)
-                    ).fetchall(),
-                    candidates_by_office={
-                        o["id"]: db.execute(
-                            "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
-                            (o["id"],)
-                        ).fetchall()
-                        for o in db.execute(
-                            "SELECT * FROM offices WHERE election_id = ?", (election_id,)
-                        ).fetchall()
-                    },
-                    slate_warning=True,
-                    prefill_office=office_name,
-                    prefill_vacancies=vacancies,
-                    prefill_max_selections=max_selections,
-                    prefill_candidates=candidate_names,
-                    sidebar_state=compute_sidebar_state(election_id),
-                )
-
-            # Get next sort order
-            max_sort = db.execute(
-                "SELECT COALESCE(MAX(sort_order), 0) FROM offices WHERE election_id = ?",
-                (election_id,)
-            ).fetchone()[0]
-
-            cursor = db.execute(
-                "INSERT INTO offices (election_id, name, max_selections, vacancies, original_vacancies, sort_order) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (election_id, office_name, max_selections, vacancies, vacancies, max_sort + 1)
+        # Article 2 slate validation
+        if len(cand_list) != expected_slate and not confirm_slate:
+            flash(
+                f"Article 2 requires a slate of {expected_slate} candidates for {vacancies} "
+                f"{'vacancy' if vacancies == 1 else 'vacancies'} (twice the number of vacancies). "
+                f"You have {len(cand_list)} candidates. "
+                f"Article 13 permits deviation — confirm below to proceed.",
+                "error"
             )
-            office_id = cursor.lastrowid
+            return render_template(
+                "admin/step_offices.html",
+                election=election,
+                offices=db.execute(
+                    "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
+                    (election_id,)
+                ).fetchall(),
+                candidates_by_office={
+                    o["id"]: db.execute(
+                        "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
+                        (o["id"],)
+                    ).fetchall()
+                    for o in db.execute(
+                        "SELECT * FROM offices WHERE election_id = ?", (election_id,)
+                    ).fetchall()
+                },
+                slate_warning=True,
+                prefill_office=office_name,
+                prefill_vacancies=vacancies,
+                prefill_max_selections=max_selections,
+                prefill_candidates=candidate_names,
+                sidebar_state=compute_sidebar_state(election_id),
+            )
 
-            # Parse candidate names (one per line)
-            for i, cand_name in enumerate(cand_list):
-                db.execute(
-                    "INSERT INTO candidates (office_id, name, sort_order) VALUES (?, ?, ?)",
-                    (office_id, cand_name, i)
-                )
+        # Get next sort order
+        max_sort = db.execute(
+            "SELECT COALESCE(MAX(sort_order), 0) FROM offices WHERE election_id = ?",
+            (election_id,)
+        ).fetchone()[0]
 
-            db.commit()
+        cursor = db.execute(
+            "INSERT INTO offices (election_id, name, max_selections, vacancies, original_vacancies, sort_order) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (election_id, office_name, max_selections, vacancies, vacancies, max_sort + 1)
+        )
+        office_id = cursor.lastrowid
 
-            if len(cand_list) != expected_slate:
-                flash(f"Office '{office_name}' added (Article 13 deviation: {len(cand_list)} candidates for {vacancies} vacancies).", "success")
-            else:
-                flash(f"Office '{office_name}' added with {len(cand_list)} candidates.", "success")
+        # Parse candidate names (one per line)
+        for i, cand_name in enumerate(cand_list):
+            db.execute(
+                "INSERT INTO candidates (office_id, name, sort_order) VALUES (?, ?, ?)",
+                (office_id, cand_name, i)
+            )
 
-        return redirect(url_for("admin_step_offices", election_id=election_id))
+        db.commit()
 
-    offices = db.execute(
-        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
-        (election_id,)
-    ).fetchall()
+        if len(cand_list) != expected_slate:
+            flash(f"Office '{office_name}' added (Article 13 deviation: {len(cand_list)} candidates for {vacancies} vacancies).", "success")
+        else:
+            flash(f"Office '{office_name}' added with {len(cand_list)} candidates.", "success")
 
-    candidates_by_office = {}
-    for office in offices:
-        candidates_by_office[office["id"]] = db.execute(
-            "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
-            (office["id"],)
-        ).fetchall()
-
-    return render_template(
-        "admin/election_setup.html",
-        election=election,
-        offices=offices,
-        candidates_by_office=candidates_by_office
-    )
+    return redirect(url_for("admin_step_offices", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/settings", methods=["POST"])
@@ -1449,15 +1403,7 @@ def admin_codes(election_id):
     total_codes = stats["total"]
     used_codes = stats["used"] or 0
 
-    return render_template(
-        "admin/codes.html",
-        election=election,
-        total_codes=total_codes,
-        used_codes=used_codes,
-        generated_codes=generated_codes,
-        default_count=default_count,
-        member_count=member_count
-    )
+    return redirect(url_for("admin_step_codes", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/codes/delete", methods=["POST"])

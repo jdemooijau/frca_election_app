@@ -45,7 +45,11 @@ def fresh_election(admin_client):
 
 
 def test_sidebar_state_fresh_election_has_only_details_done(fresh_election):
-    """A just-created election has only step 1 done; everything else locked or current."""
+    """A just-created election has only step 1 done; everything else locked or current.
+
+    Note: `members` is skipped from auto-landing selection (it's app-global),
+    so on a fresh election the current step lands on `offices`.
+    """
     from app import compute_sidebar_state
     with app.app_context():
         state = compute_sidebar_state(election_id=1)
@@ -53,13 +57,13 @@ def test_sidebar_state_fresh_election_has_only_details_done(fresh_election):
     assert state["election"]["id"] == 1
     assert state["election"]["name"] == "Test Election"
     assert state["election"]["current_round"] == 1
-    # Setup group: details done, members locked (no members yet),
-    # offices locked, settings locked, codes locked
+    # Setup group: details done, members locked (no members yet, but skipped
+    # from auto-landing), offices is current, settings locked, codes locked
     setup = next(g for g in state["groups"] if g["label"] == "Setup")
     states_by_slug = {item["slug"]: item["state"] for item in setup["entries"]}
     assert states_by_slug["details"] == "done"
-    assert states_by_slug["members"] in ("current", "locked")
-    assert states_by_slug["offices"] == "locked"
+    assert states_by_slug["members"] == "locked"
+    assert states_by_slug["offices"] == "current"
     assert states_by_slug["codes"] == "locked"
 
 
