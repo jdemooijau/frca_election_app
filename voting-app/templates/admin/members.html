@@ -1,13 +1,17 @@
-{% extends "base.html" %}
-{% block title %}Members — Office Bearer Election{% endblock %}
+{% extends parent_template|default("base.html") %}
+{% block title %}Members - Office Bearer Election{% endblock %}
+{% block step_tag %}Members{% endblock %}
+{% block step_heading %}Member directory{% endblock %}
 
 {% block content %}
+{% if sidebar_state %}{{ super() }}{% else %}
 <div class="admin-header">
     <h1>Member Directory</h1>
     <a href="{{ url_for('admin_dashboard') }}">Back</a>
 </div>
 
 <div class="container-wide">
+{% block step_content %}
     <!-- Upload form -->
     <div class="card">
         <div class="card-header">Import Members from Church Social</div>
@@ -15,7 +19,7 @@
             Upload a CSV with at least <strong>Last name</strong> and <strong>First name</strong> columns.
             Other columns are optional and will be ignored. Uploading replaces all existing members.
         </p>
-        <form method="POST" enctype="multipart/form-data">
+        <form method="POST" action="{{ url_for('admin_members') }}" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <input type="file" name="csv_file" accept=".csv" required
@@ -65,5 +69,7 @@
         </table>
     </div>
     {% endif %}
+{% endblock %}
 </div>
+{% endif %}
 {% endblock %}

@@ -109,3 +109,12 @@ def test_step_details_renders_form(admin_client):
     assert "Election details" in body
     # Sidebar should be present
     assert "wizard-sidebar" in body
+
+
+def test_step_members_renders_with_sidebar(admin_client):
+    admin_client.post("/admin/election/new", data={"name": "E", "max_rounds": "2"})
+    rv = admin_client.get("/admin/election/1/step/members")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Import Members" in body  # existing CSV upload form copy
+    assert "wizard-sidebar" in body

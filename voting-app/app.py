@@ -774,6 +774,29 @@ def admin_step_details_save(election_id):
     return redirect(url_for("admin_step_details", election_id=election_id))
 
 
+@app.route("/admin/election/<int:election_id>/step/members", methods=["GET"], endpoint="admin_step_members")
+@admin_required
+def admin_step_members(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    members = db.execute(
+        "SELECT * FROM members ORDER BY surname_sort_key(last_name || ' ' || first_name)"
+    ).fetchall()
+    member_count = len(members)
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/members.html",
+        members=members,
+        member_count=member_count,
+        sidebar_state=sidebar_state,
+        parent_template="admin/_step_base.html",
+    )
+
+
 _register_step_stubs()
 
 
