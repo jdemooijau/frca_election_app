@@ -387,6 +387,7 @@ def _step_done(db, election, slug, round_no):
     if slug == "details":
         return True  # election row exists
     if slug == "members":
+        # Members are app-global; the same imported list is reused across elections.
         return db.execute("SELECT COUNT(*) FROM members").fetchone()[0] > 0
     if slug == "offices":
         return db.execute(
@@ -479,42 +480,40 @@ def compute_sidebar_state(election_id):
         return None
 
     current_round = election["current_round"] or 1
+    # Members are app-global, not per-election; the count is shared across all elections.
     member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
 
+    # First pass: compute (done, reachable) for each step and stash item shells.
+    status = {}  # slug -> (done, reachable)
     items_by_slug = {}
     for slug, label, _group in WIZARD_STEPS:
         done = _step_done(db, election, slug, current_round)
         reachable = _step_prerequisites_met(db, election, slug, current_round)
-        item_label = label
-        if slug == "members" and member_count > 0:
-            item_label = f"Members ({member_count})"
+        status[slug] = (done, reachable)
+        item_label = f"Members ({member_count})" if slug == "members" and member_count > 0 else label
         items_by_slug[slug] = {
             "slug": slug,
             "label": item_label,
-            "done": done,
-            "reachable": reachable,
             "url": url_for(f"admin_step_{slug}", election_id=election_id),
         }
 
-    current_step = "minutes"
-    for slug, _label, _group in WIZARD_STEPS:
-        item = items_by_slug[slug]
-        if item["reachable"] and not item["done"]:
-            current_step = slug
-            break
+    # Current step = lowest-numbered reachable, not-done step. If all done,
+    # fall back to the last step in WIZARD_STEPS (currently "minutes").
+    current_step = next(
+        (slug for slug, _label, _group in WIZARD_STEPS
+         if status[slug][1] and not status[slug][0]),
+        WIZARD_STEPS[-1][0],
+    )
 
-    for slug in items_by_slug:
-        item = items_by_slug[slug]
+    # Second pass: assign render state.
+    for slug, item in items_by_slug.items():
+        done, _reachable = status[slug]
         if slug == current_step:
             item["state"] = "current"
-        elif item["done"]:
+        elif done:
             item["state"] = "done"
-        elif item["reachable"]:
-            item["state"] = "locked"
         else:
             item["state"] = "locked"
-        del item["done"]
-        del item["reachable"]
 
     groups = [
         {"label": "Setup", "items": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Setup"]},
@@ -717,16 +716,26 @@ def admin_required(f):
     return decorated
 
 
-# Register 12 stub wizard-step routes so url_for("admin_step_<slug>") resolves
-# before the real handlers are wired up in later tasks. Stubs return 501.
-for _slug, _label, _group in WIZARD_STEPS:
-    _view = _make_step_stub(_slug)
-    app.add_url_rule(
-        f"/admin/election/<int:election_id>/step/{_slug}",
-        endpoint=f"admin_step_{_slug}",
-        view_func=admin_required(_view),
-        methods=["GET"],
-    )
+def _register_step_stubs():
+    """Register stub views for any step slug whose real view hasn't been
+    defined yet. Idempotent: real `admin_step_<slug>` views registered
+    earlier in the module are left intact. Tasks 3-14 add real views
+    above this call; this function only fills the gaps so url_for()
+    resolves for slugs not yet implemented."""
+    for slug, _label, _group in WIZARD_STEPS:
+        endpoint = f"admin_step_{slug}"
+        if endpoint in app.view_functions:
+            continue
+        view = _make_step_stub(slug)
+        app.add_url_rule(
+            f"/admin/election/<int:election_id>/step/{slug}",
+            endpoint=endpoint,
+            view_func=admin_required(view),
+            methods=["GET"],
+        )
+
+
+_register_step_stubs()
 
 
 def hash_code(code):
