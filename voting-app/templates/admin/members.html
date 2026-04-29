@@ -1,4 +1,12 @@
 {% extends parent_template|default("base.html") %}
+{# Dual-mode template:
+   - Standalone /admin/members hit: parent_template defaults to base.html;
+     the {% if sidebar_state %} branch is false, so the legacy markup renders inline.
+   - Wizard /admin/election/<id>/step/members hit: parent_template is _step_base.html
+     and sidebar_state is set; {{ super() }} delegates to the parent shell, which
+     calls {% block step_content %} to pull the body back from this child.
+   The step_content block is always defined regardless of textual nesting under {% else %}.
+#}
 {% block title %}Members - Office Bearer Election{% endblock %}
 {% block step_tag %}Members{% endblock %}
 {% block step_heading %}Member directory{% endblock %}

@@ -2568,7 +2568,7 @@ def admin_members():
 
     # GET: show current members
     members = db.execute(
-        "SELECT * FROM members ORDER BY last_name, first_name"
+        "SELECT * FROM members ORDER BY surname_sort_key(last_name || ' ' || first_name)"
     ).fetchall()
     member_count = len(members)
 
