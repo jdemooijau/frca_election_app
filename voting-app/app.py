@@ -355,6 +355,209 @@ def get_round_counts(election_id, round_number):
     return 0, 0, 0
 
 
+# ---------------------------------------------------------------------------
+# Wizard sidebar state
+# ---------------------------------------------------------------------------
+
+# Step ordering and slugs. Order matters; index in this list = step number.
+WIZARD_STEPS = [
+    # (slug, label, group)
+    ("details",    "Election details",      "Setup"),
+    ("members",    "Members",               "Setup"),
+    ("offices",    "Offices & Candidates",  "Setup"),
+    ("settings",   "Election settings",     "Setup"),
+    ("codes",      "Codes & printing",      "Setup"),
+    ("attendance", "Attendance & postal",   "Round"),
+    ("welcome",    "Welcome & Rules",       "Round"),
+    ("voting",     "Voting",                "Round"),
+    ("count",      "Count & tally",         "Round"),
+    ("decide",     "Decide",                "Round"),
+    ("final",      "Final results",         "Finish"),
+    ("minutes",    "Minutes & archive",     "Finish"),
+]
+
+
+def _step_done(db, election, slug, round_no):
+    """Return True if the given step is Done in the spec sense.
+
+    `round_no` is the round we are evaluating Done for: usually
+    election.current_round, but used to render historical-round summaries.
+    """
+    eid = election["id"]
+    if slug == "details":
+        return True  # election row exists
+    if slug == "members":
+        return db.execute("SELECT COUNT(*) FROM members").fetchone()[0] > 0
+    if slug == "offices":
+        return db.execute(
+            """
+            SELECT 1 FROM offices o
+            WHERE o.election_id = ?
+              AND EXISTS (SELECT 1 FROM candidates c WHERE c.office_id = o.id)
+            LIMIT 1
+            """,
+            (eid,),
+        ).fetchone() is not None
+    if slug == "settings":
+        return True  # safe defaults; visiting is enough
+    if slug == "codes":
+        return db.execute(
+            "SELECT COUNT(*) FROM codes WHERE election_id = ?", (eid,)
+        ).fetchone()[0] > 0
+    if slug == "attendance":
+        in_person, _, _ = get_round_counts(eid, round_no)
+        return in_person > 0
+    if slug == "welcome":
+        if (election["display_phase"] or 1) >= 2:
+            return True
+        if election["voting_open"]:
+            return True
+        v = db.execute(
+            "SELECT 1 FROM votes WHERE election_id = ? AND round_number = ? LIMIT 1",
+            (eid, round_no),
+        ).fetchone()
+        return v is not None
+    if slug == "voting":
+        v = db.execute(
+            "SELECT 1 FROM votes WHERE election_id = ? AND round_number = ? LIMIT 1",
+            (eid, round_no),
+        ).fetchone()
+        return v is not None
+    if slug == "count":
+        v = db.execute(
+            "SELECT 1 FROM paper_votes WHERE election_id = ? AND round_number = ? LIMIT 1",
+            (eid, round_no),
+        ).fetchone()
+        return v is not None
+    if slug == "decide":
+        if (election["current_round"] or 1) > round_no:
+            return True
+        return (election["display_phase"] or 1) >= 4
+    if slug == "final":
+        return (election["display_phase"] or 1) >= 4
+    if slug == "minutes":
+        return False
+    return False
+
+
+def _step_prerequisites_met(db, election, slug, round_no):
+    """Return True if the step's prerequisites are satisfied (i.e. it is reachable)."""
+    if slug in ("details", "members"):
+        return True
+    if slug == "offices":
+        return _step_done(db, election, "details", round_no)
+    if slug == "settings":
+        return _step_done(db, election, "details", round_no)
+    if slug == "codes":
+        return _step_done(db, election, "offices", round_no)
+    if slug == "attendance":
+        return _step_done(db, election, "codes", round_no)
+    if slug == "welcome":
+        return _step_done(db, election, "attendance", round_no)
+    if slug == "voting":
+        return _step_done(db, election, "welcome", round_no)
+    if slug == "count":
+        if not _step_done(db, election, "voting", round_no):
+            return False
+        return not election["voting_open"] or (election["current_round"] or 1) != round_no
+    if slug == "decide":
+        return _step_prerequisites_met(db, election, "count", round_no)
+    if slug == "final":
+        return _step_done(db, election, "decide", round_no)
+    if slug == "minutes":
+        return _step_done(db, election, "final", round_no)
+    return False
+
+
+def compute_sidebar_state(election_id):
+    """Build the dict consumed by `_sidebar.html`."""
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        return None
+
+    current_round = election["current_round"] or 1
+    member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+
+    items_by_slug = {}
+    for slug, label, _group in WIZARD_STEPS:
+        done = _step_done(db, election, slug, current_round)
+        reachable = _step_prerequisites_met(db, election, slug, current_round)
+        item_label = label
+        if slug == "members" and member_count > 0:
+            item_label = f"Members ({member_count})"
+        items_by_slug[slug] = {
+            "slug": slug,
+            "label": item_label,
+            "done": done,
+            "reachable": reachable,
+            "url": url_for(f"admin_step_{slug}", election_id=election_id),
+        }
+
+    current_step = "minutes"
+    for slug, _label, _group in WIZARD_STEPS:
+        item = items_by_slug[slug]
+        if item["reachable"] and not item["done"]:
+            current_step = slug
+            break
+
+    for slug in items_by_slug:
+        item = items_by_slug[slug]
+        if slug == current_step:
+            item["state"] = "current"
+        elif item["done"]:
+            item["state"] = "done"
+        elif item["reachable"]:
+            item["state"] = "locked"
+        else:
+            item["state"] = "locked"
+        del item["done"]
+        del item["reachable"]
+
+    groups = [
+        {"label": "Setup", "items": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Setup"]},
+        {"label": f"Round {current_round}", "items": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Round"]},
+        {"label": "Finish", "items": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Finish"]},
+    ]
+
+    if current_round > 1:
+        for r in range(1, current_round):
+            elected = db.execute(
+                "SELECT COUNT(*) FROM candidates c "
+                "JOIN offices o ON o.id = c.office_id "
+                "WHERE o.election_id = ? AND c.elected = 1 AND c.elected_round = ?",
+                (election_id, r),
+            ).fetchone()[0]
+            summary = f"Closed - {elected} elected" if elected else "Closed - 0 elected"
+            groups.insert(
+                1 + (r - 1),
+                {"label": f"Round {r}", "collapsed": True, "summary": summary, "items": []},
+            )
+
+    return {
+        "election": {
+            "id": election["id"],
+            "name": election["name"],
+            "date": election["election_date"] if "election_date" in election.keys() else "",
+            "current_round": current_round,
+            "max_rounds": election["max_rounds"],
+            "voting_open": bool(election["voting_open"]),
+        },
+        "current_step": current_step,
+        "groups": groups,
+    }
+
+
+def _make_step_stub(slug):
+    """Stub route used to make url_for() resolve before real routes exist."""
+    def _stub(election_id):
+        return f"step {slug} not yet implemented", 501
+    _stub.__name__ = f"admin_step_{slug}"
+    return _stub
+
+
 def set_round_counts(election_id, round_number, participants, paper_ballot_count):
     """Set participants and paper_ballot_count for a specific round."""
     db = get_db()
@@ -512,6 +715,18 @@ def admin_required(f):
             return redirect(url_for("admin_login"))
         return f(*args, **kwargs)
     return decorated
+
+
+# Register 12 stub wizard-step routes so url_for("admin_step_<slug>") resolves
+# before the real handlers are wired up in later tasks. Stubs return 501.
+for _slug, _label, _group in WIZARD_STEPS:
+    _view = _make_step_stub(_slug)
+    app.add_url_rule(
+        f"/admin/election/<int:election_id>/step/{_slug}",
+        endpoint=f"admin_step_{_slug}",
+        view_func=admin_required(_view),
+        methods=["GET"],
+    )
 
 
 def hash_code(code):
