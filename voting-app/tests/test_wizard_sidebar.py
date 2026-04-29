@@ -292,3 +292,9 @@ def test_dashboard_manage_link_targets_step_open(election_with_codes):
     assert "/admin/election/1" in body
     # Should NOT have a "Manage" link to the legacy URL
     assert "/admin/election/1/manage" not in body
+
+
+def test_admin_election_open_redirects_to_current_step(election_with_codes):
+    rv = election_with_codes.get("/admin/election/1", follow_redirects=False)
+    assert rv.status_code in (301, 302, 308)
+    assert "/step/" in rv.location

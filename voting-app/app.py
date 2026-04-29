@@ -1219,7 +1219,7 @@ def admin_election_new():
         db.commit()
 
         flash("Election created. Now add offices and candidates.", "success")
-        return redirect(url_for("admin_election_setup", election_id=election_id))
+        return redirect(url_for("admin_step_offices", election_id=election_id))
 
     return render_template("admin/election_new.html")
 
@@ -1354,7 +1354,7 @@ def admin_election_settings(election_id):
         abort(404)
     if election["voting_open"]:
         flash("Cannot change settings while voting is open.", "error")
-        return redirect(url_for("admin_election_setup", election_id=election_id))
+        return redirect(url_for("admin_step_offices", election_id=election_id))
 
     paper_count_enabled = 1 if request.form.get("paper_count_enabled") == "1" else 0
     db.execute(
@@ -1481,7 +1481,7 @@ def admin_codes_delete(election_id):
             "used. Regenerating would invalidate any votes already cast.",
             "error"
         )
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     # Hard guard 2: require typed election name AND admin password.
     # Codes may already be printed — regenerating without the chairman
@@ -1495,10 +1495,10 @@ def admin_codes_delete(election_id):
             "reprinting would fail the election.",
             "error"
         )
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
     if typed_password != get_setting("admin_password"):
         flash("Codes not deleted — admin password incorrect.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     db.execute("DELETE FROM codes WHERE election_id = ?", (election_id,))
     db.commit()
@@ -1507,7 +1507,7 @@ def admin_codes_delete(election_id):
         "before voting opens.",
         "success"
     )
-    return redirect(url_for("admin_codes", election_id=election_id))
+    return redirect(url_for("admin_step_codes", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/voting", methods=["POST"])
@@ -1530,7 +1530,7 @@ def admin_toggle_voting(election_id):
         ).fetchone()[0]
         if code_count == 0:
             flash("Cannot open voting — no unused codes available.", "error")
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_step_voting", election_id=election_id))
 
         # Don't open voting until attendance is set. Without it, the Article 6b
         # threshold cannot be calculated and no candidate can be declared elected.
@@ -1541,7 +1541,7 @@ def admin_toggle_voting(election_id):
                 "(Phase 2, Step 1).",
                 "error",
             )
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_step_voting", election_id=election_id))
 
     # Closing voting only sets voting_open = 0. The chairman explicitly
     # decides when to reveal tallies on the projector via the
@@ -1564,7 +1564,7 @@ def admin_toggle_voting(election_id):
 
     status = "opened" if new_state else "closed"
     flash(f"Voting {status} for round {election['current_round']}.", "success")
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    return redirect(url_for("admin_step_voting", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/toggle-results", methods=["POST"])
@@ -1586,7 +1586,7 @@ def admin_toggle_results(election_id):
 
     status = "visible" if new_state else "hidden"
     flash(f"Vote counts are now {status} on the projector display.", "success")
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    return redirect(url_for("admin_step_voting", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/display-phase", methods=["POST"])
@@ -1614,15 +1614,15 @@ def admin_set_display_phase(election_id):
         try:
             new_phase = int(target)
         except ValueError:
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_election_open", election_id=election_id))
         if new_phase not in (1, 2, 3, 4):
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_election_open", election_id=election_id))
     elif direction == "next" and current_phase < 3:
         new_phase = current_phase + 1
     elif direction == "prev" and current_phase > 1:
         new_phase = current_phase - 1
     else:
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
     # Advancing to phase 3 opens voting automatically
     if new_phase == 3 and not election["voting_open"]:
@@ -1632,7 +1632,7 @@ def admin_set_display_phase(election_id):
         ).fetchone()[0]
         if code_count == 0:
             flash("Cannot proceed to voting — no unused codes available.", "error")
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_election_open", election_id=election_id))
 
         # Attendance must be set before voting can open. Without it the
         # Article 6b threshold cannot be calculated and no candidate can be
@@ -1644,7 +1644,7 @@ def admin_set_display_phase(election_id):
                 "(Step 1 above).",
                 "error",
             )
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_election_open", election_id=election_id))
 
         db.execute(
             "UPDATE elections SET display_phase = ?, voting_open = 1 WHERE id = ?",
@@ -1676,7 +1676,7 @@ def admin_set_display_phase(election_id):
         return redirect(url_for("admin_step_decide", election_id=election_id))
     if "/step/final" in referrer:
         return redirect(url_for("admin_step_final", election_id=election_id))
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    return redirect(url_for("admin_election_open", election_id=election_id))
 
 
 def _build_manage_view_payload(election_id):
@@ -1993,7 +1993,7 @@ def admin_set_participants(election_id):
     elif "/step/attendance" in referrer:
         return redirect(url_for("admin_step_attendance", election_id=election_id))
     else:
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/postal-votes", methods=["GET", "POST"])
@@ -2261,7 +2261,7 @@ def admin_next_round(election_id):
 
     if election["voting_open"]:
         flash("Close voting before starting a new round.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_step_decide", election_id=election_id))
 
     current_round = election["current_round"]
 
@@ -2269,7 +2269,7 @@ def admin_next_round(election_id):
     carry_forward_ids = request.form.getlist("carry_forward")
     if not carry_forward_ids:
         flash("Select at least one candidate to carry forward.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_step_decide", election_id=election_id))
 
     # Deactivate all candidates, then reactivate only the carried-forward ones
     carry_set = set(int(c) for c in carry_forward_ids)
@@ -2463,11 +2463,11 @@ def admin_soft_reset(election_id):
     # Validate confirmation
     if request.form.get("confirm_text", "").strip() != "RESET":
         flash("Soft reset cancelled — type RESET to confirm.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
     if request.form.get("password") != get_setting("admin_password"):
         flash("Soft reset cancelled — incorrect password.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
     current_round = election["current_round"]
 
@@ -2499,7 +2499,7 @@ def admin_soft_reset(election_id):
 
     db.commit()
     flash(f"Soft reset complete. Round {current_round} votes cleared, codes restored. Postal votes and setup unchanged.", "success")
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    return redirect(url_for("admin_step_attendance", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/hard-reset", methods=["POST"])
@@ -2514,11 +2514,11 @@ def admin_hard_reset(election_id):
     # Validate confirmation
     if request.form.get("confirm_text", "").strip() != "HARD RESET":
         flash("Hard reset cancelled — type HARD RESET to confirm.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
     if request.form.get("password") != get_setting("admin_password"):
         flash("Hard reset cancelled — incorrect password.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
     # Clear all votes across all rounds
     db.execute("DELETE FROM votes WHERE election_id = ?", (election_id,))
@@ -2570,7 +2570,7 @@ def admin_hard_reset(election_id):
 
     db.commit()
     flash("Hard reset complete. All votes, codes, and postal votes cleared. Candidates reactivated. Generate new codes before voting.", "success")
-    return redirect(url_for("admin_election_setup", election_id=election_id))
+    return redirect(url_for("admin_step_offices", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/delete", methods=["POST"])
@@ -4333,7 +4333,7 @@ def admin_codes_pdf(election_id):
 
     if not codes:
         flash("Code slips can only be exported after code generation. Delete and regenerate codes to get a new PDF.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     db = get_db()
     election = db.execute(
@@ -4441,7 +4441,7 @@ def admin_dual_sided_ballots_pdf(election_id):
     codes = load_codes_from_db(election_id)
     if not codes:
         flash("Codes are not available. Delete and regenerate codes to get a new PDF.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     # Filter to only unused codes
     used_hashes = set()
@@ -4452,7 +4452,7 @@ def admin_dual_sided_ballots_pdf(election_id):
 
     if not unused_codes:
         flash("All codes have been used. Generate new codes first.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     offices = db.execute(
         "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order", (election_id,)
@@ -4513,7 +4513,7 @@ def admin_printer_pack_zip(election_id):
 
     if not unused_codes:
         flash("All codes have been used. Generate new codes first.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     offices = db.execute(
         "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
