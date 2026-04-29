@@ -1,13 +1,25 @@
-{% extends "base.html" %}
-{% block title %}Members — Office Bearer Election{% endblock %}
+{% extends parent_template|default("base.html") %}
+{# Dual-mode template:
+   - Standalone /admin/members hit: parent_template defaults to base.html;
+     the {% if sidebar_state %} branch is false, so the legacy markup renders inline.
+   - Wizard /admin/election/<id>/step/members hit: parent_template is _step_base.html
+     and sidebar_state is set; {{ super() }} delegates to the parent shell, which
+     calls {% block step_content %} to pull the body back from this child.
+   The step_content block is always defined regardless of textual nesting under {% else %}.
+#}
+{% block title %}Members - Office Bearer Election{% endblock %}
+{% block step_tag %}Members{% endblock %}
+{% block step_heading %}Member directory{% endblock %}
 
 {% block content %}
+{% if sidebar_state %}{{ super() }}{% else %}
 <div class="admin-header">
     <h1>Member Directory</h1>
     <a href="{{ url_for('admin_dashboard') }}">Back</a>
 </div>
 
 <div class="container-wide">
+{% block step_content %}
     <!-- Upload form -->
     <div class="card">
         <div class="card-header">Import Members from Church Social</div>
@@ -15,7 +27,7 @@
             Upload a CSV with at least <strong>Last name</strong> and <strong>First name</strong> columns.
             Other columns are optional and will be ignored. Uploading replaces all existing members.
         </p>
-        <form method="POST" enctype="multipart/form-data">
+        <form method="POST" action="{{ url_for('admin_members') }}" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <input type="file" name="csv_file" accept=".csv" required
@@ -65,5 +77,7 @@
         </table>
     </div>
     {% endif %}
+{% endblock %}
 </div>
+{% endif %}
 {% endblock %}

@@ -355,6 +355,204 @@ def get_round_counts(election_id, round_number):
     return 0, 0, 0
 
 
+# ---------------------------------------------------------------------------
+# Wizard sidebar state
+# ---------------------------------------------------------------------------
+
+# Step ordering and slugs. Order matters; index in this list = step number.
+WIZARD_STEPS = [
+    # (slug, label, group)
+    ("details",    "Election details",      "Setup"),
+    ("members",    "Members",               "Setup"),
+    ("offices",    "Offices & Candidates",  "Setup"),
+    ("settings",   "Election settings",     "Setup"),
+    ("codes",      "Codes & printing",      "Setup"),
+    ("attendance", "Attendance & postal",   "Round"),
+    ("welcome",    "Welcome & Rules",       "Round"),
+    ("voting",     "Voting",                "Round"),
+    ("count",      "Count & tally",         "Round"),
+    ("decide",     "Decide",                "Round"),
+    ("final",      "Final results",         "Finish"),
+    ("minutes",    "Minutes & archive",     "Finish"),
+]
+
+
+def _step_done(db, election, slug, round_no):
+    """Return True if the given step is Done in the spec sense.
+
+    `round_no` is the round we are evaluating Done for: usually
+    election.current_round, but used to render historical-round summaries.
+    """
+    eid = election["id"]
+    if slug == "details":
+        return True  # election row exists
+    if slug == "members":
+        # Members are app-global; the same imported list is reused across elections.
+        return db.execute("SELECT COUNT(*) FROM members").fetchone()[0] > 0
+    if slug == "offices":
+        return db.execute(
+            """
+            SELECT 1 FROM offices o
+            WHERE o.election_id = ?
+              AND EXISTS (SELECT 1 FROM candidates c WHERE c.office_id = o.id)
+            LIMIT 1
+            """,
+            (eid,),
+        ).fetchone() is not None
+    if slug == "settings":
+        return True  # safe defaults; visiting is enough
+    if slug == "codes":
+        return db.execute(
+            "SELECT COUNT(*) FROM codes WHERE election_id = ?", (eid,)
+        ).fetchone()[0] > 0
+    if slug == "attendance":
+        in_person, _, _ = get_round_counts(eid, round_no)
+        return in_person > 0
+    if slug == "welcome":
+        if (election["display_phase"] or 1) >= 2:
+            return True
+        if election["voting_open"]:
+            return True
+        v = db.execute(
+            "SELECT 1 FROM votes WHERE election_id = ? AND round_number = ? LIMIT 1",
+            (eid, round_no),
+        ).fetchone()
+        return v is not None
+    if slug == "voting":
+        v = db.execute(
+            "SELECT 1 FROM votes WHERE election_id = ? AND round_number = ? LIMIT 1",
+            (eid, round_no),
+        ).fetchone()
+        return v is not None
+    if slug == "count":
+        v = db.execute(
+            "SELECT 1 FROM paper_votes WHERE election_id = ? AND round_number = ? LIMIT 1",
+            (eid, round_no),
+        ).fetchone()
+        return v is not None
+    if slug == "decide":
+        if (election["current_round"] or 1) > round_no:
+            return True
+        return (election["display_phase"] or 1) >= 4
+    if slug == "final":
+        return (election["display_phase"] or 1) >= 4
+    if slug == "minutes":
+        return False
+    return False
+
+
+def _step_prerequisites_met(db, election, slug, round_no):
+    """Return True if the step's prerequisites are satisfied (i.e. it is reachable)."""
+    if slug in ("details", "members"):
+        return True
+    if slug == "offices":
+        return _step_done(db, election, "details", round_no)
+    if slug == "settings":
+        return _step_done(db, election, "details", round_no)
+    if slug == "codes":
+        return _step_done(db, election, "offices", round_no)
+    if slug == "attendance":
+        return _step_done(db, election, "codes", round_no)
+    if slug == "welcome":
+        return _step_done(db, election, "attendance", round_no)
+    if slug == "voting":
+        return _step_done(db, election, "welcome", round_no)
+    if slug == "count":
+        if not _step_done(db, election, "voting", round_no):
+            return False
+        return not election["voting_open"] or (election["current_round"] or 1) != round_no
+    if slug == "decide":
+        return _step_prerequisites_met(db, election, "count", round_no)
+    if slug == "final":
+        return _step_done(db, election, "decide", round_no)
+    if slug == "minutes":
+        return _step_done(db, election, "final", round_no)
+    return False
+
+
+def compute_sidebar_state(election_id):
+    """Build the dict consumed by `_sidebar.html`."""
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        return None
+
+    current_round = election["current_round"] or 1
+    # Members are app-global, not per-election; the count is shared across all elections.
+    member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+
+    # First pass: compute (done, reachable) for each step and stash item shells.
+    status = {}  # slug -> (done, reachable)
+    items_by_slug = {}
+    for slug, label, _group in WIZARD_STEPS:
+        done = _step_done(db, election, slug, current_round)
+        reachable = _step_prerequisites_met(db, election, slug, current_round)
+        status[slug] = (done, reachable)
+        item_label = f"Members ({member_count})" if slug == "members" and member_count > 0 else label
+        items_by_slug[slug] = {
+            "slug": slug,
+            "label": item_label,
+            "url": url_for(f"admin_step_{slug}", election_id=election_id),
+        }
+
+    # Current step = lowest-numbered reachable, not-done step. If all done,
+    # fall back to the last step in WIZARD_STEPS (currently "minutes").
+    # Members is app-global; don't auto-land the user there. They can still
+    # navigate to it from the sidebar; it just shouldn't be the default
+    # landing step from /admin/election/<id>/manage redirects or
+    # admin_election_open.
+    current_step = next(
+        (slug for slug, _label, _group in WIZARD_STEPS
+         if slug != "members" and status[slug][1] and not status[slug][0]),
+        WIZARD_STEPS[-1][0],
+    )
+
+    # Second pass: assign render state.
+    for slug, item in items_by_slug.items():
+        done, _reachable = status[slug]
+        if slug == current_step:
+            item["state"] = "current"
+        elif done:
+            item["state"] = "done"
+        else:
+            item["state"] = "locked"
+
+    groups = [
+        {"label": "Setup", "entries": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Setup"]},
+        {"label": f"Round {current_round}", "entries": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Round"]},
+        {"label": "Finish", "entries": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Finish"]},
+    ]
+
+    if current_round > 1:
+        for r in range(1, current_round):
+            elected = db.execute(
+                "SELECT COUNT(*) FROM candidates c "
+                "JOIN offices o ON o.id = c.office_id "
+                "WHERE o.election_id = ? AND c.elected = 1 AND c.elected_round = ?",
+                (election_id, r),
+            ).fetchone()[0]
+            summary = f"Closed - {elected} elected" if elected else "Closed - 0 elected"
+            groups.insert(
+                1 + (r - 1),
+                {"label": f"Round {r}", "collapsed": True, "summary": summary, "entries": []},
+            )
+
+    return {
+        "election": {
+            "id": election["id"],
+            "name": election["name"],
+            "date": election["election_date"] if "election_date" in election.keys() else "",
+            "current_round": current_round,
+            "max_rounds": election["max_rounds"],
+            "voting_open": bool(election["voting_open"]),
+        },
+        "current_step": current_step,
+        "groups": groups,
+    }
+
+
 def set_round_counts(election_id, round_number, participants, paper_ballot_count):
     """Set participants and paper_ballot_count for a specific round."""
     db = get_db()
@@ -512,6 +710,245 @@ def admin_required(f):
             return redirect(url_for("admin_login"))
         return f(*args, **kwargs)
     return decorated
+
+
+@app.route("/admin/election/<int:election_id>/step/details", methods=["GET"], endpoint="admin_step_details")
+@admin_required
+def _admin_step_details(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/step_details.html",
+        election=election,
+        sidebar_state=sidebar_state,
+    )
+
+
+@app.route("/admin/election/<int:election_id>/step/details/save", methods=["POST"])
+@admin_required
+def admin_step_details_save(election_id):
+    db = get_db()
+    name = request.form.get("name", "").strip()
+    election_date = request.form.get("election_date", "").strip()
+    try:
+        max_rounds = max(1, min(5, int(request.form.get("max_rounds", "2"))))
+    except ValueError:
+        max_rounds = 2
+    if not name:
+        flash("Name is required.", "error")
+        return redirect(url_for("admin_step_details", election_id=election_id))
+    db.execute(
+        "UPDATE elections SET name = ?, election_date = ?, max_rounds = ? WHERE id = ?",
+        (name, election_date, max_rounds, election_id),
+    )
+    db.commit()
+    flash("Saved.", "success")
+    return redirect(url_for("admin_step_details", election_id=election_id))
+
+
+@app.route("/admin/election/<int:election_id>/step/members", methods=["GET"], endpoint="admin_step_members")
+@admin_required
+def admin_step_members(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    members = db.execute(
+        "SELECT * FROM members ORDER BY surname_sort_key(last_name || ' ' || first_name)"
+    ).fetchall()
+    member_count = len(members)
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/members.html",
+        members=members,
+        member_count=member_count,
+        sidebar_state=sidebar_state,
+        parent_template="admin/_step_base.html",
+    )
+
+
+@app.route("/admin/election/<int:election_id>/step/offices", methods=["GET"], endpoint="admin_step_offices")
+@admin_required
+def admin_step_offices(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    offices = db.execute(
+        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
+        (election_id,)
+    ).fetchall()
+    candidates_by_office = {}
+    for office in offices:
+        candidates_by_office[office["id"]] = db.execute(
+            "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
+            (office["id"],)
+        ).fetchall()
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/step_offices.html",
+        election=election,
+        offices=offices,
+        candidates_by_office=candidates_by_office,
+        sidebar_state=sidebar_state,
+    )
+
+
+@app.route("/admin/election/<int:election_id>/step/settings", methods=["GET"], endpoint="admin_step_settings")
+@admin_required
+def admin_step_settings(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template("admin/step_settings.html",
+                           election=election, sidebar_state=sidebar_state)
+
+
+@app.route("/admin/election/<int:election_id>/step/codes", methods=["GET"], endpoint="admin_step_codes")
+@admin_required
+def admin_step_codes(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+
+    # Smart default mirrors legacy admin_codes GET: (members + 10) * max_rounds.
+    member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+    per_round = member_count + 10 if member_count > 0 else 100
+    default_count = per_round * election["max_rounds"]
+
+    total_codes = db.execute(
+        "SELECT COUNT(*) FROM codes WHERE election_id = ?", (election_id,)
+    ).fetchone()[0]
+
+    # Auto-generate on first visit once offices have been set up. Mirrors
+    # the existing /admin/election/<id>/codes GET behavior.
+    generated_codes = []
+    if total_codes == 0:
+        offices_exist = db.execute(
+            "SELECT 1 FROM offices WHERE election_id = ? LIMIT 1",
+            (election_id,)
+        ).fetchone() is not None
+        if offices_exist:
+            generated_codes = generate_codes(election_id, default_count)
+            flash(
+                f"Auto-generated {len(generated_codes)} voting codes "
+                f"({member_count} members × {election['max_rounds']} rounds + spares). "
+                "Print the code slips next.",
+                "success"
+            )
+            total_codes = len(generated_codes)
+
+    used_codes = db.execute(
+        "SELECT COUNT(*) FROM codes WHERE election_id = ? AND used = 1",
+        (election_id,)
+    ).fetchone()[0]
+    postal_voter_count = election["postal_voter_count"] or 0
+
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/step_codes.html",
+        election=election,
+        total_codes=total_codes,
+        used_codes=used_codes,
+        generated_codes=generated_codes,
+        member_count=member_count,
+        default_count=default_count,
+        postal_voter_count=postal_voter_count,
+        sidebar_state=sidebar_state,
+    )
+
+
+@app.route("/admin/election/<int:election_id>/step/attendance", methods=["GET"], endpoint="admin_step_attendance")
+@admin_required
+def admin_step_attendance(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    in_person, _, _ = get_round_counts(election_id, election["current_round"])
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/step_attendance.html",
+        election=election,
+        in_person_participants=in_person,
+        postal_voter_count=election["postal_voter_count"] or 0,
+        sidebar_state=sidebar_state,
+    )
+
+
+@app.route("/admin/election/<int:election_id>/step/welcome", methods=["GET"], endpoint="admin_step_welcome")
+@admin_required
+def admin_step_welcome(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/step_welcome.html",
+        election=election,
+        phase=election["display_phase"] or 1,
+        sidebar_state=sidebar_state,
+    )
+
+
+@app.route("/admin/election/<int:election_id>/step/voting", methods=["GET"], endpoint="admin_step_voting")
+@admin_required
+def admin_step_voting(election_id):
+    payload = _build_manage_view_payload(election_id)
+    return render_template("admin/step_voting.html", **payload)
+
+
+@app.route("/admin/election/<int:election_id>/step/count", methods=["GET"], endpoint="admin_step_count")
+@admin_required
+def admin_step_count(election_id):
+    payload = _build_manage_view_payload(election_id)
+    return render_template("admin/step_count.html", **payload)
+
+
+@app.route("/admin/election/<int:election_id>/step/decide", methods=["GET"], endpoint="admin_step_decide")
+@admin_required
+def admin_step_decide(election_id):
+    payload = _build_manage_view_payload(election_id)
+    return render_template("admin/step_decide.html", **payload)
+
+
+@app.route("/admin/election/<int:election_id>/step/final", methods=["GET"], endpoint="admin_step_final")
+@admin_required
+def admin_step_final(election_id):
+    payload = _build_manage_view_payload(election_id)
+    return render_template("admin/step_final.html", **payload)
+
+
+@app.route("/admin/election/<int:election_id>/step/minutes", methods=["GET"], endpoint="admin_step_minutes")
+@admin_required
+def admin_step_minutes(election_id):
+    db = get_db()
+    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+    if not election:
+        abort(404)
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template("admin/step_minutes.html", election=election, sidebar_state=sidebar_state)
 
 
 def hash_code(code):
@@ -756,12 +1193,19 @@ def admin_election_new():
         db.commit()
 
         flash("Election created. Now add offices and candidates.", "success")
-        return redirect(url_for("admin_election_setup", election_id=election_id))
+        return redirect(url_for("admin_step_offices", election_id=election_id))
 
     return render_template("admin/election_new.html")
 
 
-@app.route("/admin/election/<int:election_id>/setup", methods=["GET", "POST"])
+@app.route("/admin/election/<int:election_id>/setup", methods=["GET"])
+@admin_required
+def admin_election_setup_legacy_get(election_id):
+    """Legacy URL. Redirect to the wizard step."""
+    return redirect(url_for("admin_step_offices", election_id=election_id), code=301)
+
+
+@app.route("/admin/election/<int:election_id>/setup", methods=["POST"])
 @admin_required
 def admin_election_setup(election_id):
     db = get_db()
@@ -771,103 +1215,84 @@ def admin_election_setup(election_id):
     if not election:
         abort(404)
 
-    if request.method == "POST":
-        office_name = request.form.get("office_name", "").strip()
-        vacancies = int(request.form.get("vacancies", 1))
-        max_selections = int(request.form.get("max_selections", 0)) or vacancies
-        candidate_names = request.form.get("candidate_names", "").strip()
-        confirm_slate = request.form.get("confirm_slate_override")
+    office_name = request.form.get("office_name", "").strip()
+    vacancies = int(request.form.get("vacancies", 1))
+    max_selections = int(request.form.get("max_selections", 0)) or vacancies
+    candidate_names = request.form.get("candidate_names", "").strip()
+    confirm_slate = request.form.get("confirm_slate_override")
 
-        if not office_name:
-            flash("Office name is required.", "error")
-        elif not candidate_names:
-            flash("At least one candidate is required.", "error")
-        elif vacancies < 1:
-            flash("Vacancies must be at least 1.", "error")
-        else:
-            # Count candidates
-            cand_list = [n.strip() for n in candidate_names.split("\n") if n.strip()]
-            expected_slate = 2 * vacancies
+    if not office_name:
+        flash("Office name is required.", "error")
+    elif not candidate_names:
+        flash("At least one candidate is required.", "error")
+    elif vacancies < 1:
+        flash("Vacancies must be at least 1.", "error")
+    else:
+        # Count candidates
+        cand_list = [n.strip() for n in candidate_names.split("\n") if n.strip()]
+        expected_slate = 2 * vacancies
 
-            # Article 2 slate validation
-            if len(cand_list) != expected_slate and not confirm_slate:
-                flash(
-                    f"Article 2 requires a slate of {expected_slate} candidates for {vacancies} "
-                    f"{'vacancy' if vacancies == 1 else 'vacancies'} (twice the number of vacancies). "
-                    f"You have {len(cand_list)} candidates. "
-                    f"Article 13 permits deviation — confirm below to proceed.",
-                    "error"
-                )
-                return render_template(
-                    "admin/election_setup.html",
-                    election=election,
-                    offices=db.execute(
-                        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
-                        (election_id,)
-                    ).fetchall(),
-                    candidates_by_office={
-                        o["id"]: db.execute(
-                            "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
-                            (o["id"],)
-                        ).fetchall()
-                        for o in db.execute(
-                            "SELECT * FROM offices WHERE election_id = ?", (election_id,)
-                        ).fetchall()
-                    },
-                    slate_warning=True,
-                    prefill_office=office_name,
-                    prefill_vacancies=vacancies,
-                    prefill_max_selections=max_selections,
-                    prefill_candidates=candidate_names
-                )
-
-            # Get next sort order
-            max_sort = db.execute(
-                "SELECT COALESCE(MAX(sort_order), 0) FROM offices WHERE election_id = ?",
-                (election_id,)
-            ).fetchone()[0]
-
-            cursor = db.execute(
-                "INSERT INTO offices (election_id, name, max_selections, vacancies, original_vacancies, sort_order) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (election_id, office_name, max_selections, vacancies, vacancies, max_sort + 1)
+        # Article 2 slate validation
+        if len(cand_list) != expected_slate and not confirm_slate:
+            flash(
+                f"Article 2 requires a slate of {expected_slate} candidates for {vacancies} "
+                f"{'vacancy' if vacancies == 1 else 'vacancies'} (twice the number of vacancies). "
+                f"You have {len(cand_list)} candidates. "
+                f"Article 13 permits deviation — confirm below to proceed.",
+                "error"
             )
-            office_id = cursor.lastrowid
+            return render_template(
+                "admin/step_offices.html",
+                election=election,
+                offices=db.execute(
+                    "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
+                    (election_id,)
+                ).fetchall(),
+                candidates_by_office={
+                    o["id"]: db.execute(
+                        "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
+                        (o["id"],)
+                    ).fetchall()
+                    for o in db.execute(
+                        "SELECT * FROM offices WHERE election_id = ?", (election_id,)
+                    ).fetchall()
+                },
+                slate_warning=True,
+                prefill_office=office_name,
+                prefill_vacancies=vacancies,
+                prefill_max_selections=max_selections,
+                prefill_candidates=candidate_names,
+                sidebar_state=compute_sidebar_state(election_id),
+            )
 
-            # Parse candidate names (one per line)
-            for i, cand_name in enumerate(cand_list):
-                db.execute(
-                    "INSERT INTO candidates (office_id, name, sort_order) VALUES (?, ?, ?)",
-                    (office_id, cand_name, i)
-                )
+        # Get next sort order
+        max_sort = db.execute(
+            "SELECT COALESCE(MAX(sort_order), 0) FROM offices WHERE election_id = ?",
+            (election_id,)
+        ).fetchone()[0]
 
-            db.commit()
+        cursor = db.execute(
+            "INSERT INTO offices (election_id, name, max_selections, vacancies, original_vacancies, sort_order) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (election_id, office_name, max_selections, vacancies, vacancies, max_sort + 1)
+        )
+        office_id = cursor.lastrowid
 
-            if len(cand_list) != expected_slate:
-                flash(f"Office '{office_name}' added (Article 13 deviation: {len(cand_list)} candidates for {vacancies} vacancies).", "success")
-            else:
-                flash(f"Office '{office_name}' added with {len(cand_list)} candidates.", "success")
+        # Parse candidate names (one per line)
+        for i, cand_name in enumerate(cand_list):
+            db.execute(
+                "INSERT INTO candidates (office_id, name, sort_order) VALUES (?, ?, ?)",
+                (office_id, cand_name, i)
+            )
 
-        return redirect(url_for("admin_election_setup", election_id=election_id))
+        db.commit()
 
-    offices = db.execute(
-        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
-        (election_id,)
-    ).fetchall()
+        if len(cand_list) != expected_slate:
+            flash(f"Office '{office_name}' added (Article 13 deviation: {len(cand_list)} candidates for {vacancies} vacancies).", "success")
+        else:
+            flash(f"Office '{office_name}' added with {len(cand_list)} candidates.", "success")
 
-    candidates_by_office = {}
-    for office in offices:
-        candidates_by_office[office["id"]] = db.execute(
-            "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
-            (office["id"],)
-        ).fetchall()
-
-    return render_template(
-        "admin/election_setup.html",
-        election=election,
-        offices=offices,
-        candidates_by_office=candidates_by_office
-    )
+    return redirect(url_for("admin_step_offices", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/settings", methods=["POST"])
@@ -883,7 +1308,7 @@ def admin_election_settings(election_id):
         abort(404)
     if election["voting_open"]:
         flash("Cannot change settings while voting is open.", "error")
-        return redirect(url_for("admin_election_setup", election_id=election_id))
+        return redirect(url_for("admin_step_settings", election_id=election_id))
 
     paper_count_enabled = 1 if request.form.get("paper_count_enabled") == "1" else 0
     db.execute(
@@ -892,7 +1317,7 @@ def admin_election_settings(election_id):
     )
     db.commit()
     flash("Settings updated.", "success")
-    return redirect(url_for("admin_election_setup", election_id=election_id))
+    return redirect(url_for("admin_step_settings", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/office/<int:office_id>/delete", methods=["POST"])
@@ -903,10 +1328,17 @@ def admin_office_delete(election_id, office_id):
     db.execute("DELETE FROM offices WHERE id = ? AND election_id = ?", (office_id, election_id))
     db.commit()
     flash("Office removed.", "success")
-    return redirect(url_for("admin_election_setup", election_id=election_id))
+    return redirect(url_for("admin_step_offices", election_id=election_id))
 
 
-@app.route("/admin/election/<int:election_id>/codes", methods=["GET", "POST"])
+@app.route("/admin/election/<int:election_id>/codes", methods=["GET"])
+@admin_required
+def admin_codes_legacy_get(election_id):
+    """Legacy URL. Redirect to the wizard step."""
+    return redirect(url_for("admin_step_codes", election_id=election_id), code=301)
+
+
+@app.route("/admin/election/<int:election_id>/codes", methods=["POST"])
 @admin_required
 def admin_codes(election_id):
     db = get_db()
@@ -971,15 +1403,7 @@ def admin_codes(election_id):
     total_codes = stats["total"]
     used_codes = stats["used"] or 0
 
-    return render_template(
-        "admin/codes.html",
-        election=election,
-        total_codes=total_codes,
-        used_codes=used_codes,
-        generated_codes=generated_codes,
-        default_count=default_count,
-        member_count=member_count
-    )
+    return redirect(url_for("admin_step_codes", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/codes/delete", methods=["POST"])
@@ -1003,7 +1427,7 @@ def admin_codes_delete(election_id):
             "used. Regenerating would invalidate any votes already cast.",
             "error"
         )
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     # Hard guard 2: require typed election name AND admin password.
     # Codes may already be printed — regenerating without the chairman
@@ -1017,10 +1441,10 @@ def admin_codes_delete(election_id):
             "reprinting would fail the election.",
             "error"
         )
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
     if typed_password != get_setting("admin_password"):
         flash("Codes not deleted — admin password incorrect.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     db.execute("DELETE FROM codes WHERE election_id = ?", (election_id,))
     db.commit()
@@ -1029,7 +1453,7 @@ def admin_codes_delete(election_id):
         "before voting opens.",
         "success"
     )
-    return redirect(url_for("admin_codes", election_id=election_id))
+    return redirect(url_for("admin_step_codes", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/voting", methods=["POST"])
@@ -1052,7 +1476,7 @@ def admin_toggle_voting(election_id):
         ).fetchone()[0]
         if code_count == 0:
             flash("Cannot open voting — no unused codes available.", "error")
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_step_voting", election_id=election_id))
 
         # Don't open voting until attendance is set. Without it, the Article 6b
         # threshold cannot be calculated and no candidate can be declared elected.
@@ -1063,14 +1487,15 @@ def admin_toggle_voting(election_id):
                 "(Phase 2, Step 1).",
                 "error",
             )
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_step_voting", election_id=election_id))
 
-    # Closing voting auto-reveals the results panel on the projector so the
-    # chairman doesn't need a second click. The clean ELECTED-only summary
-    # is still a separate manual step (advance display phase to 4).
+    # Closing voting only sets voting_open = 0. The chairman explicitly
+    # decides when to reveal tallies on the projector via the
+    # "Show Results on Projector" button (admin_toggle_results), or by
+    # advancing display_phase to 4 for the final summary view.
     if new_state == 0:
         db.execute(
-            "UPDATE elections SET voting_open = 0, show_results = 1 WHERE id = ?",
+            "UPDATE elections SET voting_open = 0 WHERE id = ?",
             (election_id,)
         )
     else:
@@ -1085,7 +1510,7 @@ def admin_toggle_voting(election_id):
 
     status = "opened" if new_state else "closed"
     flash(f"Voting {status} for round {election['current_round']}.", "success")
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    return redirect(url_for("admin_step_voting", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/toggle-results", methods=["POST"])
@@ -1107,7 +1532,7 @@ def admin_toggle_results(election_id):
 
     status = "visible" if new_state else "hidden"
     flash(f"Vote counts are now {status} on the projector display.", "success")
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    return redirect(url_for("admin_step_voting", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/display-phase", methods=["POST"])
@@ -1135,15 +1560,15 @@ def admin_set_display_phase(election_id):
         try:
             new_phase = int(target)
         except ValueError:
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_election_open", election_id=election_id))
         if new_phase not in (1, 2, 3, 4):
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_election_open", election_id=election_id))
     elif direction == "next" and current_phase < 3:
         new_phase = current_phase + 1
     elif direction == "prev" and current_phase > 1:
         new_phase = current_phase - 1
     else:
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
     # Advancing to phase 3 opens voting automatically
     if new_phase == 3 and not election["voting_open"]:
@@ -1153,7 +1578,7 @@ def admin_set_display_phase(election_id):
         ).fetchone()[0]
         if code_count == 0:
             flash("Cannot proceed to voting — no unused codes available.", "error")
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_election_open", election_id=election_id))
 
         # Attendance must be set before voting can open. Without it the
         # Article 6b threshold cannot be calculated and no candidate can be
@@ -1165,7 +1590,7 @@ def admin_set_display_phase(election_id):
                 "(Step 1 above).",
                 "error",
             )
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_election_open", election_id=election_id))
 
         db.execute(
             "UPDATE elections SET display_phase = ?, voting_open = 1 WHERE id = ?",
@@ -1190,12 +1615,18 @@ def admin_set_display_phase(election_id):
         phase_names = {1: "Welcome", 2: "Election Rules", 3: "Voting", 4: "Final Results"}
         flash(f"Projector display: {phase_names[new_phase]}", "success")
 
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    referrer = request.referrer or ""
+    if "/step/welcome" in referrer:
+        return redirect(url_for("admin_step_welcome", election_id=election_id))
+    if "/step/decide" in referrer:
+        return redirect(url_for("admin_step_decide", election_id=election_id))
+    if "/step/final" in referrer:
+        return redirect(url_for("admin_step_final", election_id=election_id))
+    return redirect(url_for("admin_election_open", election_id=election_id))
 
 
-@app.route("/admin/election/<int:election_id>/manage")
-@admin_required
-def admin_election_manage(election_id):
+def _build_manage_view_payload(election_id):
+    """Build the context dict used by manage.html and the wizard step 8-11 views."""
     db = get_db()
     election = db.execute(
         "SELECT * FROM elections WHERE id = ?", (election_id,)
@@ -1261,7 +1692,7 @@ def admin_election_manage(election_id):
         (election_id,)
     ).fetchone()[0]
 
-    # Article 6 threshold calculations — per-round counts
+    # Article 6 threshold calculations: per-round counts
     in_person_participants, paper_ballot_count, digital_ballot_count = get_round_counts(election_id, current_round)
     postal_voter_count = (election["postal_voter_count"] or 0) if current_round == 1 else 0
 
@@ -1303,7 +1734,7 @@ def admin_election_manage(election_id):
 
     # Phase-driven flow detection for the manage page (see
     # docs/superpowers/specs/2026-04-21-manage-page-phase-flow-design.md).
-    total_ballots_round = used_codes + paper_ballot_count + postal_voter_count
+    total_ballots = used_codes + paper_ballot_count + postal_voter_count
     display_phase = election["display_phase"] or 1
 
     # Aggregate elected brothers across rounds (DB-persisted plus live
@@ -1353,7 +1784,7 @@ def admin_election_manage(election_id):
         election_complete = False
 
     voting_ever_opened = (
-        current_round > 1 or display_phase >= 3 or total_ballots_round > 0
+        current_round > 1 or display_phase >= 3 or total_ballots > 0
     )
     # Per-round signal: has THIS round ever been opened? Distinguishes a
     # fresh round (e.g. just-advanced R2 with no ballots yet) from a round
@@ -1362,32 +1793,31 @@ def admin_election_manage(election_id):
     this_round_opened = (
         bool(election["voting_open"])
         or display_phase >= 3
-        or total_ballots_round > 0
+        or total_ballots > 0
     )
 
     if election_complete or display_phase == 4:
         active_phase = 5
     elif election["voting_open"]:
         active_phase = 3
-    elif total_ballots_round > 0 or election["show_results"]:
+    elif total_ballots > 0 or election["show_results"]:
         active_phase = 4
     elif (
         in_person_participants > 0
         and display_phase >= 2
         and not voting_ever_opened
     ):
-        # Attendance set + projector reached Rules - ready to Open Round.
+        # Attendance set + projector reached Rules: ready to Open Round.
         active_phase = 3
     elif display_phase in (1, 2):
         active_phase = 2
     else:
         active_phase = 1
-    next_round_started = active_phase == 5 or current_round > 1
 
     phase_done = {
         1: total_codes > 0,
         2: voting_ever_opened,
-        3: not election["voting_open"] and total_ballots_round > 0,
+        3: not election["voting_open"] and total_ballots > 0,
         4: election_complete,
         5: False,
     }
@@ -1403,8 +1833,8 @@ def admin_election_manage(election_id):
             else "Welcome → Rules → Voting"
         ),
         3: (
-            f"Round {current_round} closed - {total_ballots_round} ballots received"
-            if not election["voting_open"] and total_ballots_round > 0
+            f"Round {current_round} closed - {total_ballots} ballots received"
+            if not election["voting_open"] and total_ballots > 0
             else (
                 f"Round {current_round} voting open"
                 if election["voting_open"]
@@ -1427,26 +1857,50 @@ def admin_election_manage(election_id):
         ),
     }
 
-    return render_template(
-        "admin/manage.html",
-        election=election,
-        results=results,
-        total_codes=total_codes,
-        used_codes=used_codes,
-        in_person_participants=in_person_participants,
-        participants=participants,
-        paper_ballot_count=paper_ballot_count,
-        postal_voter_count=postal_voter_count,
-        valid_votes_cast=valid_votes_cast,
-        thresholds=thresholds,
-        current_round=current_round,
-        active_phase=active_phase,
-        phase_done=phase_done,
-        phase_summary=phase_summary,
-        election_complete=election_complete,
-        elected_summary_by_office=elected_summary_by_office,
-        voting_ever_opened=voting_ever_opened,
-        this_round_opened=this_round_opened,
+    return {
+        "election": election,
+        "results": results,
+        "total_codes": total_codes,
+        "used_codes": used_codes,
+        "in_person_participants": in_person_participants,
+        "participants": participants,
+        "paper_ballot_count": paper_ballot_count,
+        "postal_voter_count": postal_voter_count,
+        "valid_votes_cast": valid_votes_cast,
+        "total_ballots": total_ballots,
+        "thresholds": thresholds,
+        "current_round": current_round,
+        "active_phase": active_phase,
+        "phase_done": phase_done,
+        "phase_summary": phase_summary,
+        "election_complete": election_complete,
+        "elected_summary_by_office": elected_summary_by_office,
+        "voting_ever_opened": voting_ever_opened,
+        "this_round_opened": this_round_opened,
+        "sidebar_state": compute_sidebar_state(election_id),
+    }
+
+
+@app.route("/admin/election/<int:election_id>")
+@admin_required
+def admin_election_open(election_id):
+    """Dashboard 'Open' click target. Lands on the current default step."""
+    state = compute_sidebar_state(election_id)
+    if not state:
+        abort(404)
+    return redirect(url_for(f"admin_step_{state['current_step']}", election_id=election_id))
+
+
+@app.route("/admin/election/<int:election_id>/manage")
+@admin_required
+def admin_election_manage(election_id):
+    """Legacy URL. Redirect to the wizard step shell."""
+    state = compute_sidebar_state(election_id)
+    if not state:
+        abort(404)
+    return redirect(
+        url_for(f"admin_step_{state['current_step']}", election_id=election_id),
+        code=301,
     )
 
 
@@ -1477,7 +1931,15 @@ def admin_set_participants(election_id):
 
     set_round_counts(election_id, current_round, participants, paper_ballot_count)
     flash(f"Round {current_round} — Participants: {participants}, Paper ballots: {paper_ballot_count}.", "success")
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    # Route wizard callers back to whichever step they posted from; legacy
+    # callers (the old manage page) fall through to admin_election_manage.
+    referrer = request.referrer or ""
+    if "/step/count" in referrer:
+        return redirect(url_for("admin_step_count", election_id=election_id))
+    elif "/step/attendance" in referrer:
+        return redirect(url_for("admin_step_attendance", election_id=election_id))
+    else:
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/postal-votes", methods=["GET", "POST"])
@@ -1690,7 +2152,7 @@ def admin_paper_votes(election_id):
                 )
             db.commit()
             flash("Paper vote totals saved.", "success")
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_step_count", election_id=election_id))
 
     offices = db.execute(
         "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
@@ -1745,7 +2207,7 @@ def admin_next_round(election_id):
 
     if election["voting_open"]:
         flash("Close voting before starting a new round.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_step_decide", election_id=election_id))
 
     current_round = election["current_round"]
 
@@ -1753,7 +2215,7 @@ def admin_next_round(election_id):
     carry_forward_ids = request.form.getlist("carry_forward")
     if not carry_forward_ids:
         flash("Select at least one candidate to carry forward.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_step_decide", election_id=election_id))
 
     # Deactivate all candidates, then reactivate only the carried-forward ones
     carry_set = set(int(c) for c in carry_forward_ids)
@@ -1865,7 +2327,7 @@ def admin_next_round(election_id):
     db.commit()
 
     flash(f"Round {new_round} started. Vacancies updated based on elected candidates.", "success")
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    return redirect(url_for("admin_step_attendance", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/voter-log")
@@ -1947,11 +2409,11 @@ def admin_soft_reset(election_id):
     # Validate confirmation
     if request.form.get("confirm_text", "").strip() != "RESET":
         flash("Soft reset cancelled — type RESET to confirm.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
     if request.form.get("password") != get_setting("admin_password"):
         flash("Soft reset cancelled — incorrect password.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
     current_round = election["current_round"]
 
@@ -1983,7 +2445,7 @@ def admin_soft_reset(election_id):
 
     db.commit()
     flash(f"Soft reset complete. Round {current_round} votes cleared, codes restored. Postal votes and setup unchanged.", "success")
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    return redirect(url_for("admin_step_attendance", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/hard-reset", methods=["POST"])
@@ -1998,11 +2460,11 @@ def admin_hard_reset(election_id):
     # Validate confirmation
     if request.form.get("confirm_text", "").strip() != "HARD RESET":
         flash("Hard reset cancelled — type HARD RESET to confirm.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
     if request.form.get("password") != get_setting("admin_password"):
         flash("Hard reset cancelled — incorrect password.", "error")
-        return redirect(url_for("admin_election_manage", election_id=election_id))
+        return redirect(url_for("admin_election_open", election_id=election_id))
 
     # Clear all votes across all rounds
     db.execute("DELETE FROM votes WHERE election_id = ?", (election_id,))
@@ -2054,7 +2516,7 @@ def admin_hard_reset(election_id):
 
     db.commit()
     flash("Hard reset complete. All votes, codes, and postal votes cleared. Candidates reactivated. Generate new codes before voting.", "success")
-    return redirect(url_for("admin_election_setup", election_id=election_id))
+    return redirect(url_for("admin_step_offices", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/delete", methods=["POST"])
@@ -2190,7 +2652,7 @@ def admin_load_sample_offices(election_id):
             "Remove them first if you want to start over.",
             "error",
         )
-        return redirect(url_for("admin_election_setup", election_id=election_id))
+        return redirect(url_for("admin_step_offices", election_id=election_id))
 
     member_names = _load_member_names(db)
     candidate_names = generate_demo_names(count=10, member_names=member_names)
@@ -2227,7 +2689,7 @@ def admin_load_sample_offices(election_id):
         "Sample offices loaded: Elder (3 vacancies, 6 candidates) and Deacon (2 vacancies, 4 candidates).",
         "success",
     )
-    return redirect(url_for("admin_election_setup", election_id=election_id))
+    return redirect(url_for("admin_step_offices", election_id=election_id))
 
 
 @app.route("/admin/members", methods=["GET", "POST"])
@@ -2282,7 +2744,7 @@ def admin_members():
 
     # GET: show current members
     members = db.execute(
-        "SELECT * FROM members ORDER BY last_name, first_name"
+        "SELECT * FROM members ORDER BY surname_sort_key(last_name || ' ' || first_name)"
     ).fetchall()
     member_count = len(members)
 
@@ -3817,7 +4279,7 @@ def admin_codes_pdf(election_id):
 
     if not codes:
         flash("Code slips can only be exported after code generation. Delete and regenerate codes to get a new PDF.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     db = get_db()
     election = db.execute(
@@ -3925,7 +4387,7 @@ def admin_dual_sided_ballots_pdf(election_id):
     codes = load_codes_from_db(election_id)
     if not codes:
         flash("Codes are not available. Delete and regenerate codes to get a new PDF.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     # Filter to only unused codes
     used_hashes = set()
@@ -3936,7 +4398,7 @@ def admin_dual_sided_ballots_pdf(election_id):
 
     if not unused_codes:
         flash("All codes have been used. Generate new codes first.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     offices = db.execute(
         "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order", (election_id,)
@@ -3997,7 +4459,7 @@ def admin_printer_pack_zip(election_id):
 
     if not unused_codes:
         flash("All codes have been used. Generate new codes first.", "error")
-        return redirect(url_for("admin_codes", election_id=election_id))
+        return redirect(url_for("admin_step_codes", election_id=election_id))
 
     offices = db.execute(
         "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",

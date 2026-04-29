@@ -375,8 +375,9 @@ class TestPaperVotes:
             "paper_3": "2"
         })
 
-        # Check results on manage page
-        resp = client.get("/admin/election/1/manage")
+        # Check results on manage page (legacy URL now redirects to the
+        # wizard step; follow it to verify paper votes are surfaced).
+        resp = client.get("/admin/election/1/manage", follow_redirects=True)
         assert resp.status_code == 200
         # The paper votes should appear in the results table
         assert b"5" in resp.data

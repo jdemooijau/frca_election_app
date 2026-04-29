@@ -3,7 +3,7 @@
 {% block content %}
 <div class="admin-header">
     <h1>Paper Count - Round {{ round_no }}</h1>
-    <a href="{{ url_for('admin_election_manage', election_id=election.id) }}">Back to Manage</a>
+    <a href="{{ url_for('admin_election_open', election_id=election.id) }}">Back to Manage</a>
 </div>
 <div class="container-fullwide">
     <div class="count-dashboard"

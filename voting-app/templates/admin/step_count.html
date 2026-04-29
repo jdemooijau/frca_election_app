@@ -1,0 +1,58 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}Count &amp; tally - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}Round {{ sidebar_state.election.current_round }} - Count &amp; tally{% endblock %}
+{% block step_heading %}Enter paper ballot counts and per-candidate tally{% endblock %}
+{% block step_content %}
+
+<p style="font-size: 14px; color: #555; margin-bottom: 14px;">
+    Voting closed. Count the paper ballots, enter the per-candidate
+    tally below, then advance to <em>Decide</em>.
+</p>
+
+<h3 style="margin: 8px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Paper ballots received</h3>
+<form method="POST" action="{{ url_for('admin_set_participants', election_id=sidebar_state.election.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: end; margin-bottom: 8px;">
+        <div class="form-group" style="flex: 1; min-width: 200px;">
+            <label>Paper Ballots Received</label>
+            <input type="number" name="paper_ballot_count" value="{{ paper_ballot_count }}"
+                   min="0" style="text-align: center;">
+        </div>
+        <button type="submit" class="btn btn-primary btn-small">Save</button>
+    </div>
+</form>
+
+<div class="btn-row" style="margin-bottom: 16px;">
+    <a href="{{ url_for('admin_paper_votes', election_id=sidebar_state.election.id) }}" class="btn btn-gold">
+        Enter Paper Votes (per candidate)
+    </a>
+    {% if election.paper_count_enabled %}
+    <a href="{{ url_for('admin_count_dashboard', election_id=sidebar_state.election.id, round_no=sidebar_state.election.current_round) }}"
+       target="_blank" class="btn btn-outline">Paper Count Dashboard</a>
+    {% endif %}
+    <form method="POST" action="{{ url_for('admin_toggle_results', election_id=sidebar_state.election.id) }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if election.show_results %}
+        <button type="submit" class="btn btn-outline btn-small">Hide Results on Projector</button>
+        {% else %}
+        <button type="submit" class="btn btn-gold btn-small">Show Results on Projector</button>
+        {% endif %}
+    </form>
+</div>
+
+{# ============= Round tally table - shared partial ============= #}
+{% if this_round_opened and results %}
+<div style="margin: 18px 0; padding: 16px 18px; background: white; border: 1px solid var(--grey); border-radius: 8px;">
+    <h3 style="margin: 0 0 12px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">
+        Round {{ election.current_round }} tally
+    </h3>
+    {% include "admin/_round_tally.html" %}
+</div>
+{% endif %}
+
+<div style="margin-top: 18px;">
+    <a href="{{ url_for('admin_step_decide', election_id=sidebar_state.election.id) }}" class="btn btn-primary">
+        Next: Decide &rarr;
+    </a>
+</div>
+{% endblock %}

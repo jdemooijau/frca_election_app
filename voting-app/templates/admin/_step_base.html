@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block body_class %}wizard-shell-body{% endblock %}
+{% block content %}
+<div class="wizard-shell">
+    {% include "admin/_sidebar.html" %}
+    <main class="wizard-main">
+        <div class="wizard-main-head">
+            <span class="wizard-step-tag">{% block step_tag %}{% endblock %}</span>
+            <h1 class="wizard-step-heading">{% block step_heading %}{% endblock %}</h1>
+        </div>
+        {% block step_content %}{% endblock %}
+    </main>
+</div>
+{% endblock %}
