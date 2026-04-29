@@ -19,12 +19,13 @@
     {% else %}
     {% for item in group.items %}
     {% if item.state == 'locked' %}
-    <span class="wizard-sidebar-item locked" title="Complete prior steps first">
-        <span class="ico">&#9679;</span><span>{{ item.label }}</span>
+    <span class="wizard-sidebar-item locked" aria-disabled="true" title="Complete prior steps first">
+        <span class="ico" aria-hidden="true">&#9679;</span><span>{{ item.label }}</span>
     </span>
     {% else %}
-    <a href="{{ item.url }}" class="wizard-sidebar-item {{ item.state }}">
-        <span class="ico">{% if item.state == 'done' %}&#10003;{% else %}&#9679;{% endif %}</span>
+    <a href="{{ item.url }}" class="wizard-sidebar-item {{ item.state }}"
+       {% if item.state == 'current' %}aria-current="step"{% endif %}>
+        <span class="ico" aria-hidden="true">{% if item.state == 'done' %}&#10003;{% else %}&#9679;{% endif %}</span>
         <span>{{ item.label }}</span>
     </a>
     {% endif %}
