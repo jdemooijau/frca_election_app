@@ -897,6 +897,26 @@ def admin_step_codes(election_id):
     )
 
 
+@app.route("/admin/election/<int:election_id>/step/attendance", methods=["GET"], endpoint="admin_step_attendance")
+@admin_required
+def admin_step_attendance(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    in_person, _, _ = get_round_counts(election_id, election["current_round"])
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template(
+        "admin/step_attendance.html",
+        election=election,
+        in_person_participants=in_person,
+        postal_voter_count=election["postal_voter_count"] or 0,
+        sidebar_state=sidebar_state,
+    )
+
+
 _register_step_stubs()
 
 
@@ -1864,7 +1884,15 @@ def admin_set_participants(election_id):
 
     set_round_counts(election_id, current_round, participants, paper_ballot_count)
     flash(f"Round {current_round} — Participants: {participants}, Paper ballots: {paper_ballot_count}.", "success")
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    # Route wizard callers back to whichever step they posted from; legacy
+    # callers (the old manage page) fall through to admin_election_manage.
+    referrer = request.referrer or ""
+    if "/step/count" in referrer:
+        return redirect(url_for("admin_step_count", election_id=election_id))
+    elif "/step/attendance" in referrer:
+        return redirect(url_for("admin_step_attendance", election_id=election_id))
+    else:
+        return redirect(url_for("admin_election_manage", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/postal-votes", methods=["GET", "POST"])

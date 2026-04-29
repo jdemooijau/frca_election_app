@@ -1,0 +1,64 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}Attendance &amp; postal - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}Round {{ sidebar_state.election.current_round }} - Attendance &amp; postal{% endblock %}
+{% block step_heading %}Set the attendance count from the register{% endblock %}
+{% block step_content %}
+{% set attendance_missing = (in_person_participants or 0) <= 0 %}
+
+<div style="margin-bottom: 14px; padding: 14px; border-radius: 8px;
+            {% if attendance_missing %}background: #FFF6E5; border: 2px solid #C0392B;
+            {% else %}background: #F4FAF6; border: 1px solid #B8E0C8;{% endif %}">
+    <h3 style="margin: 0 0 6px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">
+        {% if attendance_missing %}&#9888; Attendance not yet set (Article 4)
+        {% else %}&#10003; Attendance set (Article 4){% endif %}
+    </h3>
+    <p style="font-size: 14px; color: #444; margin: 0 0 10px;">
+        Count the brothers who have signed the <strong>attendance register</strong>
+        at the door, and enter that number below. This drives the Article 6b
+        threshold, without it, no candidate can be declared elected.
+    </p>
+    <form method="POST" action="{{ url_for('admin_set_participants', election_id=sidebar_state.election.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: end;">
+            <div class="form-group" style="flex: 1; min-width: 200px; margin: 0;">
+                <label for="participants" style="font-weight: 700;">Brothers Present (from attendance register)</label>
+                <input type="number" id="participants" name="participants"
+                       value="{{ in_person_participants }}" min="0"
+                       style="text-align: center; font-size: 22px; font-weight: 700;">
+            </div>
+            <button type="submit" class="btn btn-primary">Save attendance</button>
+        </div>
+    </form>
+</div>
+
+<div style="margin-bottom: 18px; padding: 12px 14px;
+            background: #FFFAF0; border-left: 4px solid var(--gold);
+            border-radius: 6px;">
+    <h3 style="margin: 0 0 4px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">
+        Postal votes (last chance)
+    </h3>
+    <p style="font-size: 14px; color: #444; margin: 0 0 8px;">
+        {% if postal_voter_count > 0 %}<strong>{{ postal_voter_count }} postal vote{{ '' if postal_voter_count == 1 else 's' }}</strong> already entered.
+        {% else %}<strong>No postal votes entered yet.</strong>{% endif %}
+        Last chance to enter envelopes handed to the chairman just now, postal
+        votes that arrive after voting opens cannot be added.
+    </p>
+    <div class="btn-row">
+        <a href="{{ url_for('admin_postal_votes', election_id=sidebar_state.election.id) }}" class="btn btn-outline btn-small">
+            {% if postal_voter_count > 0 %}Add or adjust postal votes{% else %}Enter postal votes{% endif %}
+        </a>
+        <a href="{{ url_for('admin_postal_tally', election_id=sidebar_state.election.id) }}" class="btn btn-outline btn-small">Postal Tally Helper</a>
+    </div>
+</div>
+
+<div style="margin-top: 18px;">
+    {% if attendance_missing %}
+    <button class="btn btn-outline" disabled title="Set attendance first">Next: Welcome &amp; Rules &rarr;</button>
+    <p style="font-size: 13px; color: #C0392B; margin-top: 6px;">Save attendance above before advancing.</p>
+    {% else %}
+    <a href="{{ url_for('admin_step_welcome', election_id=sidebar_state.election.id) }}" class="btn btn-primary">
+        Next: Welcome &amp; Rules &rarr;
+    </a>
+    {% endif %}
+</div>
+{% endblock %}

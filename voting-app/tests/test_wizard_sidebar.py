@@ -158,3 +158,23 @@ def test_step_codes_shows_status_and_printer_pack(admin_client):
     assert "Total Codes" in body or "10" in body
     assert "Printer Pack" in body
     assert "wizard-sidebar" in body
+
+
+@pytest.fixture
+def election_ready_for_attendance(admin_client):
+    """An election with offices+candidates+codes but no attendance set yet."""
+    admin_client.post("/admin/election/new", data={"name": "Ready", "max_rounds": "2"})
+    admin_client.post("/admin/election/1/setup", data={
+        "office_name": "Elder", "vacancies": "1", "max_selections": "1",
+        "candidate_names": "A\nB\nC", "confirm_slate_override": "1",
+    })
+    admin_client.post("/admin/election/1/codes", data={"count": "10"})
+    return admin_client
+
+
+def test_step_attendance_shows_participants_form(election_ready_for_attendance):
+    rv = election_ready_for_attendance.get("/admin/election/1/step/attendance")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Brothers Present" in body
+    assert "wizard-sidebar" in body
