@@ -1224,7 +1224,14 @@ def admin_election_new():
     return render_template("admin/election_new.html")
 
 
-@app.route("/admin/election/<int:election_id>/setup", methods=["GET", "POST"])
+@app.route("/admin/election/<int:election_id>/setup", methods=["GET"])
+@admin_required
+def admin_election_setup_legacy_get(election_id):
+    """Legacy URL. Redirect to the wizard step."""
+    return redirect(url_for("admin_step_offices", election_id=election_id), code=301)
+
+
+@app.route("/admin/election/<int:election_id>/setup", methods=["POST"])
 @admin_required
 def admin_election_setup(election_id):
     db = get_db()
@@ -1370,7 +1377,14 @@ def admin_office_delete(election_id, office_id):
     return redirect(url_for("admin_step_offices", election_id=election_id))
 
 
-@app.route("/admin/election/<int:election_id>/codes", methods=["GET", "POST"])
+@app.route("/admin/election/<int:election_id>/codes", methods=["GET"])
+@admin_required
+def admin_codes_legacy_get(election_id):
+    """Legacy URL. Redirect to the wizard step."""
+    return redirect(url_for("admin_step_codes", election_id=election_id), code=301)
+
+
+@app.route("/admin/election/<int:election_id>/codes", methods=["POST"])
 @admin_required
 def admin_codes(election_id):
     db = get_db()
@@ -1921,11 +1935,27 @@ def _build_manage_view_payload(election_id):
     }
 
 
+@app.route("/admin/election/<int:election_id>")
+@admin_required
+def admin_election_open(election_id):
+    """Dashboard 'Open' click target. Lands on the current default step."""
+    state = compute_sidebar_state(election_id)
+    if not state:
+        abort(404)
+    return redirect(url_for(f"admin_step_{state['current_step']}", election_id=election_id))
+
+
 @app.route("/admin/election/<int:election_id>/manage")
 @admin_required
 def admin_election_manage(election_id):
-    payload = _build_manage_view_payload(election_id)
-    return render_template("admin/manage.html", **payload)
+    """Legacy URL. Redirect to the wizard step shell."""
+    state = compute_sidebar_state(election_id)
+    if not state:
+        abort(404)
+    return redirect(
+        url_for(f"admin_step_{state['current_step']}", election_id=election_id),
+        code=301,
+    )
 
 
 @app.route("/admin/election/<int:election_id>/participants", methods=["POST"])

@@ -260,3 +260,35 @@ def test_step_minutes_links_to_docx(election_with_codes):
     assert "Minutes" in body
     assert "/admin/election/1/minutes" in body or "minutes" in body.lower()
     assert "wizard-sidebar" in body
+
+
+def test_old_manage_url_redirects_to_step(election_with_codes):
+    rv = election_with_codes.get("/admin/election/1/manage", follow_redirects=False)
+    assert rv.status_code in (301, 302, 308)
+    assert "/step/" in rv.location
+
+
+def test_old_setup_url_redirects_to_offices_step(admin_client):
+    admin_client.post("/admin/election/new", data={"name": "E", "max_rounds": "2"})
+    rv = admin_client.get("/admin/election/1/setup", follow_redirects=False)
+    assert rv.status_code in (301, 302, 308)
+    assert "/step/offices" in rv.location
+
+
+def test_old_codes_url_redirects_to_codes_step(election_with_codes):
+    rv = election_with_codes.get("/admin/election/1/codes", follow_redirects=False)
+    assert rv.status_code in (301, 302, 308)
+    assert "/step/codes" in rv.location
+
+
+def test_dashboard_manage_link_targets_step_open(election_with_codes):
+    # Mark first-run setup complete so /admin renders the dashboard.
+    from app import set_setting
+    with app.app_context():
+        set_setting("setup_complete", "1")
+    rv = election_with_codes.get("/admin")
+    body = rv.get_data(as_text=True)
+    # The dashboard should have an "Open" link going to /admin/election/1 (or directly to a /step/ URL)
+    assert "/admin/election/1" in body
+    # Should NOT have a "Manage" link to the legacy URL
+    assert "/admin/election/1/manage" not in body

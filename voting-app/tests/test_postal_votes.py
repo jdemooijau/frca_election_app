@@ -107,7 +107,8 @@ class TestPostalVoteEntry:
             "paper_ballot_count": "0"
         })
 
-        resp = client.get("/admin/election/1/manage")
+        # Legacy /manage URL now redirects to the wizard step shell.
+        resp = client.get("/admin/election/1/manage", follow_redirects=True)
         # The manage page should show postal column
         assert b"Postal" in resp.data or b"postal" in resp.data
 
@@ -153,8 +154,8 @@ class TestPostalVoteEntry:
             "carry_forward": ["1", "2", "3", "4"]
         })
 
-        # Check round 2 manage page
-        resp = client.get("/admin/election/1/manage")
+        # Check round 2 manage page (legacy URL redirects; follow it).
+        resp = client.get("/admin/election/1/manage", follow_redirects=True)
         content = resp.data.decode()
 
         # In round 2, postal voter count should not be shown/added
