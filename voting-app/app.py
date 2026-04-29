@@ -949,6 +949,13 @@ def admin_step_count(election_id):
     return render_template("admin/step_count.html", **payload)
 
 
+@app.route("/admin/election/<int:election_id>/step/decide", methods=["GET"], endpoint="admin_step_decide")
+@admin_required
+def admin_step_decide(election_id):
+    payload = _build_manage_view_payload(election_id)
+    return render_template("admin/step_decide.html", **payload)
+
+
 _register_step_stubs()
 
 
@@ -2326,7 +2333,7 @@ def admin_next_round(election_id):
     db.commit()
 
     flash(f"Round {new_round} started. Vacancies updated based on elected candidates.", "success")
-    return redirect(url_for("admin_election_manage", election_id=election_id))
+    return redirect(url_for("admin_step_attendance", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/voter-log")

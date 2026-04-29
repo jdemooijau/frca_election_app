@@ -231,3 +231,13 @@ def test_step_count_shows_paper_inputs(election_with_codes):
     assert "Paper Ballots Received" in body or "paper_ballot_count" in body
     assert "Enter Paper Votes" in body
     assert "wizard-sidebar" in body
+
+
+def test_step_decide_shows_options_after_close(election_with_codes):
+    election_with_codes.post("/admin/election/1/voting")  # open
+    election_with_codes.post("/admin/election/1/voting")  # close
+    rv = election_with_codes.get("/admin/election/1/step/decide")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Start Round" in body or "Show Final Results" in body
+    assert "wizard-sidebar" in body
