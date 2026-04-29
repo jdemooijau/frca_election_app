@@ -17,7 +17,7 @@
     {% if group.collapsed %}
     <div class="wizard-sidebar-collapsed">{{ group.summary }}</div>
     {% else %}
-    {% for item in group["items"] %}
+    {% for item in group["entries"] %}
     {% if item.state == 'locked' %}
     <span class="wizard-sidebar-item locked" aria-disabled="true" title="Complete prior steps first">
         <span class="ico" aria-hidden="true">&#9679;</span><span>{{ item.label }}</span>

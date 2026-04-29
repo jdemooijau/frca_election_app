@@ -56,7 +56,7 @@ def test_sidebar_state_fresh_election_has_only_details_done(fresh_election):
     # Setup group: details done, members locked (no members yet),
     # offices locked, settings locked, codes locked
     setup = next(g for g in state["groups"] if g["label"] == "Setup")
-    states_by_slug = {item["slug"]: item["state"] for item in setup["items"]}
+    states_by_slug = {item["slug"]: item["state"] for item in setup["entries"]}
     assert states_by_slug["details"] == "done"
     assert states_by_slug["members"] in ("current", "locked")
     assert states_by_slug["offices"] == "locked"
@@ -78,7 +78,7 @@ def test_sidebar_state_with_offices_codes_marks_them_done(admin_client):
     with app.app_context():
         state = compute_sidebar_state(election_id=1)
     setup = next(g for g in state["groups"] if g["label"] == "Setup")
-    states = {it["slug"]: it["state"] for it in setup["items"]}
+    states = {it["slug"]: it["state"] for it in setup["entries"]}
     assert states["offices"] == "done"
     assert states["codes"] == "done"
 
@@ -96,7 +96,7 @@ def test_sidebar_state_attendance_done_when_participants_set(admin_client):
     with app.app_context():
         state = compute_sidebar_state(election_id=1)
     round_group = next(g for g in state["groups"] if g["label"].startswith("Round"))
-    states = {it["slug"]: it["state"] for it in round_group["items"]}
+    states = {it["slug"]: it["state"] for it in round_group["entries"]}
     assert states["attendance"] == "done"
 
 

@@ -516,9 +516,9 @@ def compute_sidebar_state(election_id):
             item["state"] = "locked"
 
     groups = [
-        {"label": "Setup", "items": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Setup"]},
-        {"label": f"Round {current_round}", "items": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Round"]},
-        {"label": "Finish", "items": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Finish"]},
+        {"label": "Setup", "entries": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Setup"]},
+        {"label": f"Round {current_round}", "entries": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Round"]},
+        {"label": "Finish", "entries": [items_by_slug[s] for s, _, g in WIZARD_STEPS if g == "Finish"]},
     ]
 
     if current_round > 1:
@@ -532,7 +532,7 @@ def compute_sidebar_state(election_id):
             summary = f"Closed - {elected} elected" if elected else "Closed - 0 elected"
             groups.insert(
                 1 + (r - 1),
-                {"label": f"Round {r}", "collapsed": True, "summary": summary, "items": []},
+                {"label": f"Round {r}", "collapsed": True, "summary": summary, "entries": []},
             )
 
     return {
