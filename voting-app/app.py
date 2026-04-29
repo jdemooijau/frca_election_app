@@ -826,6 +826,20 @@ def admin_step_offices(election_id):
     )
 
 
+@app.route("/admin/election/<int:election_id>/step/settings", methods=["GET"], endpoint="admin_step_settings")
+@admin_required
+def admin_step_settings(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template("admin/step_settings.html",
+                           election=election, sidebar_state=sidebar_state)
+
+
 _register_step_stubs()
 
 
@@ -1208,7 +1222,7 @@ def admin_election_settings(election_id):
     )
     db.commit()
     flash("Settings updated.", "success")
-    return redirect(url_for("admin_election_setup", election_id=election_id))
+    return redirect(url_for("admin_step_settings", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/office/<int:office_id>/delete", methods=["POST"])

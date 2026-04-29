@@ -134,3 +134,12 @@ def test_step_offices_renders_existing_office_with_candidates(admin_client):
     assert "A" in body or "B" in body
     assert "wizard-sidebar" in body
     assert "Add Office" in body
+
+
+def test_step_settings_renders_paper_count_toggle(admin_client):
+    admin_client.post("/admin/election/new", data={"name": "E", "max_rounds": "2"})
+    rv = admin_client.get("/admin/election/1/step/settings")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "paper count" in body.lower() or "paper_count_enabled" in body
+    assert "wizard-sidebar" in body
