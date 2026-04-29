@@ -20,6 +20,7 @@
                 <li class="count-candidate-row" data-candidate-id="{{ cand.id }}">
                     <span class="count-val" id="count-val-{{ cand.id }}">0</span>
                     <button type="button" class="count-plus-btn" data-delta="1">
+                        <span class="count-plus-prefix" aria-hidden="true">+1</span>
                         <span class="count-surname">{{ cand.name }}</span>
                     </button>
                     <button type="button" class="count-minus-btn" data-delta="-1" aria-label="minus 1">−1</button>
@@ -71,6 +72,13 @@
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({candidate_id: candidateId, delta: delta})
             });
+            if (r.status === 403) {
+                // Server refused: cap full (helper never created), session
+                // cancelled, or already marked done. Reload so the server
+                // renders the matching end-state page with a clear message.
+                window.location.reload();
+                return;
+            }
             pulse(row, r.ok);
             if (!r.ok) {
                 row.classList.add("count-row-error");

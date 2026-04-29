@@ -56,9 +56,9 @@ anything.
 ## Contact
 
 There is no help desk or support contract. If you have a question, a bug
-report, or a suggestion, you are welcome to email the author:
+report, or a suggestion, you are welcome to contact the author:
 
-**Jan de Mooij** — demooij.jan@gmail.com
+**Jan de Mooij**
 
 Responses are not guaranteed and there is no commitment to act on any
 request. Please do not rely on a reply in time for an imminent election.

@@ -5,7 +5,7 @@
     <h1>Paper Count - Round {{ round_no }}</h1>
     <a href="{{ url_for('admin_election_manage', election_id=election.id) }}">Back to Manage</a>
 </div>
-<div class="container-wide">
+<div class="container-fullwide">
     <div class="count-dashboard"
          data-state-url="{{ url_for('admin_count_state', election_id=election.id, round_no=round_no) }}"
          data-disregard-url="{{ url_for('admin_count_disregard', election_id=election.id, round_no=round_no) }}"
@@ -77,21 +77,22 @@
             const cls = ["count-helper-col"];
             if (h.disregarded) cls.push("count-helper-disregarded");
             if (h.out_of_sync) cls.push("count-helper-flagged");
-            const flag = h.out_of_sync && !h.disregarded ? '<span class="count-flag-chip">out of sync</span>' : "";
+            const flag = h.out_of_sync && !h.disregarded ? '<span class="count-flag-chip" title="out of sync">OOS</span>' : "";
             const btn = h.disregarded
-                ? `<button class="count-helper-restore-btn" data-helper-id="${h.id}">Restore</button>`
-                : `<button class="count-helper-disregard-btn" data-helper-id="${h.id}">Disregard</button>`;
-            const stale = isStale(h.last_seen_at) ? '<span class="count-stale">(stale)</span>' : "";
-            return `<th class="${cls.join(' ')}">${h.short_id} ${flag} ${stale}<br>${btn}</th>`;
+                ? `<button class="count-helper-restore-btn" data-helper-id="${h.id}" title="Restore">&#8634;</button>`
+                : `<button class="count-helper-disregard-btn" data-helper-id="${h.id}" title="Disregard">&times;</button>`;
+            const stale = isStale(h.last_seen_at) ? '<span class="count-stale-dot" title="stale"></span>' : "";
+            return `<th class="${cls.join(' ')}">${h.short_id}${stale}${flag}<br>${btn}</th>`;
         }).join("");
-        html += `<table class="count-table"><thead><tr><th>Candidate</th>${helperHeaders}<th>Consensus</th></tr></thead><tbody>`;
+        html += `<table class="count-table"><thead><tr><th>Candidate</th>${helperHeaders}<th class="count-consensus-col">Consensus</th></tr></thead><tbody>`;
         for (const offId of Object.keys(byOffice)) {
             const off = byOffice[offId];
             html += `<tr class="count-office-row"><th colspan="${data.helpers.length + 2}">${escapeHtml(off.name)}</th></tr>`;
             for (const c of off.candidates) {
                 const cells = data.helpers.map(h => {
                     const v = c.per_helper[h.short_id];
-                    return `<td class="${h.disregarded ? 'count-cell-disregarded' : ''}">${v == null ? "" : v}</td>`;
+                    const cellCls = "count-cell" + (h.disregarded ? " count-cell-disregarded" : "");
+                    return `<td class="${cellCls}">${v == null ? "" : v}</td>`;
                 }).join("");
                 let consensusCell = "";
                 if (c.consensus.status === "ok") consensusCell = `<td class="count-cell-ok">&#10003; ${c.consensus.value}</td>`;

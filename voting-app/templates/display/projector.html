@@ -5,22 +5,57 @@
 {% block head %}
 <style>
     html, body { overflow-x: hidden; }
+    :root { --proj-scale: 1; }
     .display-body, .display-topbar, .display-main, .display-summary,
     .display-results, .display-offices, .display-office,
     .display-office * { box-sizing: border-box; min-width: 0; }
+
+    /* Top summary: bigger numbers, much bigger labels, taller progress bar */
+    .display-vote-count,
+    .display-vote-total,
+    .display-vote-waiting { min-width: 180px; }
+    .big-number { font-size: 64px; }
+    .big-label { font-size: 26px; margin-top: 8px; }
+    .display-pbar { height: 48px; border-radius: 24px; }
+    .display-pbar-label { font-size: 36px; }
+
+    /* Bottom stats bar: bump bar height, legend text, and dot size.
+       Inline styles on the inner divs are overridden via !important so
+       both the Jinja-rendered and JS-rerendered versions pick this up. */
+    #stats-bar { padding: 20px 40px 8px !important; }
+    #stats-bar > div:first-child {
+        height: 44px !important;
+        border-radius: 22px !important;
+        margin-bottom: 18px !important;
+    }
+    #stats-bar > div:last-child {
+        font-size: 38px !important;
+        gap: 72px !important;
+    }
+    #stats-bar > div:last-child > span > span {
+        width: 28px !important;
+        height: 28px !important;
+        margin-right: 14px !important;
+        border-radius: 6px !important;
+    }
+    .display-office h2 {
+        font-size: calc(30px * var(--proj-scale)) !important;
+        margin-bottom: calc(10px * var(--proj-scale)) !important;
+        padding-bottom: calc(8px * var(--proj-scale)) !important;
+    }
     .office-thresholds {
         background: #F5F5F5;
         border-left: 4px solid var(--navy);
         border-radius: 6px;
-        padding: 8px 12px;
-        margin: 4px 0 10px;
-        font-size: 18px;
+        padding: calc(8px * var(--proj-scale)) calc(12px * var(--proj-scale));
+        margin: calc(4px * var(--proj-scale)) 0 calc(10px * var(--proj-scale));
+        font-size: calc(18px * var(--proj-scale));
         color: #333;
         line-height: 1.35;
         overflow-wrap: anywhere;
     }
     .office-thresholds p {
-        margin: 0 0 4px 0;
+        margin: 0 0 calc(4px * var(--proj-scale)) 0;
     }
     .office-thresholds p:last-child {
         margin-bottom: 0;
@@ -36,9 +71,17 @@
     }
     .rule-check.pass { color: var(--green); }
     .rule-check.fail { color: var(--red); opacity: 0.65; }
-    .display-candidate { font-size: 26px !important; gap: 12px; padding: 5px 0 !important; }
+    .display-candidate {
+        font-size: calc(26px * var(--proj-scale)) !important;
+        gap: calc(12px * var(--proj-scale));
+        padding: calc(5px * var(--proj-scale)) 0 !important;
+    }
     .display-candidate .name { overflow-wrap: anywhere; font-weight: 600 !important; }
-    .display-candidate .votes { font-size: 28px !important; margin-left: 12px !important; flex-shrink: 0; }
+    .display-candidate .votes {
+        font-size: calc(28px * var(--proj-scale)) !important;
+        margin-left: calc(12px * var(--proj-scale)) !important;
+        flex-shrink: 0;
+    }
     .runoff-banner {
         background: #FFF4E5;
         border: 2px solid #E67E22;
@@ -262,7 +305,7 @@
                 Count Votes
             </div>
             <p style="font-size: 26px; color: #888; margin: 28px 0 0;">
-                Limited to the first 30 counter helpers
+                Limited to the first 20 counter helpers
             </p>
         </div>
         {% endif %}
@@ -711,6 +754,73 @@
         d.appendChild(document.createTextNode(t));
         return d.innerHTML;
     }
+
+    function officeContentHeight(office) {
+        // Sum block-children heights (incl. margins). Avoids scrollHeight,
+        // which returns at least the parent's clientHeight when the grid has
+        // height:100% and the content is shorter than the available space.
+        var total = 0;
+        var children = office.children;
+        for (var i = 0; i < children.length; i++) {
+            var c = children[i];
+            var cs = window.getComputedStyle(c);
+            total += c.offsetHeight +
+                     parseFloat(cs.marginTop || 0) +
+                     parseFloat(cs.marginBottom || 0);
+        }
+        return total;
+    }
+
+    function autoSizeOffices() {
+        var root = document.documentElement;
+        if (window.innerWidth <= 720) {
+            root.style.setProperty('--proj-scale', '1');
+            return;
+        }
+        var resultsContainer = document.getElementById('results-container');
+        if (!resultsContainer) {
+            root.style.setProperty('--proj-scale', '1');
+            return;
+        }
+        var officeNodes = resultsContainer.querySelectorAll('.display-office');
+        if (!officeNodes.length) {
+            root.style.setProperty('--proj-scale', '1');
+            return;
+        }
+        // Reset to 1 so we measure natural (unscaled) content height
+        root.style.setProperty('--proj-scale', '1');
+        requestAnimationFrame(function() {
+            var available = resultsContainer.clientHeight;
+            var natural = 0;
+            for (var i = 0; i < officeNodes.length; i++) {
+                var h = officeContentHeight(officeNodes[i]);
+                if (h > natural) natural = h;
+            }
+            if (natural < 1 || available < 1) return;
+            var scale = (available * 0.95) / natural;
+            scale = Math.max(1, Math.min(2.2, scale));
+            root.style.setProperty('--proj-scale', scale.toFixed(3));
+        });
+    }
+
+    // Re-run after every results re-render (debounced)
+    (function() {
+        var resultsContainer = document.getElementById('results-container');
+        if (!resultsContainer || !window.MutationObserver) return;
+        var debounce;
+        var observer = new MutationObserver(function() {
+            clearTimeout(debounce);
+            debounce = setTimeout(autoSizeOffices, 50);
+        });
+        observer.observe(resultsContainer, { childList: true, subtree: true });
+    })();
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', autoSizeOffices);
+    } else {
+        autoSizeOffices();
+    }
+    window.addEventListener('resize', autoSizeOffices);
 
     setInterval(update, 1000);
 })();

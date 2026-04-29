@@ -141,3 +141,5 @@ Built for office bearer elections in Free Reformed Churches of Australia. Releas
 ## Contact
 
 Jan de Mooij
+
+For ballot-sized printing of all materials in the printer pack, [printer-admin@proecclesia.com.au](mailto:printer-admin@proecclesia.com.au) is ready to support congregations that need it.

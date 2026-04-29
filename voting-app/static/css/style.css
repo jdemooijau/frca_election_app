@@ -60,6 +60,10 @@ body {
     margin: 0 auto;
     padding: var(--spacing);
 }
+.container-fullwide {
+    margin: 0;
+    padding: 16px;
+}
 
 /* =========================================================================
    Header
@@ -1203,6 +1207,15 @@ tr:nth-child(even) {
 .count-plus-btn:active {
     background: #b7e3b7;
 }
+.count-plus-prefix {
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 1.2;
+    font-weight: 700;
+    color: #1d6d1d;
+    margin-right: 8px;
+    opacity: 0.7;
+}
 .count-surname {
     font-family: inherit;
     font-size: 16px;
@@ -1283,9 +1296,9 @@ tr:nth-child(even) {
 }
 .count-table th, .count-table td {
     border: 1px solid #ddd;
-    padding: 6px 8px;
+    padding: 2px 4px;
     text-align: left;
-    font-size: 14px;
+    font-size: 13px;
 }
 .count-table .count-office-row th {
     background: #f4f4f4;
@@ -1293,11 +1306,20 @@ tr:nth-child(even) {
     letter-spacing: 1px;
     color: #666;
 }
+.count-table th.count-consensus-col {
+    min-width: 110px;
+}
 .count-helper-col {
     text-align: center !important;
     font-family: monospace;
-    font-size: 12px;
-    min-width: 90px;
+    font-size: 11px;
+    font-weight: bold;
+    min-width: 50px;
+    line-height: 1.2;
+}
+.count-table td.count-cell {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
 }
 .count-helper-disregarded {
     opacity: 0.4;
@@ -1307,30 +1329,46 @@ tr:nth-child(even) {
     background: #fff3d8;
 }
 .count-flag-chip {
-    display: block;
-    font-size: 10px;
+    display: inline-block;
+    font-size: 9px;
     color: #7d6420;
     background: #fde9b6;
-    padding: 1px 4px;
-    border-radius: 8px;
-    margin-top: 2px;
+    padding: 0 3px;
+    border-radius: 6px;
+    margin-left: 2px;
+}
+.count-stale-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #b0b0b0;
+    margin-left: 2px;
+    vertical-align: middle;
 }
 .count-helper-disregard-btn,
 .count-helper-restore-btn {
-    font-size: 11px;
-    padding: 2px 6px;
-    margin-top: 4px;
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    margin-top: 2px;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
     cursor: pointer;
+    background: #fff;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+}
+.count-helper-disregard-btn:hover,
+.count-helper-restore-btn:hover {
+    background: #f0f0f0;
 }
 .count-cell-disregarded { color: #aaa; }
 .count-cell-ok { background: #d8f3d8; color: #1d6d1d; font-weight: 600; }
 .count-cell-mismatch { background: #f3d8d8; color: #8d2424; font-weight: 600; }
 .count-cell-pending { color: #999; }
-.count-stale {
-    font-size: 10px;
-    color: #999;
-    display: block;
-}
 .count-persist-table {
     border-collapse: collapse;
     width: 100%;

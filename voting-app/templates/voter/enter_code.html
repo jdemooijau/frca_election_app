@@ -47,6 +47,12 @@
         <button type="submit" class="btn btn-primary">Submit Code</button>
     </form>
 
+    <div style="text-align: center; margin-top: 16px;">
+        <a href="{{ url_for('display_phone') }}" class="btn btn-outline">
+            View Live Results
+        </a>
+    </div>
+
     {% else %}
     <div style="text-align: center; padding: 32px 0 24px 0;">
         <svg aria-hidden="true" width="56" height="56" viewBox="0 0 24 24"

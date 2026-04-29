@@ -2782,7 +2782,7 @@ def _get_or_create_count_session(db, election_id, round_no):
     ).fetchone()
 
 
-PAPER_COUNT_MAX_HELPERS = 30
+PAPER_COUNT_MAX_HELPERS = 20
 
 
 def _paper_count_active_for_round(db, election):

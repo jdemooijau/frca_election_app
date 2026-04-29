@@ -827,6 +827,13 @@ def _draw_ballot_card(c, x, top_y, card_w, card_h, election_name,
                       left_offices, right_offices, sub_w, sub_gap):
     """Draw a single paper ballot card at the given position.
 
+    Mirrors the dynamic-scale layout used by generate_paper_ballot_pdf:
+    no subtitle, scale derived from actual text widths and available
+    vertical room, sparse-aware office_header_mm, capped row stretching,
+    and vertical centering of any residual slack. Single-office cards
+    use the full card width (sub_w/sub_gap from the caller are ignored
+    in that case).
+
     Args:
         c: ReportLab canvas.
         x: left edge of card.
@@ -835,9 +842,11 @@ def _draw_ballot_card(c, x, top_y, card_w, card_h, election_name,
         card_h: height of card.
         election_name: election title text.
         left_offices: list of office dicts for the left sub-column.
-        right_offices: list of office dicts for the right sub-column.
-        sub_w: width of each office sub-column.
-        sub_gap: gap between the two office sub-columns.
+        right_offices: list of office dicts for the right sub-column (may
+            be empty for single-office layouts).
+        sub_w: width of each office sub-column (used only when both left
+            and right have offices).
+        sub_gap: gap between the two office sub-columns (same).
     """
     cx = x + card_w / 2
     bottom_y = top_y - card_h
@@ -848,25 +857,142 @@ def _draw_ballot_card(c, x, top_y, card_w, card_h, election_name,
     c.rect(x, bottom_y, card_w, card_h)
     c.setDash()
 
-    y = top_y - 5 * mm
+    office_data_combined = list(left_offices) + list(right_offices)
 
-    # Title
+    # Always draw the warning strip at the bottom; even an empty card
+    # gets it.
+    warning_text = "\u26A0 Do not submit this ballot if you voted digitally (see reverse)"
+    if not office_data_combined:
+        # Title only, then warning.
+        c.setFillColor(HexColor("#000000"))
+        c.setFont("Helvetica-Bold", 12)
+        c.drawCentredString(cx, top_y - 5 * mm, election_name)
+        _draw_warning_strip(c, x, bottom_y, card_w, warning_text)
+        return
+
+    n_offices = len(office_data_combined)
+    two_office_cols = n_offices >= 2
+    max_cands_in_office = max(len(o["candidates"]) for o in office_data_combined)
+
+    # Single office uses the full card width; multi-office uses the
+    # caller-supplied sub_w/sub_gap.
+    if two_office_cols:
+        sub_w_eff = sub_w
+        sub_gap_eff = sub_gap
+    else:
+        sub_w_eff = card_w - 4 * mm
+        sub_gap_eff = 0
+
+    # Compute the largest scale that keeps every name and office title
+    # inside its sub-column AND the body (heading + offices + warning)
+    # fits the card height. Same approach as generate_paper_ballot_pdf.
+    text_caps = [99.0]
+    for item in office_data_combined:
+        office = item["office"]
+        title = f"For {office['name']} (select {office['max_selections']})"
+        title_w_mm = stringWidth(title, "Helvetica-Bold", 7) / mm
+        if title_w_mm > 0:
+            text_caps.append((sub_w_eff / mm) / title_w_mm)
+        for cand in item["candidates"]:
+            name_w_mm = stringWidth(cand["name"], "Helvetica", 7.5) / mm
+            if name_w_mm > 0:
+                text_caps.append((sub_w_eff / mm - 5) / (name_w_mm + 3))
+    text_fit_cap = min(text_caps)
+
+    # Page-fit cap based on actual card_h. Solve for scale so:
+    #   heading + body + bottom_padding + warning <= card_h
+    # heading \u2248 5 + max(4, 1.85*scale + 3) + 5(extra)
+    # body \u2248 scale * 5 * N + 4 (with tail_mm=4)
+    # bottom_padding = 6, warning = _WARNING_STRIP_H_mm
+    warn_h_mm = _WARNING_STRIP_H / mm
+    fixed_h_mm = 5 + 5 + 3 + 4 + 6 + warn_h_mm  # baseline non-scale fixed parts
+    available_for_scale_mm = (card_h / mm) - fixed_h_mm
+    if available_for_scale_mm > 0 and max_cands_in_office > 0:
+        page_fit_cap = available_for_scale_mm / (1.85 + 5 * max_cands_in_office)
+    else:
+        page_fit_cap = 1.0
+    page_fit_cap = max(0.5, page_fit_cap)
+
+    scale = min(text_fit_cap, page_fit_cap) * 0.97
+    scale = max(1.0, min(scale, 5.0))
+
+    # Per-element sizes (heading at base point sizes; body scales)
+    title_pt = 12  # cards are larger than grid tiles, keep title at 12pt
+    box_mm = 3 * scale
+    natural_row_mm = 5 * scale
+    row_mm = natural_row_mm
+    natural_office_header_mm = 4 * scale
+    office_header_mm = natural_office_header_mm
+    office_pad_mm = 1 * scale
+    office_title_pt = 7 * scale
+    cand_pt = 7.5 * scale
+    tail_mm = 4
+
+    EXTRA_ABOVE_BODY_MM = 5
+    heading_to_body_gap = (
+        max(4, 1.85 * scale + 3) + EXTRA_ABOVE_BODY_MM
+    ) * mm
+    header_height = 5 * mm + heading_to_body_gap
+    padding = 6 * mm
+    warning_h = _WARNING_STRIP_H
+
+    # Body region height = card_h - heading - padding - warning
+    target_body_h_mm = (card_h - header_height - padding - warning_h) / mm
+
+    # Sparse-aware office_header extra: more space above first cand for
+    # fewer candidates. Capped so the body still fits.
+    natural_body_no_extras_mm = (
+        office_header_mm
+        + max(0, max_cands_in_office - 1) * natural_row_mm
+        + tail_mm + office_pad_mm
+    )
+    max_office_extra_mm = max(0, target_body_h_mm - natural_body_no_extras_mm)
+    desired_office_extra_mm = max(3, 10 - max_cands_in_office)
+    office_header_mm += min(desired_office_extra_mm, max_office_extra_mm)
+
+    # Stretch row_mm (between candidates only), capped at 1.5x natural.
+    if max_cands_in_office > 1:
+        candidate_room_mm = target_body_h_mm - office_header_mm - tail_mm - office_pad_mm
+        stretched_row_mm = candidate_room_mm / (max_cands_in_office - 1)
+        cap_row_mm = 1.5 * natural_row_mm
+        row_mm = min(max(natural_row_mm, stretched_row_mm), cap_row_mm)
+
+    # Body height after choices \u2014 for centering
+    def _col_body_h_mm(offices):
+        h = 0
+        for item in offices:
+            n = len(item["candidates"])
+            if n == 0:
+                h += office_header_mm + office_pad_mm
+            else:
+                h += office_header_mm + (n - 1) * row_mm + tail_mm + office_pad_mm
+        return h
+
+    body_height = max(
+        _col_body_h_mm(left_offices),
+        _col_body_h_mm(right_offices) if right_offices else 0
+    ) * mm
+    vcenter_offset = max(0, (card_h - header_height - body_height - padding - warning_h) / 2)
+
+    # ---- Draw heading ----
+    cx = x + card_w / 2
+    y = top_y - 5 * mm - vcenter_offset
+
     c.setFillColor(HexColor("#000000"))
-    c.setFont("Helvetica-Bold", 12)
+    c.setFont("Helvetica-Bold", title_pt)
     c.drawCentredString(cx, y, election_name)
-    y -= 4.5 * mm
+    y -= heading_to_body_gap
 
-    c.setFont("Helvetica", 9)
-    c.setFillColor(HexColor("#666666"))
-    c.drawCentredString(cx, y, "Paper Ballot")
-    y -= 4.5 * mm
-
-    # Draw offices side by side
+    # ---- Draw offices ----
     body_y = y
-    for ci, offices in enumerate([left_offices, right_offices]):
+    cols_to_draw = [left_offices, right_offices] if two_office_cols else [left_offices]
+    for ci, offices in enumerate(cols_to_draw):
         if not offices:
             continue
-        ox = x + ci * (sub_w + sub_gap) + 2 * mm
+        if two_office_cols:
+            ox = x + ci * (sub_w_eff + sub_gap_eff) + 2 * mm
+        else:
+            ox = x + 2 * mm
         oy = body_y
 
         for item in offices:
@@ -874,31 +1000,29 @@ def _draw_ballot_card(c, x, top_y, card_w, card_h, election_name,
             candidates = item["candidates"]
 
             c.setFillColor(HexColor("#000000"))
-            c.setFont("Helvetica-Bold", 10)
+            c.setFont("Helvetica-Bold", office_title_pt)
             c.drawString(ox, oy,
                          f"For {office['name']} (select {office['max_selections']})")
-            oy -= 5.5 * mm
+            oy -= office_header_mm * mm
 
-            name_max_w = sub_w - 9.5 * mm
-            for cand in candidates:
+            name_max_w = sub_w_eff - (box_mm + 5) * mm
+            last_idx = len(candidates) - 1
+            for ci_, cand in enumerate(candidates):
                 c.setStrokeColor(HexColor("#000000"))
                 c.setFillColor(HexColor("#FFFFFF"))
-                c.rect(ox + 1 * mm, oy - 0.5 * mm, 4.5 * mm, 4.5 * mm)
+                c.rect(ox + 1 * mm, oy - 0.5 * mm, box_mm * mm, box_mm * mm)
 
                 c.setFillColor(HexColor("#000000"))
-                c.setFont("Helvetica", 10)
+                c.setFont("Helvetica", cand_pt)
                 display_name = shorten_to_fit(
-                    cand["name"], name_max_w, "Helvetica", 10)
-                c.drawString(ox + 7.5 * mm, oy, display_name)
-                oy -= 6 * mm
+                    cand["name"], name_max_w, "Helvetica", cand_pt)
+                c.drawString(ox + (box_mm + 3) * mm, oy, display_name)
+                oy -= (row_mm if ci_ < last_idx else tail_mm) * mm
 
-            oy -= 1 * mm
+            oy -= office_pad_mm * mm
 
     # Warning strip at bottom
-    _draw_warning_strip(
-        c, x, bottom_y, card_w,
-        "\u26A0 Do not submit this ballot if you voted digitally (see reverse)"
-    )
+    _draw_warning_strip(c, x, bottom_y, card_w, warning_text)
 
 
 # ---------------------------------------------------------------------------
@@ -1377,6 +1501,10 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
     instructions = f"""\
 PRINTER PACK — {election_name}
 {'=' * 60}
+
+Thank you for printing the materials for our office bearer election.
+Your work helps the congregation cast their votes on election day,
+and we are grateful for your care and skill.
 
 This ZIP contains everything needed to print materials for the
 church office bearer election. Below is a description of each file.
