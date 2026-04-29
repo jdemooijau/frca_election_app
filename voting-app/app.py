@@ -942,6 +942,13 @@ def admin_step_voting(election_id):
     return render_template("admin/step_voting.html", **payload)
 
 
+@app.route("/admin/election/<int:election_id>/step/count", methods=["GET"], endpoint="admin_step_count")
+@admin_required
+def admin_step_count(election_id):
+    payload = _build_manage_view_payload(election_id)
+    return render_template("admin/step_count.html", **payload)
+
+
 _register_step_stubs()
 
 
@@ -2144,7 +2151,7 @@ def admin_paper_votes(election_id):
                 )
             db.commit()
             flash("Paper vote totals saved.", "success")
-            return redirect(url_for("admin_election_manage", election_id=election_id))
+            return redirect(url_for("admin_step_count", election_id=election_id))
 
     offices = db.execute(
         "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",

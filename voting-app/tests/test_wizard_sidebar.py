@@ -220,3 +220,14 @@ def test_step_voting_shows_open_close_button(election_with_codes):
     body = rv.get_data(as_text=True)
     assert "Round" in body and "Open" in body
     assert "wizard-sidebar" in body
+
+
+def test_step_count_shows_paper_inputs(election_with_codes):
+    election_with_codes.post("/admin/election/1/voting")  # open
+    election_with_codes.post("/admin/election/1/voting")  # close
+    rv = election_with_codes.get("/admin/election/1/step/count")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Paper Ballots Received" in body or "paper_ballot_count" in body
+    assert "Enter Paper Votes" in body
+    assert "wizard-sidebar" in body
