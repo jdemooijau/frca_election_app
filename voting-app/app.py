@@ -956,6 +956,13 @@ def admin_step_decide(election_id):
     return render_template("admin/step_decide.html", **payload)
 
 
+@app.route("/admin/election/<int:election_id>/step/final", methods=["GET"], endpoint="admin_step_final")
+@admin_required
+def admin_step_final(election_id):
+    payload = _build_manage_view_payload(election_id)
+    return render_template("admin/step_final.html", **payload)
+
+
 _register_step_stubs()
 
 

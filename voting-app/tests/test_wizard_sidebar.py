@@ -241,3 +241,13 @@ def test_step_decide_shows_options_after_close(election_with_codes):
     body = rv.get_data(as_text=True)
     assert "Start Round" in body or "Show Final Results" in body
     assert "wizard-sidebar" in body
+
+
+def test_step_final_renders_when_phase_4(election_with_codes):
+    # Force display_phase = 4
+    election_with_codes.post("/admin/election/1/display-phase", data={"target": "4"})
+    rv = election_with_codes.get("/admin/election/1/step/final")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Final" in body and "Result" in body
+    assert "wizard-sidebar" in body
