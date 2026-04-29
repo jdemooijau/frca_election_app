@@ -963,6 +963,17 @@ def admin_step_final(election_id):
     return render_template("admin/step_final.html", **payload)
 
 
+@app.route("/admin/election/<int:election_id>/step/minutes", methods=["GET"], endpoint="admin_step_minutes")
+@admin_required
+def admin_step_minutes(election_id):
+    db = get_db()
+    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+    if not election:
+        abort(404)
+    sidebar_state = compute_sidebar_state(election_id)
+    return render_template("admin/step_minutes.html", election=election, sidebar_state=sidebar_state)
+
+
 _register_step_stubs()
 
 

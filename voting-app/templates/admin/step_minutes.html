@@ -1,0 +1,31 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}Minutes &amp; archive - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}Minutes &amp; archive{% endblock %}
+{% block step_heading %}Download the minutes and archive the database{% endblock %}
+{% block step_content %}
+
+<div class="card">
+    <div class="card-header">Election minutes</div>
+    <p style="font-size: 14px; color: #555; margin-bottom: 12px;">
+        Narrative minutes with one section per round, ready for the secretary
+        to fill in placeholders (chairman name, scripture reference, helpers'
+        names, etc.).
+    </p>
+    <a href="{{ url_for('admin_minutes_docx', election_id=sidebar_state.election.id) }}"
+       class="btn btn-primary">Download Election Minutes (DOCX)</a>
+</div>
+
+<div class="card">
+    <div class="card-header">Archive the database</div>
+    <p style="font-size: 14px; color: #555; margin-bottom: 12px;">
+        Copy the database file at <code>data/frca_election.db</code> to a safe
+        location for the congregation's records (e.g. a USB stick or the
+        secretary's encrypted folder). You can do this at any time after the
+        election concludes.
+    </p>
+    <p style="font-size: 13px; color: #999;">
+        Tip: rename the copy with the date and election name, e.g.
+        <code>frca_election_2026-10-20_office-bearers.db</code>.
+    </p>
+</div>
+{% endblock %}

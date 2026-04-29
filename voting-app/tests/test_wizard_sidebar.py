@@ -251,3 +251,12 @@ def test_step_final_renders_when_phase_4(election_with_codes):
     body = rv.get_data(as_text=True)
     assert "Final" in body and "Result" in body
     assert "wizard-sidebar" in body
+
+
+def test_step_minutes_links_to_docx(election_with_codes):
+    rv = election_with_codes.get("/admin/election/1/step/minutes")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Minutes" in body
+    assert "/admin/election/1/minutes" in body or "minutes" in body.lower()
+    assert "wizard-sidebar" in body
