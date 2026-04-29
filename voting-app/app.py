@@ -1354,7 +1354,7 @@ def admin_election_settings(election_id):
         abort(404)
     if election["voting_open"]:
         flash("Cannot change settings while voting is open.", "error")
-        return redirect(url_for("admin_step_offices", election_id=election_id))
+        return redirect(url_for("admin_step_settings", election_id=election_id))
 
     paper_count_enabled = 1 if request.form.get("paper_count_enabled") == "1" else 0
     db.execute(
