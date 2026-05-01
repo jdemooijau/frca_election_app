@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+{% block title %}Display — Election Rules{% endblock %}
+{% block body_class %}display-body{% endblock %}
+
+{% block head %}
+<meta http-equiv="refresh" content="5">
+<style>
+    /* Override the display-body 100vh/overflow:hidden so the rules page
+       can flow naturally and the page scrolls instead of an inner column
+       producing its own scrollbar. */
+    body.display-body {
+        height: auto;
+        overflow: visible;
+    }
+    body.display-body .display-main {
+        overflow: visible;
+    }
+    :root { --rules-scale: 1; }
+
+    /* Bigger topbar title on the rules page (scoped) */
+    body.display-body .display-topbar { padding: 18px 32px; }
+    body.display-body .display-title { font-size: 40px; }
+
+    /* Participation strip: always larger, doesn't scale with content
+       (kept fixed so the layout's top doesn't move when scaling). */
+    .participants-strip {
+        display: flex;
+        gap: 56px;
+        justify-content: center;
+        align-items: baseline;
+        padding: 16px 24px;
+        background: var(--grey-light);
+        border-bottom: 2px solid var(--gold);
+        font-size: 32px;
+        flex-wrap: wrap;
+    }
+    .participants-strip strong {
+        font-size: 48px;
+    }
+    .participants-strip .pstrip-num-navy { color: var(--navy); }
+    .participants-strip .pstrip-num-gold { color: var(--gold); }
+    .participants-strip .pstrip-label { color: #555; }
+    .rules-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 48px;
+    }
+    .rules-column {
+        padding: 8px 0;
+    }
+    .candidate-offices {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: calc(28px * var(--rules-scale));
+    }
+    .rules-column h2 {
+        font-size: calc(26px * var(--rules-scale));
+        color: var(--navy);
+        margin-bottom: calc(14px * var(--rules-scale));
+        padding-bottom: calc(8px * var(--rules-scale));
+        border-bottom: 3px solid var(--gold);
+    }
+    .candidate-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    .candidate-office {
+        margin-bottom: calc(24px * var(--rules-scale));
+    }
+    .candidate-office h3 {
+        font-size: calc(36px * var(--rules-scale));
+        color: var(--gold);
+        margin-bottom: calc(14px * var(--rules-scale));
+    }
+    /* Scale the inline-styled pill / "all vacancies filled" sub-elements
+       so they stay in proportion with the heading. */
+    .candidate-office h3 > span {
+        font-size: calc(22px * var(--rules-scale)) !important;
+    }
+    .candidate-list li {
+        font-size: calc(32px * var(--rules-scale));
+        padding: calc(12px * var(--rules-scale)) calc(16px * var(--rules-scale));
+        border-bottom: 1px solid var(--grey);
+        color: var(--navy);
+    }
+    .candidate-list li:last-child {
+        border-bottom: none;
+    }
+    .article-block {
+        margin-bottom: 0;
+        padding: calc(14px * var(--rules-scale)) calc(20px * var(--rules-scale));
+        background: var(--grey-light);
+        border-left: 5px solid var(--gold);
+    }
+    .article-block:first-of-type { border-top-right-radius: 8px; border-top-left-radius: 8px; }
+    .article-block:last-of-type { border-bottom-right-radius: 8px; border-bottom-left-radius: 8px; }
+    .article-block + .article-block { border-top: 1px solid var(--grey); }
+    .article-block h3 {
+        font-size: calc(28px * var(--rules-scale));
+        color: var(--navy);
+        margin-bottom: calc(8px * var(--rules-scale));
+    }
+    .article-block p {
+        font-size: calc(22px * var(--rules-scale));
+        color: #333;
+        line-height: 1.35;
+        margin-bottom: calc(8px * var(--rules-scale));
+    }
+    .article-block p:last-child {
+        margin-bottom: 0;
+    }
+    .threshold-line {
+        margin-top: calc(8px * var(--rules-scale)) !important;
+        padding: calc(8px * var(--rules-scale)) calc(12px * var(--rules-scale));
+        background: rgba(255,255,255,0.6);
+        border-radius: 6px;
+        font-size: calc(20px * var(--rules-scale)) !important;
+        color: var(--navy) !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="display-topbar">
+    <span class="display-title">{{ election.name }}</span>
+    {% if election.current_round > 1 %}
+    <span class="round-badge">Round {{ election.current_round }}</span>
+    {% endif %}
+</div>
+
+{% if (in_person_participants or 0) > 0 or (postal_voter_count or 0) > 0 %}
+<div class="participants-strip">
+    <span><strong class="pstrip-num-navy">{{ in_person_participants or 0 }}</strong>
+          <span class="pstrip-label">brother{{ '' if in_person_participants == 1 else 's' }} present</span></span>
+    <span><strong class="pstrip-num-navy">{{ postal_voter_count or 0 }}</strong>
+          <span class="pstrip-label">postal vote{{ '' if postal_voter_count == 1 else 's' }}</span></span>
+    <span><strong class="pstrip-num-gold">{{ (in_person_participants or 0) + (postal_voter_count or 0) }}</strong>
+          <span class="pstrip-label">total participating</span></span>
+</div>
+{% endif %}
+
+<div class="display-main">
+    <div class="rules-layout">
+        <!-- Left column: Candidate list -->
+        <div class="rules-column">
+            {% if election.current_round > 1 %}
+            <h2>Remaining Candidates — Round {{ election.current_round }}</h2>
+            {% else %}
+            <h2>Slate / Candidate List</h2>
+            {% endif %}
+            <div class="candidate-offices">
+            {% for item in results %}
+            <div class="candidate-office">
+                <h3>
+                    For {{ item.office_name }}
+                    {% if item.max_selections > 0 %}
+                    <span style="display: block; width: fit-content; margin-top: 6px; padding: 4px 14px;
+                                 background: var(--gold); color: var(--navy);
+                                 border-radius: 999px; font-size: 22px; font-weight: 700;
+                                 letter-spacing: 0.3px;">
+                        Select {{ item.max_selections }} name{{ '' if item.max_selections == 1 else 's' }}
+                    </span>
+                    {% else %}
+                    <span style="display: block; margin-top: 6px; font-size: 22px; font-weight: 400; color: #666;">
+                        all vacancies filled
+                    </span>
+                    {% endif %}
+                </h3>
+                {% if item.candidates %}
+                <ul class="candidate-list">
+                    {% for cand in item.candidates %}
+                    <li>Br. {{ cand.name }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% endfor %}
+            </div>
+        </div>
+
+        <!-- Right column: Articles -->
+        <div class="rules-column">
+            <h2>Election Rules</h2>
+
+            {% if election.current_round > 1 %}
+            <div class="article-block">
+                <h3>Article 7 — Subsequent Rounds</h3>
+                <p>If, after voting, the number of candidates elected is insufficient to fill the vacancies, an additional ballot will be held between those candidates who did not receive a sufficient number of votes.</p>
+                <p>If, in any subsequent ballot, no additional candidate is elected, the number of candidates from which a choice is to be made shall be reduced to twice the number of vacancies remaining to be filled by eliminating those candidates who gained the least votes.</p>
+            </div>
+            {% else %}
+            <div class="article-block">
+                <h3>Article 4</h3>
+                <p>At this meeting all male communicant members present must sign the attendance register.</p>
+                <div style="margin-top: 12px; padding: 12px 16px;
+                            background: #C0392B; color: #fff;
+                            border-radius: 8px; font-weight: 700; font-size: 22px;
+                            text-align: center; letter-spacing: 0.3px;">
+                    &#9888; If you have not yet signed the attendance register, please do so now.
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="article-block">
+                <h3>Article 6</h3>
+                <p>The candidates who receive the most votes will be declared elected, provided that:</p>
+                <p><strong>a)</strong> they receive a number of votes greater than half the valid votes cast divided by the number of vacancies, and</p>
+                <p><strong>b)</strong> the number of votes they receive is equal to or greater than two-fifths of the number of people who participated in the election.</p>
+                {% if participants > 0 %}
+                <p class="threshold-line">
+                    For this election: {{ participants }} &times; 2/5 = {{ "%.1f"|format(participants * 2 / 5) }}
+                    &rarr; rounded up to <strong>{{ (participants * 2 / 5) | round(0, 'ceil') | int }} votes</strong>.
+                </p>
+                {% endif %}
+            </div>
+
+            <div class="article-block">
+                <h3>Article 12</h3>
+                <p>Objections of a formal nature against procedure at the election shall be lodged at the same meeting.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    // Largest scale at which every candidate-name LI still fits on one line
+    // in its column. Both the text and the padding scale with --rules-scale,
+    // so for each LI the constraint is:
+    //   (textWidth_1 + padH_1) * s <= columnWidth   (columnWidth is constant)
+    function maxScaleForNoWrap(layout) {
+        var lis = layout.querySelectorAll('.candidate-list li');
+        if (!lis.length) return Infinity;
+        var minScale = Infinity;
+        for (var i = 0; i < lis.length; i++) {
+            var li = lis[i];
+            // Find the text node so we can measure the natural unwrapped width.
+            var textNode = null;
+            for (var j = 0; j < li.childNodes.length; j++) {
+                if (li.childNodes[j].nodeType === 3 &&
+                    li.childNodes[j].nodeValue.trim().length > 0) {
+                    textNode = li.childNodes[j];
+                    break;
+                }
+            }
+            if (!textNode) continue;
+            var origWS = li.style.whiteSpace;
+            li.style.whiteSpace = 'nowrap';
+            var range = document.createRange();
+            range.selectNode(textNode);
+            var textWidth = range.getBoundingClientRect().width;
+            li.style.whiteSpace = origWS;
+            var cs = window.getComputedStyle(li);
+            var padH = parseFloat(cs.paddingLeft || 0) +
+                       parseFloat(cs.paddingRight || 0);
+            var availW = li.clientWidth;
+            var denom = textWidth + padH;
+            if (availW > 0 && denom > 0) {
+                var s = availW / denom;
+                if (s < minScale) minScale = s;
+            }
+        }
+        return minScale;
+    }
+
+    function autoSizeRules() {
+        var root = document.documentElement;
+        // Mobile keeps natural sizing; no upscale on narrow viewports.
+        if (window.innerWidth <= 720) {
+            root.style.setProperty('--rules-scale', '1');
+            return;
+        }
+        var layout = document.querySelector('.rules-layout');
+        if (!layout) {
+            root.style.setProperty('--rules-scale', '1');
+            return;
+        }
+        // Reset before measuring so we always start from natural (unscaled)
+        // content height.
+        root.style.setProperty('--rules-scale', '1');
+        requestAnimationFrame(function() {
+            var rect = layout.getBoundingClientRect();
+            // Available vertical space below the layout's top, within the viewport.
+            // Leave a small bottom buffer so scaled content never touches the edge.
+            var available = window.innerHeight - rect.top - 16;
+            var natural = layout.scrollHeight;
+            if (natural < 1 || available < 1) return;
+            var vScale = (available * 0.94) / natural;
+            // Cap horizontally so the longest candidate name still fits its
+            // column on one line. Tiny safety margin (0.98) for sub-pixel
+            // rendering quirks.
+            var hScale = maxScaleForNoWrap(layout) * 0.98;
+            var scale = Math.min(vScale, hScale, 2.0);
+            // Never shrink (clamp to 1). If content already overflows the
+            // viewport at scale 1, leave it - the page falls back to scrolling.
+            scale = Math.max(1, scale);
+            root.style.setProperty('--rules-scale', scale.toFixed(3));
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', autoSizeRules);
+    } else {
+        autoSizeRules();
+    }
+    window.addEventListener('resize', autoSizeRules);
+})();
+</script>
+{% endblock %}

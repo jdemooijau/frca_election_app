@@ -1,0 +1,830 @@
+{% extends "base.html" %}
+{% block title %}Display — {{ election.name }}{% endblock %}
+{% block body_class %}display-body{% endblock %}
+
+{% block head %}
+<style>
+    html, body { overflow-x: hidden; }
+    :root { --proj-scale: 1; }
+    .display-body, .display-topbar, .display-main, .display-summary,
+    .display-results, .display-offices, .display-office,
+    .display-office * { box-sizing: border-box; min-width: 0; }
+
+    /* Top summary: bigger numbers, much bigger labels, taller progress bar */
+    .display-vote-count,
+    .display-vote-total,
+    .display-vote-waiting { min-width: 180px; }
+    .big-number { font-size: 64px; }
+    .big-label { font-size: 26px; margin-top: 8px; }
+    .display-pbar { height: 48px; border-radius: 24px; }
+    .display-pbar-label { font-size: 36px; }
+
+    /* Bottom stats bar: bump bar height, legend text, and dot size.
+       Inline styles on the inner divs are overridden via !important so
+       both the Jinja-rendered and JS-rerendered versions pick this up. */
+    #stats-bar { padding: 20px 40px 8px !important; }
+    #stats-bar > div:first-child {
+        height: 44px !important;
+        border-radius: 22px !important;
+        margin-bottom: 18px !important;
+    }
+    #stats-bar > div:last-child {
+        font-size: 38px !important;
+        gap: 72px !important;
+    }
+    #stats-bar > div:last-child > span > span {
+        width: 28px !important;
+        height: 28px !important;
+        margin-right: 14px !important;
+        border-radius: 6px !important;
+    }
+    .display-office h2 {
+        font-size: calc(30px * var(--proj-scale)) !important;
+        margin-bottom: calc(10px * var(--proj-scale)) !important;
+        padding-bottom: calc(8px * var(--proj-scale)) !important;
+    }
+    .office-thresholds {
+        background: #F5F5F5;
+        border-left: 4px solid var(--navy);
+        border-radius: 6px;
+        padding: calc(8px * var(--proj-scale)) calc(12px * var(--proj-scale));
+        margin: calc(4px * var(--proj-scale)) 0 calc(10px * var(--proj-scale));
+        font-size: calc(18px * var(--proj-scale));
+        color: #333;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+    .office-thresholds p {
+        margin: 0 0 calc(4px * var(--proj-scale)) 0;
+    }
+    .office-thresholds p:last-child {
+        margin-bottom: 0;
+    }
+    .office-thresholds strong {
+        color: var(--navy);
+    }
+    .rule-check {
+        display: inline-block;
+        font-weight: 700;
+        font-size: 1.1em;
+        margin-left: 6px;
+    }
+    .rule-check.pass { color: var(--green); }
+    .rule-check.fail { color: var(--red); opacity: 0.65; }
+    .display-candidate {
+        font-size: calc(26px * var(--proj-scale)) !important;
+        gap: calc(12px * var(--proj-scale));
+        padding: calc(5px * var(--proj-scale)) 0 !important;
+    }
+    .display-candidate .name { overflow-wrap: anywhere; font-weight: 600 !important; }
+    .display-candidate .votes {
+        font-size: calc(28px * var(--proj-scale)) !important;
+        margin-left: calc(12px * var(--proj-scale)) !important;
+        flex-shrink: 0;
+    }
+    .runoff-banner {
+        background: #FFF4E5;
+        border: 2px solid #E67E22;
+        color: #8A4A00;
+        padding: 12px 20px;
+        border-radius: 8px;
+        margin: 0 auto 16px;
+        font-size: 28px;
+        font-weight: 600;
+        text-align: center;
+        max-width: 1400px;
+    }
+    .runoff-banner strong { color: #8A4A00; }
+    .status-badge {
+        display: inline-block;
+        font-weight: 700;
+        margin-left: 8px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.75em;
+        letter-spacing: 0.5px;
+    }
+    .status-badge.elected { color: var(--green); background: #E8F8EE; }
+    .do-not-mark {
+        margin-top: 18px;
+        padding: 18px 22px;
+        background: #FFF4E5;
+        border: 2px solid #E67E22;
+        border-left-width: 8px;
+        border-radius: 8px;
+        font-size: 26px;
+        color: #3D1F00;
+        line-height: 1.45;
+    }
+    .do-not-mark-title {
+        font-weight: 800;
+        color: #8A4A00;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 10px;
+        font-size: 24px;
+    }
+    .do-not-mark-office {
+        margin-bottom: 8px;
+    }
+    .do-not-mark-office:last-child { margin-bottom: 0; }
+    .do-not-mark-office strong { color: var(--navy); }
+    .ballot-anomaly {
+        background: #FFEAE8;
+        border: 3px solid #C0392B;
+        color: #6B1A12;
+        padding: 16px 24px;
+        margin: 8px auto 16px;
+        border-radius: 10px;
+        font-size: 22px;
+        font-weight: 600;
+        text-align: center;
+        max-width: 1400px;
+        line-height: 1.4;
+    }
+    .ballot-anomaly .anomaly-title {
+        color: #C0392B;
+        font-weight: 800;
+        font-size: 24px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        display: block;
+        margin-bottom: 6px;
+    }
+    .all-votes-panel {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 80px 40px;
+    }
+    .all-votes-panel h2 { text-align: center; }
+    .all-votes-panel p { text-align: center; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="display-topbar">
+    <span class="display-title" id="election-name">{{ election.name }}</span>
+    <span class="round-badge" id="round-badge" {% if election.current_round <= 1 %}style="display:none"{% endif %}>Round {{ election.current_round }}</span>
+    <span class="display-status {{ 'open' if election.voting_open else 'closed' }}" id="voting-status">
+        {{ "OPEN" if election.voting_open else "CLOSED" }}
+    </span>
+</div>
+
+<div class="display-main">
+    {% if total_ballots > participants and participants > 0 %}
+    <div class="ballot-anomaly" id="ballot-anomaly">
+        <span class="anomaly-title">&#9888; Ballot count anomaly</span>
+        {{ total_ballots }} ballots received but only {{ participants }} brother{{ '' if participants == 1 else 's' }} marked as participating.
+        Likely causes: the attendance register was miscounted, or a voter voted online and also handed in a paper ballot. Review before finalising.
+    </div>
+    {% else %}
+    <div class="ballot-anomaly" id="ballot-anomaly" style="display:none;"></div>
+    {% endif %}
+
+    {% if not election.voting_open and total_ballots == 0 %}
+    <div style="text-align: center; padding: 40px 0;">
+        <h2 style="font-size: 32px; color: var(--navy); margin-bottom: 16px;">Voting will begin shortly</h2>
+        <p style="font-size: 20px; color: #666; margin-bottom: 24px;">
+            Please connect to the WiFi and have your voting code ready.
+        </p>
+        {% if wifi_ssid %}
+        <div style="display: inline-block; padding: 20px 32px; background: var(--grey-light); border-radius: 12px;">
+            <p style="font-size: 20px; color: var(--navy); margin-bottom: 4px;"><strong>WiFi:</strong> {{ wifi_ssid }}</p>
+            {% if wifi_password %}
+            <p style="font-size: 20px; color: var(--navy);"><strong>Password:</strong> {{ wifi_password }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="display-summary" id="summary-panel">
+        <div class="display-vote-count">
+            <span class="big-number" id="vote-count">{{ total_ballots }}</span>
+            <span class="big-label">ballots received</span>
+        </div>
+        <div class="display-vote-total">
+            <span class="big-number dim" id="total-participants">{{ participants }}</span>
+            <span class="big-label" id="participants-label">
+                {%- if postal_voter_count > 0 -%}
+                    brothers participating ({{ participants - postal_voter_count }} in-person + {{ postal_voter_count }} postal)
+                {%- else -%}
+                    brothers participating
+                {%- endif -%}
+            </span>
+        </div>
+        {% set remaining = participants - total_ballots %}
+        <div class="display-vote-waiting" id="waiting-container">
+            <span class="big-number" id="waiting-count" style="color: {{ 'var(--green)' if remaining <= 0 else 'var(--red)' }};">{{ '✓' if remaining <= 0 else remaining }}</span>
+            <span class="big-label" id="waiting-label">{{ 'all votes in' if remaining <= 0 else 'still to vote' }}</span>
+        </div>
+        <div class="display-vote-progress">
+            {% set pct = ((total_ballots / participants * 100) | round | int) if participants > 0 else 0 %}
+            <div class="display-pbar">
+                <div class="display-pfill" id="progress-fill" style="width: {{ pct }}%;"></div>
+                <div class="display-pbar-label" id="progress-label">{{ total_ballots }} of {{ participants }} ({{ pct }}%)</div>
+            </div>
+        </div>
+    </div>
+
+    {% set _remaining_init = (participants - total_ballots) if participants else 0 %}
+    {% set all_votes_in = election.voting_open and not election.show_results and participants > 0 and _remaining_init <= 0 %}
+    {% set show_instructions = election.voting_open and not election.show_results and not all_votes_in %}
+    <div class="display-instructions" id="instructions-panel"
+         style="{{ '' if show_instructions else 'display:none' }}">
+        <div class="instructions-options">
+            <div class="instruction-card">
+                <div class="instruction-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><rect x="5" y="1" width="14" height="22" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="20" x2="14" y2="20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </div>
+                <h2>Option 1 — Vote Online</h2>
+                <ol>
+                    {% if wifi_ssid %}
+                    <li>Connect to WiFi: <strong>{{ wifi_ssid }}</strong>{% if wifi_password %} (password: <strong>{{ wifi_password }}</strong>){% endif %}</li>
+                    {% endif %}
+                    <li>Scan the <strong>QR code</strong> on your code slip
+                        <div class="or-divider"><span>OR</span></div>
+                        Go to <strong>{{ vote_url }}</strong> and type in your code</li>
+                    <li>Mark your selections and submit</li>
+                </ol>
+                <p style="margin-top: 12px; padding: 14px 18px; background: #FFF8DC; border-left: 6px solid #D4A017; border-radius: 8px; color: #5C4400; font-size: 34px; line-height: 1.3; font-weight: 600;">
+                    No phone? <strong>Borrow one.</strong> Your code slip is what identifies your vote.
+                </p>
+            </div>
+            <div class="options-divider"><span>OR</span></div>
+            <div class="instruction-card">
+                <div class="instruction-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="1em" height="1em"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                </div>
+                <h2>Option 2 — Vote on Paper</h2>
+                <ol>
+                    <li>Mark your selections on the <strong>ballot paper</strong></li>
+                    <li>Fold the ballot and hand it in for <strong>manual counting</strong></li>
+                </ol>
+                <div class="do-not-mark" id="do-not-mark"
+                     style="{{ '' if paper_guide else 'display:none' }}">
+                    <div class="do-not-mark-title">On the paper ballot, select only from:</div>
+                    <div class="do-not-mark-body">
+                    {% for entry in paper_guide %}
+                        <div class="do-not-mark-office">
+                            {% if entry.names %}
+                            <strong>{{ entry.office_name }}:</strong>
+                            {% for n in entry.names %}Br. {{ n }}{% if not loop.last %}; {% endif %}{% endfor %}
+                            {% else %}
+                            <strong>No {{ entry.office_name }}s</strong>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="instruction-card instruction-warning instruction-warning-wide">
+            <div class="instruction-warning-body">
+                <div class="instruction-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="1em" height="1em"><path d="M12 2L1 21h22L12 2z"/><line x1="12" y1="9" x2="12" y2="15"/><circle cx="12" cy="18" r="0.5" fill="currentColor"/></svg>
+                </div>
+                <p class="warning-highlight">Do not hand in your paper ballot if you voted online.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="all-votes-in-panel" class="all-votes-panel" {% if not all_votes_in %}style="display:none"{% endif %}>
+        <div style="font-size: 96px; line-height: 1; color: var(--green); margin-bottom: 16px;">&#10003;</div>
+        <h2 style="font-size: 60px; font-weight: 700; color: var(--navy); margin: 0 0 16px;">All votes received</h2>
+        <p style="font-size: 48px; color: #555; margin: 0;">Paper votes are being counted/confirmed</p>
+
+        {% if election.paper_count_enabled %}
+        <div style="margin-top: 60px; padding-top: 40px; border-top: 2px solid var(--grey); max-width: 1100px; width: 100%; display: flex; flex-direction: column; align-items: center;">
+            <p style="font-size: 36px; color: var(--navy); margin: 0 0 28px; line-height: 1.4;">
+                Help count from your phone. On your live results page, tap:
+            </p>
+            <div style="padding: 22px 56px; background: var(--navy); color: #fff; border-radius: 14px; font-size: 38px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 4px 0 var(--navy-dark);">
+                Count Votes
+            </div>
+            <p style="font-size: 26px; color: #888; margin: 28px 0 0;">
+                Limited to the first 20 counter helpers
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="display-results" id="results-container">
+        {% if not election.voting_open and results %}
+        {# Voting closed. Runoff banner waits for an explicit Show Results
+           click so paper ballots can be counted before any conclusion is
+           shown to the audience. #}
+        {% set any_runoff = election.show_results and results|selectattr('runoff_needed')|list|length > 0 %}
+        {% if any_runoff %}
+        <div class="runoff-banner">
+            <strong>Round {{ election.current_round + 1 }} required</strong> —
+            {% for office in results if office.runoff_needed %}
+            {{ office.office_name }}: {{ office.remaining_vacancies }} vacanc{{ 'y' if office.remaining_vacancies == 1 else 'ies' }} remain{% if not loop.last %}; {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+        <div class="display-offices">
+            {% for office in results %}
+            {% if office.candidates %}
+            <div class="display-office">
+                <h2>For {{ office.office_name }}</h2>
+                {% if election.show_results and office.valid_votes_cast > 0 and office.vacancies > 0 %}
+                <div class="office-thresholds">
+                    {% set pass6a = office.count_pass_6a >= office.vacancies %}
+                    {% set pass6b = office.count_pass_6b >= office.vacancies %}
+                    <p>
+                        <strong>Article 6a</strong>
+                        <span class="rule-check {{ 'pass' if pass6a else 'fail' }}">{{ '✓' if pass6a else '✗' }}</span>:
+                        {{ office.valid_votes_cast }} / {{ office.vacancies }} / 2 = {{ "%.2f"|format(office.threshold_6a) }}
+                        — need <strong>more than {{ "%.2f"|format(office.threshold_6a) }}</strong> votes
+                    </p>
+                    <p>
+                        <strong>Article 6b</strong>
+                        <span class="rule-check {{ 'pass' if pass6b else 'fail' }}">{{ '✓' if pass6b else '✗' }}</span>:
+                        {{ participants }} &times; 2/5 = {{ "%.1f"|format(participants * 2 / 5) }}
+                        &rarr; rounded up to <strong>{{ office.threshold_6b }}</strong>
+                        — need <strong>at least {{ office.threshold_6b }}</strong> votes
+                    </p>
+                </div>
+                {% endif %}
+                {% for cand in office.candidates %}
+                <div class="display-candidate">
+                    <span class="name">
+                        Br. {{ cand.name }}
+                        {% if cand.elected and not election.voting_open and election.show_results %}
+                        <span class="status-badge elected">ELECTED</span>
+                        {% endif %}
+                    </span>
+                    {% if election.show_results %}
+                    <span class="votes">{{ cand.total }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% if election.show_results %}
+                {% set possible = total_ballots * office.max_selections %}
+                {% set spoilt_slots = (office.spoilt_count or 0) * office.max_selections %}
+                {% set blank = possible - office.votes_cast - spoilt_slots %}
+                {% if possible > 0 and blank > 0 %}
+                <div class="display-candidate" style="opacity: 0.5;">
+                    <span class="name" style="font-style: italic;">Blank votes</span>
+                    <span class="votes">{{ blank }}</span>
+                </div>
+                {% endif %}
+                {% if (office.spoilt_count or 0) > 0 %}
+                <div class="display-candidate" style="opacity: 0.7; color: #C0392B;">
+                    <span class="name" style="font-style: italic;">Spoilt ballots</span>
+                    <span class="votes">{{ office.spoilt_count }}</span>
+                </div>
+                {% endif %}
+                {% if possible > 0 %}
+                <div class="display-candidate" style="border-top: 2px solid var(--gold); margin-top: 4px; padding-top: 8px;">
+                    <span class="name" style="font-weight: 700;">Total</span>
+                    <span class="votes">
+                        {% if office.votes_cast > possible %}
+                        <span style="color: var(--red); font-weight: 700;">{{ office.votes_cast }}</span>
+                        <span style="font-size: 0.7em; color: var(--grey-dark);"> / {{ possible }} max</span>
+                        <span style="color: var(--red); margin-left: 6px;">&#10007;</span>
+                        {% else %}
+                        {{ office.votes_cast + blank + spoilt_slots }}
+                        <span style="color: var(--green); margin-left: 6px;">&#10003;</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% elif election.show_results and results %}
+        {# Voting open with results shown — full display #}
+        <div class="display-offices">
+            {% for office in results %}
+            {% if office.candidates %}
+            <div class="display-office">
+                <h2>For {{ office.office_name }}</h2>
+                {% if office.valid_votes_cast > 0 and office.vacancies > 0 %}
+                <div class="office-thresholds">
+                    {% set pass6a = office.count_pass_6a >= office.vacancies %}
+                    {% set pass6b = office.count_pass_6b >= office.vacancies %}
+                    <p>
+                        <strong>Article 6a</strong>
+                        <span class="rule-check {{ 'pass' if pass6a else 'fail' }}">{{ '✓' if pass6a else '✗' }}</span>:
+                        {{ office.valid_votes_cast }} / {{ office.vacancies }} / 2 = {{ "%.2f"|format(office.threshold_6a) }}
+                        — need <strong>more than {{ "%.2f"|format(office.threshold_6a) }}</strong> votes
+                    </p>
+                    <p>
+                        <strong>Article 6b</strong>
+                        <span class="rule-check {{ 'pass' if pass6b else 'fail' }}">{{ '✓' if pass6b else '✗' }}</span>:
+                        {{ participants }} &times; 2/5 = {{ "%.1f"|format(participants * 2 / 5) }}
+                        &rarr; rounded up to <strong>{{ office.threshold_6b }}</strong>
+                        — need <strong>at least {{ office.threshold_6b }}</strong> votes
+                    </p>
+                </div>
+                {% endif %}
+                {% for cand in office.candidates %}
+                <div class="display-candidate">
+                    <span class="name">Br. {{ cand.name }}</span>
+                    <span class="votes">{{ cand.total }}</span>
+                </div>
+                {% endfor %}
+                {% set possible = total_ballots * office.max_selections %}
+                {% set spoilt_slots = (office.spoilt_count or 0) * office.max_selections %}
+                {% set blank = possible - office.votes_cast - spoilt_slots %}
+                {% if possible > 0 and blank > 0 %}
+                <div class="display-candidate" style="opacity: 0.5;">
+                    <span class="name" style="font-style: italic;">Blank votes</span>
+                    <span class="votes">{{ blank }}</span>
+                </div>
+                {% endif %}
+                {% if (office.spoilt_count or 0) > 0 %}
+                <div class="display-candidate" style="opacity: 0.7; color: #C0392B;">
+                    <span class="name" style="font-style: italic;">Spoilt ballots</span>
+                    <span class="votes">{{ office.spoilt_count }}</span>
+                </div>
+                {% endif %}
+                {% if possible > 0 %}
+                <div class="display-candidate" style="border-top: 2px solid var(--gold); margin-top: 4px; padding-top: 8px;">
+                    <span class="name" style="font-weight: 700;">Total</span>
+                    <span class="votes">
+                        {% if office.votes_cast > possible %}
+                        <span style="color: var(--red); font-weight: 700;">{{ office.votes_cast }}</span>
+                        <span style="font-size: 0.7em; color: var(--grey-dark);"> / {{ possible }} max</span>
+                        <span style="color: var(--red); margin-left: 6px;">&#10007;</span>
+                        {% else %}
+                        {{ office.votes_cast + blank + spoilt_slots }}
+                        <span style="color: var(--green); margin-left: 6px;">&#10003;</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    {# Stats bar wrapper is always in the DOM so the JS can populate it
+       when voting closes (server-side `closed OR show_results` condition
+       transitions). Visibility and content are managed by the JS below. #}
+    {% set stats_visible = total_ballots > 0 and (not election.voting_open or election.show_results or all_votes_in) %}
+    {% set dPct = (used_codes / total_ballots * 100)|round|int if total_ballots > 0 else 0 %}
+    {% set pPct = (paper_ballot_count / total_ballots * 100)|round|int if total_ballots > 0 else 0 %}
+    {% set poPct = (postal_voter_count / total_ballots * 100)|round|int if total_ballots > 0 and postal_voter_count > 0 else 0 %}
+    <div id="stats-bar" style="border-top: 2px solid var(--grey); margin-top: 14px; padding: 14px 40px 0;{% if not stats_visible %}display:none;{% endif %}">
+        {% if stats_visible %}
+        <div style="display: flex; height: 32px; border-radius: 16px; overflow: hidden; margin-bottom: 12px;">
+            <div style="width: {{ dPct }}%; background: var(--navy);"></div>
+            <div style="width: {{ pPct }}%; background: var(--gold);"></div>
+            {% if poPct > 0 %}
+            <div style="width: {{ poPct }}%; background: var(--grey-dark);"></div>
+            {% endif %}
+        </div>
+        <div style="display: flex; justify-content: center; gap: 56px; font-size: 28px; font-weight: 700;">
+            <span><span style="display: inline-block; width: 22px; height: 22px; background: var(--navy); border-radius: 5px; vertical-align: middle; margin-right: 12px;"></span>{{ used_codes }} digital ({{ dPct }}%)</span>
+            <span><span style="display: inline-block; width: 22px; height: 22px; background: var(--gold); border-radius: 5px; vertical-align: middle; margin-right: 12px;"></span>{{ paper_ballot_count }} paper ({{ pPct }}%)</span>
+            {% if postal_voter_count > 0 %}
+            <span><span style="display: inline-block; width: 22px; height: 22px; background: var(--grey-dark); border-radius: 5px; vertical-align: middle; margin-right: 12px;"></span>{{ postal_voter_count }} postal ({{ poPct }}%)</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    function update() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/display-data', true);
+        xhr.onload = function() {
+            if (xhr.status !== 200) return;
+            var data = JSON.parse(xhr.responseText);
+            if (!data.active) return;
+
+            // Phase changed — reload to get the correct template
+            if (data.display_phase && data.display_phase !== 3) {
+                location.reload();
+                return;
+            }
+
+            document.getElementById('vote-count').textContent = data.total_ballots || 0;
+            document.getElementById('total-participants').textContent = data.participants || 0;
+
+            var anomaly = document.getElementById('ballot-anomaly');
+            if (anomaly) {
+                var tbA = data.total_ballots || 0;
+                var partsA = data.participants || 0;
+                if (partsA > 0 && tbA > partsA) {
+                    anomaly.innerHTML =
+                        '<span class="anomaly-title">⚠ Ballot count anomaly</span>' +
+                        tbA + ' ballots received but only ' + partsA +
+                        ' brother' + (partsA === 1 ? '' : 's') +
+                        ' marked as participating. Likely causes: the attendance register was miscounted, or a voter voted online and also handed in a paper ballot. Review before finalising.';
+                    anomaly.style.display = '';
+                } else {
+                    anomaly.style.display = 'none';
+                }
+            }
+
+            var plabel = document.getElementById('participants-label');
+            if (plabel) {
+                var po = data.postal_voter_count || 0;
+                if (po > 0) {
+                    plabel.textContent = 'brothers participating (' + ((data.participants || 0) - po) + ' in-person + ' + po + ' postal)';
+                } else {
+                    plabel.textContent = 'brothers participating';
+                }
+            }
+
+            var parts = data.participants || 0;
+            var tb = data.total_ballots || 0;
+            var pct = parts > 0 ? Math.round(tb / parts * 100) : 0;
+            document.getElementById('progress-fill').style.width = pct + '%';
+            document.getElementById('progress-label').textContent = tb + ' of ' + parts + ' (' + pct + '%)';
+
+            var remaining = parts - tb;
+            var wc = document.getElementById('waiting-count');
+            var wl = document.getElementById('waiting-label');
+            var wcont = document.getElementById('waiting-container');
+            if (wc && wl && wcont) {
+                if (remaining > 0) {
+                    wc.textContent = remaining;
+                    wc.style.color = 'var(--red)';
+                    wl.textContent = 'still to vote';
+                } else {
+                    wc.textContent = '✓';
+                    wc.style.color = 'var(--green)';
+                    wl.textContent = 'all votes in';
+                }
+                wcont.style.display = '';
+            }
+
+            var rb = document.getElementById('round-badge');
+            if (data.current_round > 1) {
+                rb.textContent = 'Round ' + data.current_round;
+                rb.style.display = '';
+            } else {
+                rb.style.display = 'none';
+            }
+
+            var status = document.getElementById('voting-status');
+            status.textContent = data.voting_open ? 'OPEN' : 'CLOSED';
+            status.className = 'display-status ' + (data.voting_open ? 'open' : 'closed');
+
+            var dnm = document.getElementById('do-not-mark');
+            if (dnm) {
+                if (Array.isArray(data.paper_guide) && data.paper_guide.length > 0) {
+                    var body = '<div class="do-not-mark-title">On the paper ballot, select only from:</div>';
+                    body += '<div class="do-not-mark-body">';
+                    data.paper_guide.forEach(function(entry) {
+                        body += '<div class="do-not-mark-office">';
+                        if (entry.names && entry.names.length > 0) {
+                            body += '<strong>' + esc(entry.office_name) + ':</strong> ';
+                            body += entry.names.map(function(n) { return 'Br. ' + esc(n); }).join('; ');
+                        } else {
+                            body += '<strong>No ' + esc(entry.office_name) + 's</strong>';
+                        }
+                        body += '</div>';
+                    });
+                    body += '</div>';
+                    dnm.innerHTML = body;
+                    dnm.style.display = '';
+                } else {
+                    dnm.style.display = 'none';
+                }
+            }
+
+            var container = document.getElementById('results-container');
+            var instrPanel = document.getElementById('instructions-panel');
+            var allVotesPanel = document.getElementById('all-votes-in-panel');
+            var summaryPanel = document.getElementById('summary-panel');
+            var showCounts = data.show_results;
+            var closed = !data.voting_open;
+            var showingResults = data.results && (showCounts || closed);
+            // "All votes in" replaces the voting instructions once the room
+                // has finished — the how-to-vote panel becomes noise when there
+                // are no more voters left.
+            var allVotesIn = data.voting_open && !showCounts && parts > 0 && (parts - tb) <= 0;
+            var showingInstructions = data.voting_open && !showCounts && !allVotesIn;
+
+            // Show instructions when voting is open, no results displayed,
+            // and there are still voters to come.
+            if (instrPanel) {
+                instrPanel.style.display = showingInstructions ? '' : 'none';
+            }
+            if (allVotesPanel) {
+                allVotesPanel.style.display = allVotesIn ? '' : 'none';
+            }
+            // Hide bottom stats bar when showing instructions (top summary stays visible)
+            var sb = document.getElementById('stats-bar');
+            if (sb) {
+                sb.style.display = showingInstructions ? 'none' : '';
+            }
+
+            if (showingResults) {
+                var html = '';
+                if (closed && showCounts) {
+                    var runoffOffices = data.results.filter(function(o) { return o.runoff_needed; });
+                    if (runoffOffices.length > 0) {
+                        var runoffSummary = runoffOffices.map(function(o) {
+                            var noun = o.remaining_vacancies === 1 ? 'vacancy' : 'vacancies';
+                            return esc(o.office_name) + ': ' + o.remaining_vacancies + ' ' + noun + ' remain';
+                        }).join('; ');
+                        html += '<div class="runoff-banner"><strong>Round ' + (data.current_round + 1) +
+                                ' required</strong> - ' + runoffSummary + '</div>';
+                    }
+                }
+                html += '<div class="display-offices">';
+                data.results.forEach(function(office) {
+                    if (!office.candidates || office.candidates.length === 0) return;
+                    html += '<div class="display-office"><h2>For ' + esc(office.office_name) + '</h2>';
+                    var ovvc = office.valid_votes_cast || 0;
+                    if (showCounts && ovvc > 0 && office.vacancies > 0) {
+                        var t6a = office.threshold_6a || 0;
+                        var t6b = office.threshold_6b || 0;
+                        var pass6a = (office.count_pass_6a || 0) >= office.vacancies;
+                        var pass6b = (office.count_pass_6b || 0) >= office.vacancies;
+                        var tick6a = '<span class="rule-check ' + (pass6a ? 'pass' : 'fail') + '">' +
+                                     (pass6a ? '\u2713' : '\u2717') + '</span>';
+                        var tick6b = '<span class="rule-check ' + (pass6b ? 'pass' : 'fail') + '">' +
+                                     (pass6b ? '\u2713' : '\u2717') + '</span>';
+                        html += '<div class="office-thresholds">';
+                        html += '<p><strong>Article 6a</strong> ' + tick6a + ': ' +
+                                ovvc + ' / ' + office.vacancies + ' / 2 = ' + t6a.toFixed(2) +
+                                ' — need <strong>more than ' + t6a.toFixed(2) + '</strong> votes</p>';
+                        html += '<p><strong>Article 6b</strong> ' + tick6b + ': ' +
+                                parts + ' &times; 2/5 = ' + (parts * 2 / 5).toFixed(1) +
+                                ' &rarr; rounded up to <strong>' + t6b + '</strong>' +
+                                ' — need <strong>at least ' + t6b + '</strong> votes</p>';
+                        html += '</div>';
+                    }
+                    office.candidates.forEach(function(cand) {
+                        html += '<div class="display-candidate">';
+                        html += '<span class="name">Br. ' + esc(cand.name);
+                        if (cand.elected && !data.voting_open && showCounts) {
+                            html += ' <span class="status-badge elected">ELECTED</span>';
+                        }
+                        html += '</span>';
+                        if (showCounts) {
+                            html += '<span class="votes">' + cand.total + '</span>';
+                        }
+                        html += '</div>';
+                    });
+                    if (showCounts) {
+                        var possible = tb * (office.max_selections || 1);
+                        var vc = office.votes_cast || 0;
+                        var spoilt = office.spoilt_count || 0;
+                        var spoiltSlots = spoilt * (office.max_selections || 1);
+                        var blank = possible - vc - spoiltSlots;
+                        if (possible > 0 && blank > 0) {
+                            html += '<div class="display-candidate" style="opacity:0.5">';
+                            html += '<span class="name" style="font-style:italic">Blank votes</span>';
+                            html += '<span class="votes">' + blank + '</span>';
+                            html += '</div>';
+                        }
+                        if (spoilt > 0) {
+                            html += '<div class="display-candidate" style="opacity:0.7;color:#C0392B">';
+                            html += '<span class="name" style="font-style:italic">Spoilt ballots</span>';
+                            html += '<span class="votes">' + spoilt + '</span>';
+                            html += '</div>';
+                        }
+                        if (possible > 0) {
+                            html += '<div class="display-candidate" style="border-top:2px solid #D4A843;margin-top:4px;padding-top:8px">';
+                            html += '<span class="name" style="font-weight:700">Total</span>';
+                            if (vc > possible) {
+                                html += '<span class="votes">' +
+                                    '<span style="color:#C0392B;font-weight:700">' + vc + '</span>' +
+                                    '<span style="font-size:0.7em;color:#666"> / ' + possible + ' max</span>' +
+                                    ' <span style="color:#C0392B;margin-left:6px">&#10007;</span>' +
+                                    '</span>';
+                            } else {
+                                var total = vc + Math.max(blank, 0) + spoiltSlots;
+                                html += '<span class="votes">' + total +
+                                    ' <span style="color:#27AE60;margin-left:6px">&#10003;</span>' +
+                                    '</span>';
+                            }
+                            html += '</div>';
+                        }
+                    }
+                    html += '</div>';
+                });
+                html += '</div>';
+                container.innerHTML = html;
+
+                // Update stats bar. Server-side condition is "tb > 0 AND
+                // (closed OR show_results)" — match it here so the bar
+                // appears as soon as voting closes, even if the chairman
+                // hasn't toggled "Show Results on Projector".
+                var sb = document.getElementById('stats-bar');
+                if (sb) {
+                    if (tb > 0 && (showCounts || closed || allVotesIn)) {
+                        var dPct = Math.round(data.used_codes / tb * 100);
+                        var pPct = Math.round((data.paper_ballot_count || 0) / tb * 100);
+                        var poPct = data.postal_voter_count > 0 ? Math.round(data.postal_voter_count / tb * 100) : 0;
+                        var bar = '<div style="display:flex;height:32px;border-radius:16px;overflow:hidden;margin-bottom:12px">';
+                        bar += '<div style="width:' + dPct + '%;background:#1A3353"></div>';
+                        bar += '<div style="width:' + pPct + '%;background:#D4A843"></div>';
+                        if (poPct > 0) bar += '<div style="width:' + poPct + '%;background:#666"></div>';
+                        bar += '</div>';
+                        var dot = function(c) { return '<span style="display:inline-block;width:22px;height:22px;background:'+c+';border-radius:5px;vertical-align:middle;margin-right:12px"></span>'; };
+                        var legend = '<div style="display:flex;justify-content:center;gap:56px;font-size:28px;font-weight:700">';
+                        legend += '<span>' + dot('#1A3353') + data.used_codes + ' digital (' + dPct + '%)</span>';
+                        legend += '<span>' + dot('#D4A843') + (data.paper_ballot_count||0) + ' paper (' + pPct + '%)</span>';
+                        if (data.postal_voter_count > 0) legend += '<span>' + dot('#666') + data.postal_voter_count + ' postal (' + poPct + '%)</span>';
+                        legend += '</div>';
+                        sb.innerHTML = bar + legend;
+                        sb.style.display = '';
+                    } else {
+                        sb.innerHTML = '';
+                        sb.style.display = 'none';
+                    }
+                }
+            } else {
+                container.innerHTML = '';
+            }
+        };
+        xhr.send();
+    }
+
+    function esc(t) {
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(t));
+        return d.innerHTML;
+    }
+
+    function officeContentHeight(office) {
+        // Sum block-children heights (incl. margins). Avoids scrollHeight,
+        // which returns at least the parent's clientHeight when the grid has
+        // height:100% and the content is shorter than the available space.
+        var total = 0;
+        var children = office.children;
+        for (var i = 0; i < children.length; i++) {
+            var c = children[i];
+            var cs = window.getComputedStyle(c);
+            total += c.offsetHeight +
+                     parseFloat(cs.marginTop || 0) +
+                     parseFloat(cs.marginBottom || 0);
+        }
+        return total;
+    }
+
+    function autoSizeOffices() {
+        var root = document.documentElement;
+        if (window.innerWidth <= 720) {
+            root.style.setProperty('--proj-scale', '1');
+            return;
+        }
+        var resultsContainer = document.getElementById('results-container');
+        if (!resultsContainer) {
+            root.style.setProperty('--proj-scale', '1');
+            return;
+        }
+        var officeNodes = resultsContainer.querySelectorAll('.display-office');
+        if (!officeNodes.length) {
+            root.style.setProperty('--proj-scale', '1');
+            return;
+        }
+        // Reset to 1 so we measure natural (unscaled) content height
+        root.style.setProperty('--proj-scale', '1');
+        requestAnimationFrame(function() {
+            var available = resultsContainer.clientHeight;
+            var natural = 0;
+            for (var i = 0; i < officeNodes.length; i++) {
+                var h = officeContentHeight(officeNodes[i]);
+                if (h > natural) natural = h;
+            }
+            if (natural < 1 || available < 1) return;
+            var scale = (available * 0.95) / natural;
+            scale = Math.max(1, Math.min(2.2, scale));
+            root.style.setProperty('--proj-scale', scale.toFixed(3));
+        });
+    }
+
+    // Re-run after every results re-render (debounced)
+    (function() {
+        var resultsContainer = document.getElementById('results-container');
+        if (!resultsContainer || !window.MutationObserver) return;
+        var debounce;
+        var observer = new MutationObserver(function() {
+            clearTimeout(debounce);
+            debounce = setTimeout(autoSizeOffices, 50);
+        });
+        observer.observe(resultsContainer, { childList: true, subtree: true });
+    })();
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', autoSizeOffices);
+    } else {
+        autoSizeOffices();
+    }
+    window.addEventListener('resize', autoSizeOffices);
+
+    setInterval(update, 1000);
+})();
+</script>
+{% endblock %}

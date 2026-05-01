@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Vote Recorded — Office Bearer Election{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>Office Bearer Election</h1>
+</div>
+
+<div class="container">
+    <div class="confirmation" style="padding: 0;">
+        <div class="checkmark" aria-hidden="true" style="font-size: 48px; margin: 0;">&#10003;</div>
+        <h2 style="margin: 4px 0;">Vote Registered</h2>
+
+        {% if used_code %}
+        <div style="margin: 12px auto 0; padding: 8px 16px; background: #f4f4f4; border-radius: 8px; display: inline-block;">
+            <span style="font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Code</span>
+            <span style="font-size: 22px; font-weight: 700; letter-spacing: 4px; color: #222; margin-left: 8px;">{{ used_code }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <hr style="border: none; border-top: 1px solid #ddd; margin: 16px 0;">
+
+    <div style="text-align: center;">
+        <h3 style="font-size: 18px; margin: 0 0 12px;">Next voter</h3>
+        <a href="{{ url_for('voter_enter_code') }}" class="btn btn-primary">
+            Enter code or scan QR
+        </a>
+        <a href="{{ url_for('display_phone') }}" class="btn btn-outline" style="margin-top: 12px;">
+            View Live Results
+        </a>
+    </div>
+
+    {% if show_assist %}
+    <hr style="border: none; border-top: 1px solid #ddd; margin: 16px 0;">
+    <div style="text-align: center;">
+        <form method="POST" action="{{ url_for('count_join') }}" style="display: inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline btn-small">Count Votes</button>
+        </form>
+        <p style="font-size: 12px; color: #888; margin-top: 6px;">
+            Count paper ballots from your phone.
+        </p>
+    </div>
+    {% endif %}
+</div>
+<script>
+(function() {
+    function check() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/display-data', true);
+        xhr.onload = function() {
+            if (xhr.status !== 200) return;
+            try {
+                var data = JSON.parse(xhr.responseText);
+                if (data.active && data.display_phase === 4) {
+                    window.location.href = '/displayphone';
+                }
+            } catch (e) {}
+        };
+        xhr.send();
+    }
+    setInterval(check, 5000);
+})();
+</script>
+{% endblock %}

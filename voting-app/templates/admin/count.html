@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Paper Count - {{ election.name }} - Round {{ round_no }}{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h1>Paper Count - Round {{ round_no }}</h1>
+    <a href="{{ url_for('admin_election_open', election_id=election.id) }}">Back to Manage</a>
+</div>
+<div class="container-fullwide">
+    <div class="count-dashboard"
+         data-state-url="{{ url_for('admin_count_state', election_id=election.id, round_no=round_no) }}"
+         data-disregard-url="{{ url_for('admin_count_disregard', election_id=election.id, round_no=round_no) }}"
+         data-persist-url="{{ url_for('admin_count_persist', election_id=election.id, round_no=round_no) }}"
+         data-session-status="{{ sess.status }}">
+
+        <div class="count-dashboard-header">
+            <span id="count-summary">N helpers joined - M done</span>
+        </div>
+
+        <div id="count-banner" class="count-banner count-banner-grey">No data yet.</div>
+
+        <div id="count-table-host"><!-- populated by JS --></div>
+
+        <div style="margin-top: 16px;">
+            <button type="button" id="count-persist-btn" class="btn btn-primary" disabled>Persist Paper Ballot Count</button>
+        </div>
+
+        {% if sess.status == "persisted" %}
+        <div class="count-end-banner">Session persisted at {{ sess.persisted_at }}.</div>
+        {% endif %}
+
+        <dialog id="count-persist-modal" style="border: 1px solid #ccc; padding: 16px; max-width: 600px;">
+            <h3 style="margin-top: 0;">Persist Paper Ballot Count</h3>
+            <p>Confirm the final totals. Mismatched or low-confidence rows are highlighted - edit if needed.</p>
+            <table id="count-persist-table" class="count-persist-table"></table>
+            <div style="margin-top: 12px; text-align: right;">
+                <button type="button" id="count-persist-modal-cancel" class="btn btn-outline">Cancel</button>
+                <button type="button" id="count-persist-modal-confirm" class="btn btn-primary">Persist</button>
+            </div>
+        </dialog>
+    </div>
+</div>
+<script>
+(function() {
+    const root = document.querySelector(".count-dashboard");
+    if (!root) return;
+    const stateUrl = root.dataset.stateUrl;
+    const persistBtn = document.getElementById("count-persist-btn");
+    const tableHost = document.getElementById("count-table-host");
+    const banner = document.getElementById("count-banner");
+    const summary = document.getElementById("count-summary");
+    let lastState = null;
+    let pollPaused = false;
+
+    async function loadState() {
+        if (pollPaused) return;
+        try {
+            const r = await fetch(stateUrl);
+            if (!r.ok) return;
+            const data = await r.json();
+            lastState = data;
+            render(data);
+        } catch (e) {}
+    }
+
+    function render(data) {
+        summary.textContent = `${data.helper_count} active helpers - ${data.done_count} done`;
+        banner.className = "count-banner count-banner-" + data.banner;
+        banner.textContent = bannerText(data);
+
+        const byOffice = {};
+        for (const c of data.candidates) {
+            if (!byOffice[c.office_id]) byOffice[c.office_id] = {name: c.office_name, candidates: []};
+            byOffice[c.office_id].candidates.push(c);
+        }
+        let html = "";
+        const helperHeaders = data.helpers.map(h => {
+            const cls = ["count-helper-col"];
+            if (h.disregarded) cls.push("count-helper-disregarded");
+            if (h.out_of_sync) cls.push("count-helper-flagged");
+            const flag = h.out_of_sync && !h.disregarded ? '<span class="count-flag-chip" title="out of sync">OOS</span>' : "";
+            const btn = h.disregarded
+                ? `<button class="count-helper-restore-btn" data-helper-id="${h.id}" title="Restore">&#8634;</button>`
+                : `<button class="count-helper-disregard-btn" data-helper-id="${h.id}" title="Disregard">&times;</button>`;
+            const stale = isStale(h.last_seen_at) ? '<span class="count-stale-dot" title="stale"></span>' : "";
+            return `<th class="${cls.join(' ')}">${h.short_id}${stale}${flag}<br>${btn}</th>`;
+        }).join("");
+        html += `<table class="count-table"><thead><tr><th>Candidate</th>${helperHeaders}<th class="count-consensus-col">Consensus</th></tr></thead><tbody>`;
+        for (const offId of Object.keys(byOffice)) {
+            const off = byOffice[offId];
+            html += `<tr class="count-office-row"><th colspan="${data.helpers.length + 2}">${escapeHtml(off.name)}</th></tr>`;
+            for (const c of off.candidates) {
+                const cells = data.helpers.map(h => {
+                    const v = c.per_helper[h.short_id];
+                    const cellCls = "count-cell" + (h.disregarded ? " count-cell-disregarded" : "");
+                    return `<td class="${cellCls}">${v == null ? "" : v}</td>`;
+                }).join("");
+                let consensusCell = "";
+                if (c.consensus.status === "ok") consensusCell = `<td class="count-cell-ok">&#10003; ${c.consensus.value}</td>`;
+                else if (c.consensus.status === "mismatch") consensusCell = `<td class="count-cell-mismatch">&#10007; Mismatch</td>`;
+                else consensusCell = `<td class="count-cell-pending">-</td>`;
+                html += `<tr><td>${escapeHtml(c.name)}</td>${cells}${consensusCell}</tr>`;
+            }
+        }
+        html += "</tbody></table>";
+        tableHost.innerHTML = html;
+
+        persistBtn.disabled = (data.helper_count === 0 && data.candidates.every(c => c.consensus.status === "no_data"));
+
+        if (data.session_status !== "active") {
+            persistBtn.disabled = true;
+        }
+    }
+
+    function isStale(iso) {
+        if (!iso) return false;
+        const then = new Date(iso + "Z");
+        return (Date.now() - then.getTime()) > 30000;
+    }
+    function bannerText(d) {
+        if (d.banner === "green") return "All candidates agree (" + d.done_count + " of " + d.helper_count + " helpers, all marked done)";
+        if (d.banner === "red") {
+            const mismatched = d.candidates.filter(c => c.consensus.status === "mismatch").map(c => c.name);
+            return "Mismatch on: " + mismatched.join(", ");
+        }
+        if (d.banner === "amber") return "Counting in progress.";
+        return "No active helpers.";
+    }
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+    }
+
+    loadState();
+    setInterval(loadState, 1000);
+
+    tableHost.addEventListener("click", async function(ev) {
+        const dis = ev.target.closest(".count-helper-disregard-btn");
+        const res = ev.target.closest(".count-helper-restore-btn");
+        const btn = dis || res;
+        if (!btn) return;
+        const helperId = parseInt(btn.dataset.helperId, 10);
+        await fetch(root.dataset.disregardUrl, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({helper_id: helperId, disregard: dis ? true : false}),
+        });
+        loadState();
+    });
+
+    persistBtn.addEventListener("click", function() {
+        if (!lastState) return;
+        const modal = document.getElementById("count-persist-modal");
+        const tbl = document.getElementById("count-persist-table");
+        let rows = "";
+        for (const c of lastState.candidates) {
+            let suggested = 0;
+            let cls = "count-persist-mismatch";
+            if (c.consensus.status === "ok") { suggested = c.consensus.value; cls = ""; }
+            else if (c.consensus.status === "insufficient" && c.consensus.values.length) {
+                suggested = Math.max(...c.consensus.values);
+            } else if (c.consensus.status === "mismatch") {
+                const counts = {};
+                for (const v of c.consensus.values) counts[v] = (counts[v]||0) + 1;
+                const mode = Object.entries(counts).sort((a,b) => b[1]-a[1])[0];
+                suggested = parseInt(mode[0], 10);
+            }
+            rows += `<tr class="${cls}"><td>${escapeHtml(c.name)}</td><td><input type="number" min="0" data-cand="${c.id}" value="${suggested}" style="width: 80px;"></td><td>${c.consensus.status}</td></tr>`;
+        }
+        tbl.innerHTML = `<thead><tr><th>Candidate</th><th>Final</th><th>Status</th></tr></thead><tbody>${rows}</tbody>`;
+        pollPaused = true;
+        modal.showModal();
+    });
+
+    document.getElementById("count-persist-modal-cancel").addEventListener("click", function() {
+        document.getElementById("count-persist-modal").close();
+        pollPaused = false;
+    });
+
+    document.getElementById("count-persist-modal-confirm").addEventListener("click", async function() {
+        const inputs = document.querySelectorAll("#count-persist-table input[data-cand]");
+        const totals = {};
+        for (const i of inputs) totals[i.dataset.cand] = parseInt(i.value, 10) || 0;
+        const r = await fetch(root.dataset.persistUrl, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({totals: totals}),
+        });
+        if (r.ok) {
+            document.getElementById("count-persist-modal").close();
+            window.location.reload();
+        } else {
+            alert("Persist failed: " + r.status);
+            pollPaused = false;
+        }
+    });
+
+    window.__paperCount = {
+        loadState, pausePolling: () => pollPaused = true, resumePolling: () => pollPaused = false,
+        getState: () => lastState
+    };
+})();
+</script>
+{% endblock %}

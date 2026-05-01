@@ -1,0 +1,9 @@
+.claude/worktrees/
+.claude/settings.local.json
+.superpowers/
+/temp
+/node_modules/
+/screenshots/*.pdf
+/voting-app/data/frca_election.db.*_backup
+/voting-app/data/frca_election.db.before_*
+/voting-app/ballot_test_output/

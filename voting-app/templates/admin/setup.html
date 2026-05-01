@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Settings' if setup_complete else 'Setup' }} — Office Bearer Election{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>{{ 'Settings' if setup_complete else 'Congregation Setup' }}</h1>
+    <div class="subtitle">{{ 'Update app configuration' if setup_complete else 'Configure the app for your congregation' }}</div>
+</div>
+
+<div class="container">
+    <form method="POST" style="margin-top: 16px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-group">
+            <label for="congregation_name">Congregation Name</label>
+            <input type="text" id="congregation_name" name="congregation_name"
+                   value="{{ congregation_name }}" required
+                   placeholder="e.g. Free Reformed Church of Armadale"
+                   autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="congregation_short">Short Name</label>
+            <input type="text" id="congregation_short" name="congregation_short"
+                   value="{{ congregation_short }}"
+                   placeholder="e.g. FRCA Armadale"
+                   autocomplete="off">
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                Used in PDF headers and page titles.
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label for="wifi_ssid">WiFi Network Name (SSID)</label>
+            <input type="text" id="wifi_ssid" name="wifi_ssid"
+                   value="{{ wifi_ssid }}"
+                   placeholder="e.g. ChurchVote"
+                   autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="wifi_password">WiFi Password (optional)</label>
+            <input type="text" id="wifi_password" name="wifi_password"
+                   value="{{ wifi_password }}"
+                   placeholder="Leave blank for an open network"
+                   autocomplete="off">
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                Leave blank for an open network (recommended). The church WiFi has no internet,
+                and voting is protected by one-time codes — a password adds friction without
+                meaningful security. If you prefer one, it will be printed on every code slip.
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label for="voting_base_url">Voting Base URL</label>
+            <input type="text" id="voting_base_url" name="voting_base_url"
+                   value="{{ voting_base_url }}"
+                   placeholder="http://church.vote"
+                   autocomplete="off">
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                The URL encoded in QR codes on the code slips. Must match the laptop's
+                reserved IP on the church router. See SETUP.md for router configuration.
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label for="new_password">{{ 'Change Admin Password' if setup_complete else 'New Admin Password' }}</label>
+            <input type="password" id="new_password" name="new_password"
+                   {% if not setup_complete %}required{% endif %}
+                   placeholder="{{ 'Leave blank to keep current password' if setup_complete else 'At least 6 characters' }}"
+                   autocomplete="new-password">
+            {% if setup_complete %}
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                Leave both password fields blank to keep the current admin password.
+            </p>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="confirm_password">Confirm Password</label>
+            <input type="password" id="confirm_password" name="confirm_password"
+                   {% if not setup_complete %}required{% endif %}
+                   placeholder="{{ 'Repeat the new password' if setup_complete else 'Repeat the password' }}"
+                   autocomplete="new-password">
+        </div>
+
+        <button type="submit" class="btn btn-primary">{{ 'Save Changes' if setup_complete else 'Save and Continue' }}</button>
+    </form>
+</div>
+{% endblock %}

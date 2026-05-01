@@ -1,0 +1,47 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}Welcome &amp; Rules - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}Round {{ sidebar_state.election.current_round }} - Welcome &amp; Rules{% endblock %}
+{% block step_heading %}Walk the projector through Welcome and Election Rules{% endblock %}
+{% block step_content %}
+
+<p style="font-size: 14px; color: #555; margin-bottom: 14px;">
+    Walk the projector through <strong>Welcome</strong> and <strong>Election Rules</strong>
+    with the meeting. When ready, advance to <em>Voting</em> below to open the round.
+</p>
+
+<div style="display: flex; align-items: center; gap: 0; margin-bottom: 12px;">
+    {% set proj_phases = [(1, "Welcome"), (2, "Election Rules")] %}
+    {% for num, label in proj_phases %}
+    <div style="flex: 1; text-align: center; padding: 8px 4px; font-size: 13px; font-weight: 600;
+                {{ 'background: var(--navy); color: var(--white);' if phase == num else 'background: var(--grey-light); color: #999;' }}
+                {{ 'border-radius: 6px 0 0 6px;' if loop.first else '' }}
+                {{ 'border-radius: 0 6px 6px 0;' if loop.last else '' }}">
+        {{ num }}. {{ label }}{% if phase == num %} &bull;{% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 4px;">
+    {% if phase == 2 %}
+    <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=sidebar_state.election.id) }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="direction" value="prev">
+        <button type="submit" class="btn btn-outline btn-small">&larr; Back to Welcome</button>
+    </form>
+    {% endif %}
+    {% if phase < 2 %}
+    <form method="POST" action="{{ url_for('admin_set_display_phase', election_id=sidebar_state.election.id) }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="direction" value="next">
+        <button type="submit" class="btn btn-gold">Next: Election Rules &rarr;</button>
+    </form>
+    {% endif %}
+    <a href="{{ url_for('display') }}" target="_blank" class="btn btn-outline btn-small" style="margin-left: auto;">Open Display</a>
+</div>
+
+<div style="margin-top: 18px;">
+    <a href="{{ url_for('admin_step_voting', election_id=sidebar_state.election.id) }}" class="btn btn-primary">
+        Next: Voting &rarr;
+    </a>
+</div>
+{% endblock %}

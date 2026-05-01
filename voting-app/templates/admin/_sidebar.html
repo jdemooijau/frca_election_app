@@ -1,0 +1,35 @@
+{# Renders the wizard sidebar from `sidebar_state`. Included by _step_base.html. #}
+<aside class="wizard-sidebar">
+    <div class="wizard-sidebar-head">
+        <div class="wizard-sidebar-ename">{{ sidebar_state.election.name }}</div>
+        <div class="wizard-sidebar-meta">
+            {% if sidebar_state.election.date %}{{ sidebar_state.election.date }} &middot; {% endif %}
+            Round {{ sidebar_state.election.current_round }} of {{ sidebar_state.election.max_rounds }}
+            {% if sidebar_state.election.voting_open %}
+                &middot; <strong style="color: var(--green);">OPEN</strong>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('admin_dashboard') }}" class="wizard-sidebar-back">&larr; All elections</a>
+    </div>
+
+    {% for group in sidebar_state.groups %}
+    <div class="wizard-sidebar-group-label">{{ group.label }}</div>
+    {% if group.collapsed %}
+    <div class="wizard-sidebar-collapsed">{{ group.summary }}</div>
+    {% else %}
+    {% for item in group["entries"] %}
+    {% if item.state == 'locked' %}
+    <span class="wizard-sidebar-item locked" aria-disabled="true" title="Complete prior steps first">
+        <span class="ico" aria-hidden="true">&#9679;</span><span>{{ item.label }}</span>
+    </span>
+    {% else %}
+    <a href="{{ item.url }}" class="wizard-sidebar-item {{ item.state }}"
+       {% if item.state == 'current' %}aria-current="step"{% endif %}>
+        <span class="ico" aria-hidden="true">{% if item.state == 'done' %}&#10003;{% else %}&#9679;{% endif %}</span>
+        <span>{{ item.label }}</span>
+    </a>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% endfor %}
+</aside>

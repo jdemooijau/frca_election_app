@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Voter Audit Log — {{ election.name }}{% endblock %}
+
+{% block head %}
+<style>
+    .audit-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .audit-table th, .audit-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid #eee;
+        text-align: left;
+        vertical-align: top;
+    }
+    .audit-table th {
+        background: var(--grey-light);
+        font-weight: 700;
+    }
+    .audit-table tr:hover { background: #fafafa; }
+    .audit-table .ts { white-space: nowrap; color: #666; font-family: monospace; }
+    .audit-table .code { font-family: monospace; font-weight: 700; }
+    .audit-table .result { white-space: nowrap; }
+    .result-pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .result-pill.ok { background: #E8F8EE; color: #13532B; }
+    .result-pill.bad { background: #FFEAE8; color: #6B1A12; }
+    .result-pill.warn { background: #FFF4E5; color: #8A4A00; }
+    .audit-table .ua { font-size: 11px; color: #888; }
+    .audit-table .detail { font-size: 12px; color: #555; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Voter Audit Log: {{ election.name }}</h1>
+    <a href="{{ url_for('admin_election_open', election_id=election.id) }}">Back to Manage</a>
+</div>
+
+<div class="container-wide">
+    <p style="font-size: 14px; color: #555; margin: 12px 0 16px;">
+        Every voter-route interaction (QR scan, code submission, vote submission)
+        is recorded here with its outcome, so anomalies like a code being used
+        twice can be traced.
+    </p>
+
+    {% if repeat_offenders %}
+    <div style="padding: 14px 18px; border: 2px solid #C0392B; border-radius: 8px; background: #FFEAE8; color: #6B1A12; margin-bottom: 16px;">
+        <strong>&#9888; Codes that were accepted/submitted more than once:</strong>
+        <ul style="margin: 8px 0 0 18px;">
+            {% for r in repeat_offenders %}
+            <li>
+                <code>{{ r.code }}</code> — {{ r.n }} times.
+                <a href="{{ url_for('admin_voter_log', election_id=election.id, code=r.code) }}">View entries</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <form method="GET" action="{{ url_for('admin_voter_log', election_id=election.id) }}"
+          style="display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 14px;">
+        <div class="form-group" style="margin: 0;">
+            <label for="filter_result">Result</label>
+            <select id="filter_result" name="result" style="min-width: 200px;">
+                <option value="">(all)</option>
+                {% for r in distinct_results %}
+                <option value="{{ r }}" {% if r == result_filter %}selected{% endif %}>{{ r }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin: 0;">
+            <label for="filter_code">Code</label>
+            <input type="text" id="filter_code" name="code" value="{{ code_filter }}" maxlength="6" style="text-transform: uppercase; min-width: 120px;">
+        </div>
+        <div class="form-group" style="margin: 0;">
+            <label for="filter_limit">Rows</label>
+            <input type="number" id="filter_limit" name="limit" value="{{ limit }}" min="1" max="5000" style="min-width: 100px;">
+        </div>
+        <div class="form-group" style="margin: 0;">
+            <button type="submit" class="btn btn-primary btn-small">Filter</button>
+            <a href="{{ url_for('admin_voter_log', election_id=election.id) }}" class="btn btn-outline btn-small">Reset</a>
+        </div>
+    </form>
+
+    <p style="font-size: 13px; color: #666; margin: 0 0 8px;">
+        Showing {{ rows|length }} row(s){% if result_filter or code_filter %} (filtered){% endif %}, newest first.
+    </p>
+
+    <div style="overflow-x: auto;">
+        <table class="audit-table">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Round</th>
+                    <th>Code</th>
+                    <th>Result</th>
+                    <th>Path</th>
+                    <th>IP</th>
+                    <th>Detail</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                {% set pill_class = 'ok' if row.result in ('vote_submitted', 'code_accepted') else ('warn' if row.result.startswith('rejected_invalid') or row.result.startswith('rejected_unknown') else 'bad') %}
+                <tr>
+                    <td class="ts">{{ row.ts }}</td>
+                    <td>{{ row.round_number or '' }}</td>
+                    <td class="code">{{ row.code or '' }}</td>
+                    <td class="result"><span class="result-pill {{ pill_class }}">{{ row.result }}</span></td>
+                    <td><code>{{ row.path or '' }}</code></td>
+                    <td>{{ row.ip or '' }}<br><span class="ua">{{ (row.user_agent or '')[:60] }}{% if (row.user_agent or '')|length > 60 %}…{% endif %}</span></td>
+                    <td class="detail">{{ row.detail or '' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" style="text-align: center; padding: 20px; color: #999;">No log entries{% if result_filter or code_filter %} match the filter{% endif %}.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

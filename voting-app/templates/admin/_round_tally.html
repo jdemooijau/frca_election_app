@@ -1,0 +1,108 @@
+{% for item in results %}
+{% set office_id = item.office.id %}
+{% set has_thresholds = office_id in thresholds %}
+{% set show_elected = has_thresholds %}
+<div style="margin-bottom: 14px;">
+    <strong style="color: var(--navy);">{{ item.office.name }}</strong>
+    <span style="font-size: 13px; color: #666;">
+        ({{ item.office.vacancies or item.office.max_selections }}
+        {% if (item.office.vacancies or item.office.max_selections) == 1 %}vacancy{% else %}vacancies{% endif %})
+    </span>
+    {% if has_thresholds %}
+    {% set t = thresholds[office_id] %}
+    <p style="font-size: 13px; color: #555; margin: 4px 0;">
+        Article 6a: need &gt; {{ "%.2f"|format(t.threshold_6a) }}
+        &nbsp;&middot;&nbsp; Article 6b: need &ge; {{ t.threshold_6b }}
+    </p>
+    {% endif %}
+    <table style="width: 100%; margin-top: 6px;">
+        <thead>
+            <tr>
+                <th style="text-align: left;">Candidate</th>
+                <th style="text-align: center;">Digital</th>
+                <th style="text-align: center;">Paper</th>
+                {% if postal_voter_count > 0 %}
+                <th style="text-align: center;">Postal</th>
+                {% endif %}
+                <th style="text-align: right;">Total</th>
+                {% if has_thresholds %}
+                <th style="text-align: center;">6a</th>
+                <th style="text-align: center;">6b</th>
+                {% endif %}
+                {% if show_elected %}
+                <th style="text-align: center;">Elected</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+        {% for cand in item.candidates %}
+        {% if cand.active %}
+        <tr>
+            <td>{{ cand.name }}</td>
+            <td style="text-align: center;">{{ cand.digital }}</td>
+            <td style="text-align: center;">{{ cand.paper }}</td>
+            {% if postal_voter_count > 0 %}
+            <td style="text-align: center;">{{ cand.postal }}</td>
+            {% endif %}
+            <td style="text-align: right; font-weight: 700;">{{ cand.total }}</td>
+            {% if has_thresholds %}
+            <td style="text-align: center;">
+                {% if cand.passes_6a %}<span style="color: var(--green);">✓</span>
+                {% else %}<span style="color: var(--red); opacity: 0.6;">✗</span>{% endif %}
+            </td>
+            <td style="text-align: center;">
+                {% if cand.passes_6b %}<span style="color: var(--green);">✓</span>
+                {% else %}<span style="color: var(--red); opacity: 0.6;">✗</span>{% endif %}
+            </td>
+            {% endif %}
+            {% if show_elected %}
+            <td style="text-align: center;">
+                {% if cand.meets_threshold %}
+                    {% if election.voting_open %}
+                    <span style="color: #B8860B; font-weight: 700; font-size: 12px; white-space: nowrap;">TO BE ELECTED</span>
+                    {% else %}
+                    <span style="color: var(--green); font-weight: 700;">ELECTED</span>
+                    {% endif %}
+                {% else %}
+                <span style="color: #999;">—</span>
+                {% endif %}
+            </td>
+            {% endif %}
+        </tr>
+        {% endif %}
+        {% endfor %}
+        {% set office_max = item.office.max_selections or 1 %}
+        {% set office_possible = total_ballots * office_max %}
+        {% set office_sum = item.candidates | selectattr('active') | sum(attribute='total') %}
+        {% if office_possible > 0 %}
+        <tr style="border-top: 2px solid var(--gold);">
+            <td style="font-weight: 700;">Total</td>
+            <td></td>
+            <td></td>
+            {% if postal_voter_count > 0 %}<td></td>{% endif %}
+            <td style="text-align: right; font-weight: 700;">
+                {% if office_sum > office_possible %}
+                <span style="color: var(--red);">{{ office_sum }}</span>
+                <span style="font-size: 0.85em; color: var(--grey-dark);"> / {{ office_possible }} max</span>
+                <span style="color: var(--red); margin-left: 4px;">&#10007;</span>
+                {% else %}
+                {{ office_sum }} <span style="color: var(--green);">&#10003;</span>
+                {% endif %}
+            </td>
+            {% if has_thresholds %}<td></td><td></td>{% endif %}
+            {% if show_elected %}<td></td>{% endif %}
+        </tr>
+        {% if office_sum > office_possible %}
+        <tr>
+            <td colspan="99"
+                style="font-size: 12px; color: var(--red); padding-top: 4px;">
+                &#9888; Vote total exceeds {{ total_ballots }} ballots × {{ office_max }} selections.
+                Recount paper ballots and re-enter under <em>Enter Paper Votes</em>.
+            </td>
+        </tr>
+        {% endif %}
+        {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endfor %}

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Postal Tally — {{ election.name }}{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Postal Vote Tally</h1>
+    <a href="{{ url_for('admin_election_open', election_id=election.id) }}">Back</a>
+</div>
+
+<div class="container-wide postal-tally">
+    <div class="postal-tally-topbar">
+        <p style="margin: 0; color: #666; flex: 1; min-width: 240px;">
+            Tick candidates from each postal letter, then press <strong>Record Letter</strong>.
+            When finished, press <strong>Apply to Postal Votes</strong>.
+        </p>
+        <div class="postal-letter-counter">
+            <div class="postal-letter-counter-label">Letters Processed</div>
+            <div id="letter-count" class="postal-letter-counter-value">0</div>
+        </div>
+    </div>
+
+    <!-- Ballot area: offices side by side -->
+    <div class="postal-office-grid">
+    {% for item in office_candidates %}
+    {% if item.candidates %}
+    <div class="ballot-office postal-office-card" data-office-id="{{ item.office.id }}" data-max="{{ item.office.max_selections }}">
+        <h2 class="ballot-office-title">{{ item.office.name }}</h2>
+        <p class="ballot-max-notice">
+            Select {{ item.office.max_selections }}
+            {% if item.office.max_selections == 1 %}candidate{% else %}candidates{% endif %}
+        </p>
+
+        {% for cand in item.candidates %}
+        <label class="ballot-option postal-ballot-option" for="tally_{{ cand.id }}">
+            <input type="checkbox"
+                   id="tally_{{ cand.id }}"
+                   class="tally-checkbox"
+                   data-office-id="{{ item.office.id }}"
+                   data-cand-id="{{ cand.id }}">
+            <span class="ballot-option-text">{{ cand.name }}</span>
+            <span class="postal-cand-count" id="count_{{ cand.id }}">0</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+    </div>
+
+    <div class="postal-tally-actions">
+        <button type="button" id="btn-record" class="btn btn-primary" style="font-size: 20px; padding: 14px;">
+            Record Letter
+        </button>
+        <a id="btn-apply" class="btn btn-gold" style="font-size: 18px; padding: 14px;">
+            Apply to Postal Votes
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var counts = {};
+    var letterCount = 0;
+    var applyUrl = "{{ url_for('admin_postal_votes', election_id=election.id) }}";
+
+    // Initialize counts
+    document.querySelectorAll('.tally-checkbox').forEach(function(cb) {
+        counts[cb.dataset.candId] = 0;
+    });
+
+    // Enforce max_selections per office
+    document.querySelectorAll('.tally-checkbox').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            if (!this.checked) return;
+            var officeId = this.dataset.officeId;
+            var officeDiv = document.querySelector('[data-office-id="' + officeId + '"]');
+            var max = parseInt(officeDiv.dataset.max, 10);
+            var checked = officeDiv.querySelectorAll('.tally-checkbox:checked');
+            if (checked.length > max) {
+                this.checked = false;
+            }
+        });
+    });
+
+    // Record letter
+    document.getElementById('btn-record').addEventListener('click', function() {
+        var anyChecked = document.querySelector('.tally-checkbox:checked');
+        letterCount++;
+        document.getElementById('letter-count').textContent = letterCount;
+
+        // Accumulate counts
+        document.querySelectorAll('.tally-checkbox:checked').forEach(function(cb) {
+            counts[cb.dataset.candId]++;
+            document.getElementById('count_' + cb.dataset.candId).textContent = counts[cb.dataset.candId];
+        });
+
+        // Clear checkboxes
+        document.querySelectorAll('.tally-checkbox').forEach(function(cb) {
+            cb.checked = false;
+        });
+
+        // Scroll to top for next letter
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // Build apply URL with query params
+    function updateApplyUrl() {
+        var params = 'prefill=1&postal_voter_count=' + letterCount;
+        for (var candId in counts) {
+            if (counts[candId] > 0) {
+                params += '&postal_' + candId + '=' + counts[candId];
+            }
+        }
+        document.getElementById('btn-apply').href = applyUrl + '?' + params;
+    }
+
+    // Update apply URL on every record
+    var origRecord = document.getElementById('btn-record').onclick;
+    document.getElementById('btn-record').addEventListener('click', updateApplyUrl);
+    updateApplyUrl();
+})();
+</script>
+{% endblock %}

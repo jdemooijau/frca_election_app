@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Paper Votes — {{ election.name }}{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Paper Votes: Round {{ election.current_round }}</h1>
+    <a href="{{ url_for('admin_election_open', election_id=election.id) }}">Back</a>
+</div>
+
+<div class="container">
+    <p style="margin: 16px 0; color: #666;">
+        Enter the total paper votes counted for each candidate.
+        These will be added to the digital vote totals.
+    </p>
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        {% for item in office_candidates %}
+        <div class="card" data-max="{{ item.office.max_selections }}" style="padding: 10px 12px; margin-bottom: 10px;">
+            <div class="card-header" style="margin-bottom: 8px; padding-bottom: 6px;">{{ item.office.name }}</div>
+            {% for cand in item.candidates %}
+            <div style="display:flex; align-items:center; gap:10px; padding: 4px 0; border-bottom: 1px solid #f0f0f0;">
+                <label for="paper_{{ cand.id }}" style="flex:1; margin:0; font-weight:500; font-size:16px;">{{ cand.name }}</label>
+                <input type="number" id="paper_{{ cand.id }}" name="paper_{{ cand.id }}"
+                       value="{{ cand.paper_count }}" min="0"
+                       style="width:80px; font-size:20px; text-align:center; padding:6px;">
+            </div>
+            {% endfor %}
+            <div style="display:flex; align-items:center; gap:10px; padding: 8px 0 2px; margin-top:6px; border-top: 1px solid #eee;">
+                <label for="spoilt_{{ item.office.id }}" style="flex:1; margin:0; color:#C0392B; font-weight:500; font-size:16px;">
+                    Spoilt ballots <small style="color:#888; font-weight:normal;">(too many ticks etc.)</small>
+                </label>
+                <input type="number" id="spoilt_{{ item.office.id }}" name="spoilt_{{ item.office.id }}"
+                       value="{{ item.spoilt_count }}" min="0"
+                       style="width:80px; font-size:20px; text-align:center; padding:6px;">
+            </div>
+        </div>
+        {% endfor %}
+
+        <button type="submit" class="btn btn-primary">Save Paper Votes</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Ballot — Office Bearer Election{% endblock %}
+
+{% block flash_messages %}{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div class="subtitle">{{ election.name }}{% if election.current_round > 1 %} — Round {{ election.current_round }}{% endif %}</div>
+    {% if voter_code %}
+    <div style="font-size: 12px; color: #999; margin-top: 2px;">Code: {{ voter_code }}</div>
+    {% endif %}
+</div>
+
+<div class="container">
+    <div aria-live="polite" class="error-region">
+        {% if warning_message|default('') %}
+        <p class="error-message">{{ warning_message }}</p>
+        {% endif %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+        {% if category == 'error' %}
+        <p class="error-message">{{ message }}</p>
+        {% endif %}
+        {% endfor %}
+        {% endwith %}
+    </div>
+
+    <form method="POST" action="{{ url_for('voter_submit') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if partial_warning|default(false) %}
+        <input type="hidden" name="confirm_partial" value="1">
+        {% endif %}
+
+        {% for item in office_candidates %}
+        {% if item.candidates %}
+        <div class="ballot-office">
+            <h2 class="ballot-office-title">For {{ item.office.name }} (select {{ item.office.max_selections }})</h2>
+
+            {% for cand in item.candidates %}
+            <label class="ballot-option" for="cand_{{ cand.id }}">
+                <input type="checkbox"
+                       id="cand_{{ cand.id }}"
+                       name="office_{{ item.office.id }}"
+                       value="{{ cand.id }}"
+                       {% if selected_ids|default(none) and cand.id|string in selected_ids %}checked{% endif %}>
+                <span class="ballot-option-text">{{ cand.name }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+
+        {% if partial_warning|default(false) %}
+        <button type="submit" class="btn btn-gold">Confirm and Cast Vote</button>
+        <p style="text-align: center; margin-top: 8px; font-size: 16px; color: #666;">
+            You have not selected the maximum number of candidates.
+            Press the button above to confirm this is intentional.
+        </p>
+        {% else %}
+        <button type="submit" class="btn btn-primary">Cast Your Vote</button>
+        {% endif %}
+        <p style="text-align: center; margin-top: 12px; font-size: 16px; color: #666;">
+            Your vote is anonymous and cannot be changed after submission.
+        </p>
+    </form>
+</div>
+<script>
+(function() {
+    function check() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/display-data', true);
+        xhr.onload = function() {
+            if (xhr.status !== 200) return;
+            try {
+                var data = JSON.parse(xhr.responseText);
+                if (data.active && data.display_phase === 4) {
+                    window.location.href = '/displayphone';
+                }
+            } catch (e) {}
+        };
+        xhr.send();
+    }
+    setInterval(check, 5000);
+})();
+</script>
+{% endblock %}

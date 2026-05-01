@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — Office Bearer Election{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Admin Dashboard</h1>
+    <a href="{{ url_for('admin_logout') }}">Log out</a>
+</div>
+
+<div class="container-wide">
+    <p style="margin: 16px 0 24px; color: #666;">
+        Three steps to run an election: configure the app, prepare the attendance list, then create and run the election.
+    </p>
+
+    <!-- Step 1 — Setup -->
+    <div class="card" style="border-left: 4px solid var(--navy);">
+        <div class="card-header">
+            <span style="display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; background: var(--navy); color: #fff; border-radius: 50%; margin-right: 8px; font-size: 14px;">1</span>
+            Setup
+        </div>
+        <p style="font-size: 14px; color: #555; margin-bottom: 12px;">
+            Configure the congregation name, WiFi for voters, voting URL, and the admin password.
+            Done once before the first election; revisit any time settings change.
+        </p>
+        <div class="btn-row">
+            <a href="{{ url_for('admin_setup') }}" class="btn btn-primary btn-small">Open Settings</a>
+        </div>
+    </div>
+
+    <!-- Step 2 — Attendance lists / members -->
+    <div class="card" style="border-left: 4px solid var(--navy);">
+        <div class="card-header">
+            <span style="display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; background: var(--navy); color: #fff; border-radius: 8px; margin-right: 8px; font-size: 14px;">2</span>
+            Attendance Lists
+        </div>
+        <p style="font-size: 14px; color: #555; margin-bottom: 12px;">
+            Maintain the list of male communicant members. The same list is used to
+            print the attendance register and to size the voting-code batch for each election.
+        </p>
+        <div class="btn-row">
+            <a href="{{ url_for('admin_members') }}" class="btn btn-primary btn-small">Manage Members</a>
+        </div>
+    </div>
+
+    <!-- Step 3 — Elections -->
+    <div class="card" style="border-left: 4px solid var(--gold);">
+        <div class="card-header">
+            <span style="display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; background: var(--gold); color: var(--navy); border-radius: 50%; margin-right: 8px; font-size: 14px; font-weight: 700;">3</span>
+            Elections
+        </div>
+        <p style="font-size: 14px; color: #555; margin-bottom: 12px;">
+            Create an election, set offices and candidates, generate codes, then run voting on the day.
+        </p>
+        <div class="btn-row" style="margin-bottom: 16px;">
+            <a href="{{ url_for('admin_election_new') }}" class="btn btn-gold btn-small">+ New Election</a>
+        </div>
+
+        {% if elections %}
+        {% for election in elections %}
+        <div style="border: 1px solid var(--grey); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; background: #fafafa;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+                <strong style="font-size: 16px; color: var(--navy);">{{ election.name }}</strong>
+                {% if election.voting_open %}
+                    <span class="status-badge status-open">Voting Open</span>
+                {% else %}
+                    <span class="status-badge status-closed">Voting Closed</span>
+                {% endif %}
+            </div>
+            <p style="font-size: 13px; color: #666; margin: 6px 0 10px;">
+                Round {{ election.current_round }} of {{ election.max_rounds }}
+                &middot; Created {{ election.created_at }}
+            </p>
+            <div class="btn-row">
+                <a href="{{ url_for('admin_election_open', election_id=election.id) }}" class="btn btn-primary btn-small">Open</a>
+                <button type="button" class="btn btn-danger btn-small" onclick="toggleDeleteForm({{ election.id }})">Delete</button>
+            </div>
+            <div id="delete-form-{{ election.id }}" style="display: none; margin-top: 12px; padding: 12px; border: 1px solid var(--red); border-radius: 4px; background: #fff;">
+                <form method="POST" action="{{ url_for('admin_election_delete', election_id=election.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <p style="font-size: 14px; margin-bottom: 8px;">
+                        This will permanently delete <strong>{{ election.name }}</strong> and all its votes, codes, offices, and candidates. <strong>This cannot be undone.</strong>
+                    </p>
+                    <div class="form-group">
+                        <label for="confirm_name_{{ election.id }}">Type <strong>{{ election.name }}</strong> to confirm</label>
+                        <input type="text" id="confirm_name_{{ election.id }}" name="confirm_name"
+                               autocomplete="off" placeholder="{{ election.name }}" style="max-width: 300px;">
+                    </div>
+                    <button type="submit" class="btn btn-danger btn-small">Confirm Delete</button>
+                    <button type="button" class="btn btn-outline btn-small" onclick="toggleDeleteForm({{ election.id }})" style="margin-left: 4px;">Cancel</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="font-size: 14px; color: #666; font-style: italic; margin: 0;">
+            No elections yet. Click <strong>+ New Election</strong> to create one.
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- Wipe database -->
+    <details style="margin-top: 32px;">
+        <summary style="cursor: pointer; font-weight: 600; color: var(--grey-dark); padding: 12px 0;">
+            Advanced Actions
+        </summary>
+        <div class="card" style="border-color: var(--red); margin-top: 8px;">
+            <div class="card-header" style="border-color: var(--red); color: var(--red);">Wipe Database</div>
+            <p style="font-size: 14px; margin-bottom: 12px;">
+                Deletes the entire database — all elections, votes, codes, members, and settings.
+                The app will restart with the setup wizard as if freshly installed.
+                <strong>This cannot be undone.</strong>
+            </p>
+            <form method="POST" action="{{ url_for('admin_wipe_database') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="wipe_confirm">Type DELETE EVERYTHING to confirm</label>
+                    <input type="text" id="wipe_confirm" name="confirm_text" autocomplete="off"
+                           placeholder="Type DELETE EVERYTHING" style="max-width: 300px;">
+                </div>
+                <div class="form-group">
+                    <label for="wipe_password">Admin password</label>
+                    <input type="password" id="wipe_password" name="password" autocomplete="off"
+                           placeholder="Re-enter password" style="max-width: 200px;">
+                </div>
+                <button type="submit" class="btn btn-danger btn-small">Wipe Database</button>
+            </form>
+        </div>
+
+    </details>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleDeleteForm(electionId) {
+    var form = document.getElementById('delete-form-' + electionId);
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

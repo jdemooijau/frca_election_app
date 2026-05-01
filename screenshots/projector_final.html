@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Projector — Final Results</title>
+<style>
+:root {
+    --navy: #1A3353;
+    --gold: #D4A843;
+    --white: #FFFFFF;
+    --grey-light: #F5F5F5;
+    --grey: #E0E0E0;
+    --grey-dark: #666666;
+    --red: #C0392B;
+    --green: #27AE60;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 18px; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+    color: var(--navy);
+    background: var(--white);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.display-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 32px; background: var(--navy); border-bottom: 3px solid var(--gold); flex-shrink: 0;
+}
+.display-title { font-size: 36px; font-weight: 700; color: var(--white); }
+.display-status { font-size: 30px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: #FF4444; }
+.display-main { flex: 1; display: flex; flex-direction: column; padding: 24px 40px; overflow: hidden; }
+.display-summary { display: flex; align-items: center; gap: 40px; margin-bottom: 24px; flex-shrink: 0; }
+.display-vote-count, .display-vote-total, .display-vote-waiting { text-align: center; min-width: 140px; }
+.big-number { display: block; font-size: 80px; font-weight: 700; color: var(--navy); line-height: 1; }
+.big-number.dim { color: var(--grey-dark); font-size: 60px; }
+.big-label { display: block; font-size: 20px; color: var(--grey-dark); margin-top: 6px; }
+.display-vote-progress { flex: 1; }
+.display-pbar { height: 48px; background: var(--grey); border-radius: 24px; overflow: hidden; position: relative; }
+.display-pfill { height: 100%; background: var(--gold); border-radius: 24px; }
+.display-pbar-label {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 22px; color: var(--navy);
+}
+.display-offices { display: flex; justify-content: center; gap: 80px; height: 100%; }
+.display-office h2 { font-size: 32px; color: var(--navy); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 3px solid var(--gold); }
+.display-candidate {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 10px 0; font-size: 28px; border-bottom: 1px solid var(--grey);
+}
+.display-candidate .name { color: var(--navy); font-weight: 500; }
+.display-candidate .votes { margin-left: 24px; color: var(--navy); font-weight: 700; font-size: 32px; }
+#stats-bar { border-top: 2px solid var(--grey); margin-top: 16px; padding: 16px 40px 0; }
+</style>
+</head>
+<body>
+
+<div class="display-topbar">
+    <span class="display-title">DEMO Election 2026-04-15</span>
+    <span class="display-status">CLOSED</span>
+</div>
+
+<div class="display-main">
+    <div class="display-summary">
+        <div class="display-vote-count">
+            <span class="big-number">101</span>
+            <span class="big-label">ballots received</span>
+        </div>
+        <div class="display-vote-total">
+            <span class="big-number dim">101</span>
+            <span class="big-label">brothers participating (98 in-person + 3 postal)</span>
+        </div>
+        <div class="display-vote-progress">
+            <div class="display-pbar">
+                <div class="display-pfill" style="width: 100%;"></div>
+                <div class="display-pbar-label">101 of 101 (100%)</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="display-offices">
+        <div class="display-office">
+            <h2>For Elder</h2>
+            <div class="display-candidate">
+                <span class="name">Br. Mark Bos <span style="color:#27AE60;font-weight:700;margin-left:8px">ELECTED</span></span>
+                <span class="votes">62</span>
+            </div>
+            <div class="display-candidate">
+                <span class="name">Br. John Kuipers</span>
+                <span class="votes">41</span>
+            </div>
+            <div class="display-candidate">
+                <span class="name">Br. Gary Postma <span style="color:#27AE60;font-weight:700;margin-left:8px">ELECTED</span></span>
+                <span class="votes">54</span>
+            </div>
+            <div class="display-candidate">
+                <span class="name">Br. Isaac Steenstra</span>
+                <span class="votes">22</span>
+            </div>
+            <div class="display-candidate">
+                <span class="name">Br. Roger Vlietstra</span>
+                <span class="votes">33</span>
+            </div>
+            <div class="display-candidate">
+                <span class="name">Br. Andrew Wieringa <span style="color:#27AE60;font-weight:700;margin-left:8px">ELECTED</span></span>
+                <span class="votes">76</span>
+            </div>
+            <div class="display-candidate" style="opacity: 0.5;">
+                <span class="name" style="font-style: italic;">Blank votes</span>
+                <span class="votes">15</span>
+            </div>
+            <div class="display-candidate" style="border-top: 2px solid #D4A843; margin-top: 4px; padding-top: 8px;">
+                <span class="name" style="font-weight: 700;">Total</span>
+                <span class="votes">303 <span style="color:#27AE60;margin-left:6px">&#10003;</span></span>
+            </div>
+        </div>
+
+        <div class="display-office">
+            <h2>For Deacon</h2>
+            <div class="display-candidate">
+                <span class="name">Br. William Evers <span style="color:#27AE60;font-weight:700;margin-left:8px">ELECTED</span></span>
+                <span class="votes">58</span>
+            </div>
+            <div class="display-candidate">
+                <span class="name">Br. Chris Janssen</span>
+                <span class="votes">39</span>
+            </div>
+            <div class="display-candidate">
+                <span class="name">Br. Nick Kloosterman <span style="color:#27AE60;font-weight:700;margin-left:8px">ELECTED</span></span>
+                <span class="votes">71</span>
+            </div>
+            <div class="display-candidate">
+                <span class="name">Br. Albert van der Heijden</span>
+                <span class="votes">24</span>
+            </div>
+            <div class="display-candidate" style="opacity: 0.5;">
+                <span class="name" style="font-style: italic;">Blank votes</span>
+                <span class="votes">10</span>
+            </div>
+            <div class="display-candidate" style="border-top: 2px solid #D4A843; margin-top: 4px; padding-top: 8px;">
+                <span class="name" style="font-weight: 700;">Total</span>
+                <span class="votes">202 <span style="color:#27AE60;margin-left:6px">&#10003;</span></span>
+            </div>
+        </div>
+    </div>
+
+    <div id="stats-bar">
+        <div style="display: flex; height: 36px; border-radius: 18px; overflow: hidden; margin-bottom: 12px;">
+            <div style="width: 82%; background: #1A3353;"></div>
+            <div style="width: 15%; background: #D4A843;"></div>
+            <div style="width: 3%; background: #666;"></div>
+        </div>
+        <div style="display: flex; justify-content: center; gap: 48px; font-size: 32px; font-weight: 600;">
+            <span><span style="display:inline-block;width:22px;height:22px;background:#1A3353;border-radius:4px;vertical-align:middle;margin-right:10px"></span>83 digital (82%)</span>
+            <span><span style="display:inline-block;width:22px;height:22px;background:#D4A843;border-radius:4px;vertical-align:middle;margin-right:10px"></span>15 paper (15%)</span>
+            <span><span style="display:inline-block;width:22px;height:22px;background:#666;border-radius:4px;vertical-align:middle;margin-right:10px"></span>3 postal (3%)</span>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

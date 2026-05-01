@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Counter {{ helper.short_id }}{% endblock %}
+{% block content %}
+{% if state == "active" %}
+<div class="count-helper-page">
+    <div class="count-helper-header">
+        <span class="count-helper-hint">Tap the candidate name to add a vote</span>
+        <button type="button" id="count-done-btn" class="btn btn-outline btn-small">Done</button>
+    </div>
+    <div class="count-grid"
+         data-session-id="{{ sess.id }}"
+         data-tap-url="{{ url_for('count_tap', session_id=sess.id) }}"
+         data-done-url="{{ url_for('count_done', session_id=sess.id) }}"
+         data-heartbeat-url="{{ url_for('count_heartbeat', session_id=sess.id) }}">
+        {% for office in offices %}
+        <div class="count-office">
+            <h3 class="count-office-title">{{ office.name|upper }}</h3>
+            <ul class="count-candidate-list">
+                {% for cand in candidates_by_office[office.id] %}
+                <li class="count-candidate-row" data-candidate-id="{{ cand.id }}">
+                    <span class="count-val" id="count-val-{{ cand.id }}">0</span>
+                    <button type="button" class="count-plus-btn" data-delta="1">
+                        <span class="count-plus-prefix" aria-hidden="true">+1</span>
+                        <span class="count-surname">{{ cand.name }}</span>
+                    </button>
+                    <button type="button" class="count-minus-btn" data-delta="-1" aria-label="minus 1">−1</button>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% elif state == "thanks" %}
+<div class="count-end-screen">
+    <div class="checkmark" aria-hidden="true">&#10003;</div>
+    <h2>Thanks for helping count.</h2>
+    <a href="{{ url_for('voter_enter_code') }}" class="btn btn-outline">Done</a>
+</div>
+{% elif state == "cancelled" %}
+<div class="count-end-screen">
+    <h2>Counting was cancelled.</h2>
+    <a href="{{ url_for('voter_enter_code') }}" class="btn btn-outline">Done</a>
+</div>
+{% elif state == "full" %}
+<div class="count-end-screen">
+    <h2>No more counter pages available - thanks for trying</h2>
+    <a href="{{ url_for('voter_enter_code') }}" class="btn btn-outline">Done</a>
+</div>
+{% endif %}
+{% if state == "active" %}
+<script>
+(function() {
+    const grid = document.querySelector(".count-grid");
+    if (!grid) return;
+    const tapUrl = grid.dataset.tapUrl;
+    const doneUrl = grid.dataset.doneUrl;
+    const heartbeatUrl = grid.dataset.heartbeatUrl;
+
+    function pulse(row, ok) {
+        row.classList.add(ok ? "count-row-flash-ok" : "count-row-flash-fail");
+        setTimeout(() => {
+            row.classList.remove("count-row-flash-ok");
+            row.classList.remove("count-row-flash-fail");
+        }, 150);
+    }
+
+    async function postTap(candidateId, delta, row) {
+        try {
+            const r = await fetch(tapUrl, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({candidate_id: candidateId, delta: delta})
+            });
+            if (r.status === 403) {
+                // Server refused: cap full (helper never created), session
+                // cancelled, or already marked done. Reload so the server
+                // renders the matching end-state page with a clear message.
+                window.location.reload();
+                return;
+            }
+            pulse(row, r.ok);
+            if (!r.ok) {
+                row.classList.add("count-row-error");
+            } else {
+                row.classList.remove("count-row-error");
+                const data = await r.json();
+                if (typeof data.count === "number") {
+                    const el = document.getElementById("count-val-" + candidateId);
+                    if (el) el.textContent = data.count;
+                }
+            }
+        } catch (e) {
+            pulse(row, false);
+            row.classList.add("count-row-error");
+        }
+    }
+
+    grid.addEventListener("click", function(ev) {
+        const plusBtn = ev.target.closest(".count-plus-btn");
+        const minusBtn = ev.target.closest(".count-minus-btn");
+        const btn = plusBtn || minusBtn;
+        if (!btn) return;
+        const row = btn.closest(".count-candidate-row");
+        if (!row) return;
+        ev.stopPropagation();
+        const candidateId = parseInt(row.dataset.candidateId, 10);
+        const delta = btn === plusBtn ? 1 : -1;
+        postTap(candidateId, delta, row);
+    });
+
+    const doneBtn = document.getElementById("count-done-btn");
+    doneBtn.addEventListener("click", async function() {
+        if (!confirm("Mark yourself as Done? You will not be able to tap again.")) return;
+        await fetch(doneUrl, {method: "POST"});
+        window.location.reload();  // server will render the Thanks screen
+    });
+
+    async function heartbeat() {
+        try {
+            const r = await fetch(heartbeatUrl);
+            if (!r.ok) return;
+            const data = await r.json();
+            if (data.session_status !== "active" || data.helper_done) {
+                window.location.reload();
+            }
+        } catch (e) {
+            // ignore
+        }
+    }
+    setInterval(heartbeat, 5000);
+})();
+</script>
+{% endif %}
+{% endblock %}

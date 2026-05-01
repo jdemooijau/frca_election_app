@@ -1,0 +1,27 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}Election settings - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}Election settings{% endblock %}
+{% block step_heading %}Optional features for this election{% endblock %}
+{% block step_content %}
+<form method="POST" action="{{ url_for('admin_election_settings', election_id=sidebar_state.election.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="form-group">
+        <label style="display: flex; align-items: flex-start; gap: 10px;">
+            <input type="checkbox" name="paper_count_enabled" value="1"
+                   {% if election.paper_count_enabled %}checked{% endif %}
+                   style="margin-top: 4px;">
+            <span>
+                <strong>Enable paper count helper</strong>
+                <span style="display: block; font-size: 13px; color: #666; margin-top: 2px;">
+                    Volunteers can opt in to co-count paper ballots on their phones during the chairman's read-out.
+                </span>
+            </span>
+        </label>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save settings</button>
+    <a href="{{ url_for('admin_step_codes', election_id=sidebar_state.election.id) }}"
+       class="btn btn-outline" style="margin-left: 8px;">Next: Codes &amp; printing &rarr;</a>
+</form>
+{% endblock %}

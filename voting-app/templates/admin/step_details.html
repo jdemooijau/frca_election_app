@@ -1,0 +1,27 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}Election details - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}Election details{% endblock %}
+{% block step_heading %}Name, date, and number of rounds{% endblock %}
+{% block step_content %}
+<form method="POST" action="{{ url_for('admin_step_details_save', election_id=sidebar_state.election.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+        <label for="name">Election name</label>
+        <input type="text" id="name" name="name" required value="{{ election.name }}">
+    </div>
+    <div class="form-group">
+        <label for="election_date">Election date</label>
+        <input type="text" id="election_date" name="election_date"
+               placeholder="e.g. 20 October 2026"
+               value="{{ election.election_date or '' }}">
+    </div>
+    <div class="form-group">
+        <label for="max_rounds">Maximum rounds</label>
+        <input type="number" id="max_rounds" name="max_rounds" min="1" max="5"
+               value="{{ election.max_rounds }}">
+    </div>
+    <button type="submit" class="btn btn-primary">Save</button>
+    <a href="{{ url_for('admin_step_members', election_id=sidebar_state.election.id) }}"
+       class="btn btn-outline" style="margin-left: 8px;">Next: Members &rarr;</a>
+</form>
+{% endblock %}

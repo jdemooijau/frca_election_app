@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Postal Votes — {{ election.name }}{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Postal Votes (Round 1 only)</h1>
+    <a href="{{ url_for('admin_election_open', election_id=election.id) }}">Back</a>
+</div>
+
+<div class="container-wide">
+    {% if locked %}
+    <div class="flash flash-info">
+        Postal votes are locked - voting has started or a subsequent round is in progress.
+        These totals are read-only.
+    </div>
+    {% endif %}
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin: 12px 0 16px;">
+            <p style="margin:0; color:#666; flex:1; min-width:240px;">
+                Enter aggregate postal vote totals from letters received by the secretary of council.
+                Round 1 only, before voting opens.
+            </p>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <label for="postal_voter_count" style="margin:0; font-size:14px;">Brothers submitting</label>
+                <input type="number" id="postal_voter_count" name="postal_voter_count"
+                       value="{{ election.postal_voter_count or 0 }}" min="0"
+                       style="width:90px; font-size:20px; text-align:center; padding:6px;"
+                       {% if locked %}disabled{% endif %}>
+            </div>
+        </div>
+
+        <div class="postal-office-grid">
+        {% for item in office_candidates %}
+        <div class="postal-office-card" data-max="{{ item.office.max_selections }}">
+            <div class="card-header" style="margin-bottom:8px; padding-bottom:6px; font-size:18px;">{{ item.office.name }}</div>
+            {% for cand in item.candidates %}
+            <div style="display:flex; align-items:center; gap:10px; padding:4px 0; border-bottom:1px solid #f0f0f0;">
+                <label for="postal_{{ cand.id }}" style="flex:1; margin:0; font-weight:500; font-size:15px;">{{ cand.name }}</label>
+                <input type="number" id="postal_{{ cand.id }}" name="postal_{{ cand.id }}"
+                       value="{{ cand.postal_count }}" min="0"
+                       style="width:70px; font-size:18px; text-align:center; padding:6px;"
+                       {% if locked %}disabled{% endif %}>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+        </div>
+
+        {% if not locked %}
+        <button type="submit" class="btn btn-primary" style="margin-top:16px;">Save Postal Votes</button>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Prefill from tally helper query params
+(function() {
+    var params = new URLSearchParams(window.location.search);
+    if (!params.get('prefill')) return;
+
+    params.forEach(function(value, key) {
+        if (key === 'prefill') return;
+        var input = document.getElementById(key);
+        if (input && !input.disabled) {
+            input.value = value;
+        }
+    });
+
+    // Clean URL without reloading
+    window.history.replaceState({}, '', window.location.pathname);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}Decide - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}Round {{ sidebar_state.election.current_round }} - Decide{% endblock %}
+{% block step_heading %}Another round, or finalise the election?{% endblock %}
+{% block step_content %}
+
+<p style="font-size: 14px; color: #555; margin-bottom: 14px;">
+    Review the round {{ election.current_round }} result. You can either start
+    another round (carry forward unelected candidates), or finalise the
+    election with the result as it stands.
+</p>
+
+{% if election.voting_open %}
+<p style="color: #666;">Voting is still open. Close the round on <em>Voting</em> first.</p>
+{% else %}
+<div style="display: grid; grid-template-columns: {% if election_complete %}1fr{% else %}1fr 1fr{% endif %}; gap: 14px;">
+    {% if not election_complete %}
+    <div style="border: 1px solid var(--grey); border-radius: 8px; padding: 14px;">
+        <h4 style="margin: 0 0 8px; color: var(--navy);">Start Round {{ election.current_round + 1 }}</h4>
+        <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
+            Select the candidates to carry forward. Article 7: if no candidate
+            is elected this round, reduce the slate to twice the remaining
+            vacancies by eliminating those with the lowest votes.
+        </p>
+        <form method="POST" action="{{ url_for('admin_next_round', election_id=sidebar_state.election.id) }}"
+              onsubmit="return confirm('Start round {{ election.current_round + 1 }}? This cannot be undone.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% for item in results %}
+            <p style="margin: 8px 0 4px; font-weight: 700;">{{ item.office.name }}</p>
+            {% for cand in item.candidates %}
+            {% if cand.active %}
+            <label class="checkbox-label" style="display: block; margin-bottom: 4px; font-size: 13px;">
+                <input type="checkbox" name="carry_forward" value="{{ cand.id }}"
+                       {% if cand.meets_threshold|default(false) %}disabled{% endif %}>
+                {{ cand.name }} ({{ cand.total }} votes)
+                {% if cand.meets_threshold|default(false) %}
+                <span style="color: var(--green); font-size: 12px;">- ELECTED</span>
+                {% endif %}
+            </label>
+            {% endif %}
+            {% endfor %}
+            {% endfor %}
+            <button type="submit" class="btn btn-gold btn-small" style="margin-top: 10px;">
+                Start Round {{ election.current_round + 1 }} &rarr;
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    <div style="border: 1px solid var(--grey); border-radius: 8px; padding: 14px;">
+        <h4 style="margin: 0 0 8px; color: var(--navy);">
+            {% if election_complete %}Election complete &mdash; finalise{% else %}Finalise the election{% endif %}
+        </h4>
+        <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
+            {% if election_complete %}
+            All vacancies are filled. Continue to <em>Final results</em> to
+            review the elected brothers, then announce the result on the
+            projector from there.
+            {% else %}
+            Conclude with the result as it stands. Continue to <em>Final
+            results</em> to review and announce.
+            {% endif %}
+        </p>
+        <a href="{{ url_for('admin_step_final', election_id=sidebar_state.election.id) }}"
+           class="btn btn-{% if election_complete %}gold{% else %}primary{% endif %} btn-small">
+            Continue to Final results &rarr;
+        </a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
