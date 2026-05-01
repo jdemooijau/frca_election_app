@@ -26,8 +26,11 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Generated PDFs (keep templates, not outputs)
+# Generated PDFs (keep templates, not outputs).
+# Doc PDFs in docs/ ARE committed - they're rendered handouts, not
+# election-day artefacts.
 *.pdf
+!docs/*.pdf
 
 # Environment
 .env

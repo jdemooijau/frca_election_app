@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How to Vote - FRCA Election App</title>
+<style>
+    /* A4 portrait, 210mm x 297mm. Designed to print on a single sheet. */
+    @page { size: A4 portrait; margin: 12mm; }
+    html, body { margin: 0; padding: 0; }
+    body {
+        font-family: Georgia, 'Times New Roman', serif;
+        color: #1A3353;
+        background: #fff;
+        line-height: 1.35;
+        font-size: 11pt;
+    }
+    .page {
+        width: 186mm;
+        margin: 0 auto;
+        padding: 0;
+    }
+    h1 {
+        text-align: center;
+        font-size: 26pt;
+        margin: 4mm 0 0;
+        color: #1A3353;
+        letter-spacing: 0.5pt;
+    }
+    .subtitle {
+        text-align: center;
+        font-size: 13pt;
+        color: #6c757d;
+        font-style: italic;
+        margin: 1mm 0 6mm;
+    }
+    .pick-one {
+        text-align: center;
+        font-size: 12pt;
+        font-style: italic;
+        color: #1A3353;
+        margin: 0 0 6mm;
+    }
+    .columns {
+        display: flex;
+        gap: 6mm;
+        align-items: stretch;
+    }
+    .col {
+        flex: 1 1 50%;
+        border: 1.5pt solid #1A3353;
+        border-radius: 3mm;
+        padding: 4mm 5mm 5mm;
+        background: #F7F9FB;
+        display: flex;
+        flex-direction: column;
+    }
+    .col h2 {
+        font-size: 16pt;
+        margin: 0 0 1mm;
+        color: #1A3353;
+        text-align: center;
+        border-bottom: 2pt solid #D4A843;
+        padding-bottom: 1.5mm;
+    }
+    .col .tag {
+        text-align: center;
+        font-size: 10pt;
+        color: #6c757d;
+        margin: 0 0 4mm;
+        font-style: italic;
+    }
+    .shot {
+        text-align: center;
+        margin: 0 0 4mm;
+        height: 65mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .shot img {
+        max-width: 100%;
+        max-height: 65mm;
+        border: 1pt solid #d4d4d4;
+        border-radius: 1.5mm;
+        background: #fff;
+        object-fit: contain;
+    }
+    .shot.phone-row {
+        gap: 3mm;
+    }
+    .shot.phone-row img {
+        max-height: 65mm;
+        max-width: calc(50% - 1.5mm);
+    }
+    ol {
+        margin: 0;
+        padding-left: 6mm;
+        flex: 1 1 auto;
+    }
+    ol li {
+        margin: 0 0 1.8mm;
+        font-size: 11pt;
+    }
+    .footer {
+        margin-top: 6mm;
+        border-top: 1pt solid #d4d4d4;
+        padding-top: 4mm;
+        font-size: 10pt;
+        color: #444;
+        line-height: 1.5;
+        display: flex;
+        align-items: center;
+        gap: 5mm;
+    }
+    .footer .info {
+        flex: 1 1 auto;
+    }
+    .footer .info strong {
+        color: #1A3353;
+        display: block;
+        font-size: 11pt;
+        margin-bottom: 1mm;
+    }
+    .footer .qr {
+        flex: 0 0 auto;
+        text-align: center;
+    }
+    .footer .qr img {
+        width: 20mm;
+        height: 20mm;
+        display: block;
+    }
+    .qr-note {
+        font-size: 10pt;
+        color: #444;
+        margin: 2mm 0 4mm;
+        line-height: 1.4;
+    }
+    .preamble {
+        background: #F4FAF6;
+        border: 1.5pt solid #B8E0C8;
+        border-radius: 3mm;
+        padding: 3mm 5mm 3mm;
+        margin: 0 0 5mm;
+    }
+    .preamble h3 {
+        margin: 0 0 1.5mm;
+        font-size: 12pt;
+        color: #1A3353;
+        text-transform: uppercase;
+        letter-spacing: 0.5pt;
+    }
+    .preamble ol {
+        margin: 0;
+        padding-left: 6mm;
+    }
+    .preamble li {
+        font-size: 11pt;
+        margin-bottom: 1mm;
+    }
+
+    /* Stop browsers from clipping during print preview. */
+    @media print {
+        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+<div class="page">
+
+    <h1>How to Vote</h1>
+    <div class="subtitle">Office Bearer Election</div>
+
+    <div class="preamble">
+        <h3>Before you vote</h3>
+        <ol>
+            <li>Sign the attendance register when you arrive.</li>
+            <li>Wait for the chairman to open the meeting.</li>
+            <li>You'll be handed a paper ballot and a slip with a
+                six-character code and a QR code for voting on your
+                phone.</li>
+        </ol>
+    </div>
+
+    <div class="pick-one">
+        You vote one way only - paper or phone, whichever you prefer.
+    </div>
+
+    <div class="columns">
+
+        <!-- Paper ballot -->
+        <div class="col">
+            <h2>Paper ballot</h2>
+
+            <div class="shot">
+                <img src="../../screenshots/24_paper_ballot_single.png" alt="Paper ballot card">
+            </div>
+
+            <ol>
+                <li>Tick the box next to the candidates you choose, up to
+                    the number the office allows ("select 2" means tick
+                    up to two).</li>
+                <li>Fold the card and hand it in for counting.</li>
+            </ol>
+        </div>
+
+        <!-- Digital ballot -->
+        <div class="col">
+            <h2>Phone</h2>
+
+            <div class="shot phone-row">
+                <img src="../../screenshots/23_code_slips_single.png" alt="Voting code slip">
+                <img src="../../screenshots/16_voter_ballot_selected.png" alt="Phone ballot with ticks">
+            </div>
+
+            <ol>
+                <li>Use the code slip - it tells you which WiFi to
+                    connect to, and has a QR code to scan with your
+                    phone's camera.</li>
+                <li>Tick candidates for each office, up to the allowed
+                    number. Tap <strong>Cast Your Vote</strong>.</li>
+                <li>The confirmation screen lets you know your vote has
+                    been registered.</li>
+            </ol>
+        </div>
+
+    </div>
+
+    <div class="footer">
+        <div class="info">
+            <strong>More information?</strong>
+            Speak to your office bearer or scan the QR.
+        </div>
+        <div class="qr">
+            <img src="github_qr.png" alt="More information">
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

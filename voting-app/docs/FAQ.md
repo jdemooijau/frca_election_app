@@ -7,7 +7,7 @@ page links to the canonical document instead of duplicating.
 - For brothers in the pew - see [Voters](#voters)
 - For elders, the chairman, the secretary - see [Council & chairman](#council--chairman)
 - For another congregation considering adoption - see [Prospective adopting churches](#prospective-adopting-churches)
-- For "what if Jan isn't around?" - see [Continuity & support](#continuity--support)
+- For "what if the admin / developer isn't around?" - see [Continuity & support](#continuity--support)
 - For "is the count trustworthy?" - see [Security & auditability](#security--auditability)
 
 ---
@@ -259,7 +259,7 @@ the whole point of the dual-sided card.
 
 ## Continuity & support
 
-### What happens if the original developer (Jan) isn't available?
+### What happens if the admin / developer isn't available?
 
 The app is designed to be operated by any volunteer who can follow
 the [USER_GUIDE.md](USER_GUIDE.md) on election day. No developer
@@ -271,7 +271,7 @@ For setup or modifications you'll need someone with basic Python /
 command-line skills, but that's an annual or one-off task, not an
 election-day dependency.
 
-### What if we hit a bug on election day and Jan isn't reachable?
+### What if we hit a bug on election day and the admin / developer isn't reachable?
 
 Two layers of fallback:
 
@@ -294,7 +294,7 @@ templates, with a documented database schema, a passing test suite
 Python familiarity and a few evenings to read the codebase can take
 over maintenance.
 
-### Where do we go for help if Jan is unreachable?
+### Where do we go for help if the admin / developer is unreachable?
 
 In order:
 
