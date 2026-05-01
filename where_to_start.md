@@ -8,6 +8,12 @@ Before you go anywhere else, please read the disclaimer at the top of
 no support. The responsibility for running your congregation's election
 correctly rests entirely with your council.
 
+## I just have a question
+
+[voting-app/docs/FAQ.md](voting-app/docs/FAQ.md) — Plain-language answers
+grouped by audience: voters, council & chairman, prospective adopting
+churches, continuity ("what if Jan isn't around?"), and security & auditability.
+
 ## I am on the church council and want to understand what this is
 
 You are deciding whether to consider this tool for your congregation's

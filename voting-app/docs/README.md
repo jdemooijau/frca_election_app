@@ -93,8 +93,10 @@ voting-app/
 ├── tests/                  # pytest test suite
 ├── docs/
 │   ├── README.md           # This file
+│   ├── FAQ.md              # Plain-language answers by audience
 │   ├── SETUP.md            # Hardware and network setup
 │   ├── ADMIN_GUIDE.md      # How to run an election
+│   ├── USER_GUIDE.md       # Screenshot-driven walkthrough
 │   ├── CONFIGURATION.md    # First-time congregation setup
 │   ├── UAT_SCRIPT.md       # Council dry-run script
 │   ├── SECURITY.md         # Security and anonymity model
@@ -122,6 +124,7 @@ Everything is self-contained. No CDNs, no internet dependencies, no external ser
 
 | Document | Audience | Purpose |
 |----------|----------|---------|
+| [FAQ.md](FAQ.md) | Anyone | Plain-language answers by audience (voters, council, prospective churches, continuity, security) |
 | [CONFIGURATION.md](CONFIGURATION.md) | Administrator | First-time setup for your congregation |
 | [SETUP.md](SETUP.md) | Task team | Hardware and network setup at church |
 | [ADMIN_GUIDE.md](ADMIN_GUIDE.md) | Task team | How to run an election end to end |
