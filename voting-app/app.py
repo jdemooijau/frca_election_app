@@ -3823,10 +3823,10 @@ def admin_scan_ballot_result(election_id):
         return jsonify({"result": "match",
                         "warning": "paper_ballot_count is already 0"}), 200
 
+    db.commit()
     log_voter_audit(election_id, raw_code, "paper_set_aside_at_count",
                     "Paper ballot scanned during count, code already burned online",
                     round_number=current_round)
-    db.commit()
     return jsonify({"result": "match"}), 200
 
 
