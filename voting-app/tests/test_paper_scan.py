@@ -88,3 +88,31 @@ def test_match_decrements_paper_count_and_logs_audit(client, scan_election):
         ).fetchall()
         assert len(audit) == 1
         assert audit[0]["code"] == used_code
+
+
+def test_paper_only_no_decrement_no_audit(client, scan_election):
+    eid = scan_election["id"]
+    unused_code = scan_election["unused_codes"][0]
+
+    rv = _post_scan(client, eid, unused_code)
+    assert rv.status_code == 200
+    assert rv.get_json() == {"result": "paper_only"}
+
+    from app import app as flask_app, get_db
+    with flask_app.app_context():
+        db = get_db()
+        row = db.execute(
+            "SELECT paper_ballot_count FROM round_counts "
+            "WHERE election_id = ? AND round_number = 1",
+            (eid,)
+        ).fetchone()
+        assert row["paper_ballot_count"] == 5  # unchanged
+
+        audit_count = db.execute(
+            "SELECT COUNT(*) AS n FROM voter_audit_log "
+            "WHERE election_id = ? AND result = 'paper_set_aside_at_count'",
+            (eid,)
+        ).fetchone()["n"]
+        assert audit_count == 0
+
+
