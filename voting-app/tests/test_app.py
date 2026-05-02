@@ -984,3 +984,37 @@ def _seed_count_phase_election(db, used_codes=None, unused_codes=None,
         "used_codes": list(used_codes),
         "unused_codes": list(unused_codes),
     }
+
+
+# ---------------------------------------------------------------------------
+# Task 18: reconciliation panel on the count step
+# ---------------------------------------------------------------------------
+
+def test_step_count_payload_includes_reconciliation_fields(client):
+    from app import app as flask_app, get_db
+    with flask_app.app_context():
+        info = _seed_count_phase_election(get_db(), used_codes=["KR4T7N", "AB3XY9"],
+                                          unused_codes=["JK5WL6"], paper_ballot_count=20)
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    rv = client.get(f"/admin/election/{info['id']}/step/count")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Reconciliation" in body
+    assert "Attendees" in body
+    assert "Paper ballots" in body
+    assert "Gap" in body
+
+
+def test_step_count_shows_red_banner_when_ballots_exceed_attendance(client):
+    from app import app as flask_app, get_db
+    with flask_app.app_context():
+        info = _seed_count_phase_election(get_db(), used_codes=["KR4T7N", "AB3XY9", "JK5WL6"],
+                                          unused_codes=[], paper_ballot_count=50)
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    rv = client.get(f"/admin/election/{info['id']}/step/count")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "exceeds attendance" in body
+    assert "Scan paper ballots" in body
