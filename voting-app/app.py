@@ -3837,6 +3837,27 @@ def admin_scan_ballots(election_id):
     return render_template("admin/scan_ballots.html", election=election)
 
 
+@app.route("/scanner", methods=["GET"])
+@admin_required
+def admin_scanner_shortcut():
+    """Phone-friendly shortcut. Resolves to the most recent election in
+    count phase (voting closed, not yet finalised) so the chairman can
+    type /scanner instead of the full /admin/elections/<id>/scan-ballots
+    URL on his phone. Falls back to the admin dashboard if no election
+    is currently in count phase.
+    """
+    db = get_db()
+    election = db.execute(
+        "SELECT id FROM elections "
+        "WHERE voting_open = 0 AND display_phase != 4 "
+        "ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    if not election:
+        flash("No election is currently in the count phase.", "error")
+        return redirect(url_for("admin_dashboard"))
+    return redirect(url_for("admin_scan_ballots", election_id=election["id"]))
+
+
 @app.route("/admin/elections/<int:election_id>/scan-ballot-result", methods=["POST"])
 @admin_required
 @csrf.exempt

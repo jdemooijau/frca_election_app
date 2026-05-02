@@ -319,3 +319,55 @@ def test_scan_endpoint_requires_admin():
         _app_module.DB_PATH = original_db_path
         _os.close(db_fd)
         _os.unlink(db_path)
+
+
+def test_scanner_shortcut_redirects_to_active_election(client, scan_election):
+    """GET /scanner redirects to the scan-ballots page for the most
+    recent election in count phase."""
+    eid = scan_election["id"]
+    rv = client.get("/scanner", follow_redirects=False)
+    assert rv.status_code == 302
+    assert f"/admin/elections/{eid}/scan-ballots" in rv.headers["Location"]
+
+
+def test_scanner_shortcut_falls_back_when_no_count_phase_election(client):
+    """GET /scanner redirects to the admin dashboard with a flash when
+    no election is currently in count phase."""
+    from app import app as flask_app, get_db
+    from tests.test_app import _seed_count_phase_election
+    with flask_app.app_context():
+        info = _seed_count_phase_election(get_db(), used_codes=["KR4T7N"], unused_codes=[])
+        # Move it past count: finalised.
+        get_db().execute("UPDATE elections SET display_phase = 4 WHERE id = ?", (info["id"],))
+        get_db().commit()
+
+    rv = client.get("/scanner", follow_redirects=False)
+    assert rv.status_code == 302
+    assert "/admin" in rv.headers["Location"]
+    # Should not be the scan-ballots URL.
+    assert "/scan-ballots" not in rv.headers["Location"]
+
+
+def test_scanner_shortcut_requires_admin():
+    """An anonymous client hitting /scanner must be redirected to login."""
+    import tempfile
+    import os as _os
+    import app as _app_module
+    from app import app as flask_app, init_db
+    db_fd, db_path = tempfile.mkstemp(suffix=".db")
+    flask_app.config["TESTING"] = True
+    flask_app.config["WTF_CSRF_ENABLED"] = False
+    original_db_path = _app_module.DB_PATH
+    _app_module.DB_PATH = db_path
+    try:
+        with flask_app.test_client() as anon:
+            with flask_app.app_context():
+                init_db()
+            rv = anon.get("/scanner", follow_redirects=False)
+            assert rv.status_code in (302, 401, 403)
+            if rv.status_code == 302:
+                assert "login" in rv.headers["Location"].lower()
+    finally:
+        _app_module.DB_PATH = original_db_path
+        _os.close(db_fd)
+        _os.unlink(db_path)
