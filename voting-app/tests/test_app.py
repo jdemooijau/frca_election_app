@@ -1017,6 +1017,7 @@ def test_step_count_shows_red_banner_when_ballots_exceed_attendance(client):
     assert rv.status_code == 200
     body = rv.get_data(as_text=True)
     assert "exceeds attendance" in body
+    assert "Scan paper ballots" in body
 
 
 # ---------------------------------------------------------------------------
