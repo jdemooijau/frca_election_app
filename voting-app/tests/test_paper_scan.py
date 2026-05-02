@@ -130,7 +130,9 @@ def test_empty_code_returns_unknown(client, scan_election):
     assert rv.get_json() == {"result": "unknown"}
 
 
-def test_endpoint_rejects_when_voting_open(client):
+def test_endpoint_works_when_voting_open(client):
+    """The endpoint accepts scans in any phase. The chairman may scan
+    during voting (rehearsal) or before/after the count window."""
     from app import app as flask_app, get_db
     from tests.test_app import _seed_count_phase_election
     with flask_app.app_context():
@@ -140,12 +142,13 @@ def test_endpoint_rejects_when_voting_open(client):
         db.commit()
 
     rv = _post_scan(client, info["id"], "KR4T7N")
-    assert rv.status_code == 409
-    body = rv.get_json() or {}
-    assert "count phase" in (body.get("error") or "").lower()
+    assert rv.status_code == 200
+    assert rv.get_json()["result"] == "match"
 
 
-def test_endpoint_rejects_when_finalised(client):
+def test_endpoint_works_when_finalised(client):
+    """The endpoint accepts scans even after finalisation, e.g. for
+    after-the-fact audit checks against the printed paper trail."""
     from app import app as flask_app, get_db
     from tests.test_app import _seed_count_phase_election
     with flask_app.app_context():
@@ -155,9 +158,8 @@ def test_endpoint_rejects_when_finalised(client):
         db.commit()
 
     rv = _post_scan(client, info["id"], "KR4T7N")
-    assert rv.status_code == 409
-    body = rv.get_json() or {}
-    assert "count phase" in (body.get("error") or "").lower()
+    assert rv.status_code == 200
+    assert rv.get_json()["result"] == "match"
 
 
 def test_match_clamps_at_zero_paper_count(client):
