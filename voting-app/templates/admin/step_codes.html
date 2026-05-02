@@ -82,20 +82,6 @@
 </div>
 {% endif %}
 
-{% if generated_codes %}
-<div class="card">
-    <div class="card-header">Generated Codes (save or print now!)</div>
-    <p style="font-size: 14px; color: #666; margin-bottom: 12px;">
-        These are shown only once. Use the Code Slips PDF to print them.
-    </p>
-    <div style="columns: 3; column-gap: 16px; font-family: monospace; font-size: 16px;">
-        {% for code in generated_codes %}
-        <div style="break-inside: avoid; padding: 4px 0;">{{ code }}</div>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-
 {# ============= Print & prepare (from manage.html Phase 1) ============= #}
 <h3 style="margin: 18px 0 8px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">Print &amp; prepare</h3>
 <div class="btn-row" style="flex-wrap: wrap; margin-bottom: 16px;">
