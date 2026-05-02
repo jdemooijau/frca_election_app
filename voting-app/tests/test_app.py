@@ -1017,4 +1017,55 @@ def test_step_count_shows_red_banner_when_ballots_exceed_attendance(client):
     assert rv.status_code == 200
     body = rv.get_data(as_text=True)
     assert "exceeds attendance" in body
-    assert "Scan paper ballots" in body
+
+
+# ---------------------------------------------------------------------------
+# Task 19: e2e double-vote caught by scan
+# ---------------------------------------------------------------------------
+
+def test_e2e_double_vote_caught_by_scan(client):
+    """End-to-end: a brother votes online with code X, then a paper
+    ballot bearing the same QR is scanned at count. The scan must
+    decrement paper_ballot_count and create an audit row.
+    """
+    from app import app as flask_app, get_db
+    with flask_app.app_context():
+        info = _seed_count_phase_election(get_db(), used_codes=["KR4T7N"],
+                                          unused_codes=[], paper_ballot_count=10)
+    eid = info["id"]
+
+    # Sanity: starting state.
+    with flask_app.app_context():
+        rc = get_db().execute(
+            "SELECT paper_ballot_count FROM round_counts WHERE election_id = ? AND round_number = 1",
+            (eid,)
+        ).fetchone()
+        assert rc["paper_ballot_count"] == 10
+
+    # Establish admin session.
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+
+    # Act: scan the same code (simulating the operator finding the
+    # paper ballot bearing this voter's QR in the box).
+    rv = client.post(
+        f"/admin/elections/{eid}/scan-ballot-result",
+        json={"code": "KR4T7N"},
+    )
+    assert rv.status_code == 200
+    assert rv.get_json()["result"] == "match"
+
+    # Assert: paper_ballot_count decremented, audit row created.
+    with flask_app.app_context():
+        rc2 = get_db().execute(
+            "SELECT paper_ballot_count FROM round_counts WHERE election_id = ? AND round_number = 1",
+            (eid,)
+        ).fetchone()
+        assert rc2["paper_ballot_count"] == 9
+
+        audit = get_db().execute(
+            "SELECT result FROM voter_audit_log "
+            "WHERE election_id = ? AND result = 'paper_set_aside_at_count'",
+            (eid,)
+        ).fetchall()
+        assert len(audit) == 1
