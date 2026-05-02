@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Paper-ballot QR scanner page on the admin count step. Reads each
+  ballot's QR via the device camera (continuous video, browser
+  `BarcodeDetector` with vendored `jsQR` fallback). When a scanned QR
+  matches a code already burned online, the scanner halts on the
+  match, atomically decrements `paper_ballot_count` for the current
+  round, and writes a `paper_set_aside_at_count` audit-log row. Visual
+  flash and audible beep distinguish match / paper-only / unknown
+  results. Mute toggle supported.
+- Reconciliation panel on the count step showing attendees, online
+  used, paper, postal, and the gap. Three display states: gap > 0
+  (within attendance, optional "larger than expected" hint when gap
+  exceeds 10% of attendees), gap == 0 (reconciled green), gap < 0
+  (red banner with prominent scan-paper-ballots button). A smaller
+  scan-paper-ballots button is always present so the chairman can run
+  the scanner proactively.
+- Audit-log labels: `RESULT_LABELS` mapping renders all known voter
+  audit reasons as human-readable strings on the admin voter-log page,
+  including the new "Paper ballot set aside (already voted online)"
+  label.
+
+### Changed
+
+- Code-slip QR enlarged from 24 mm to 32 mm. The smaller QR forced
+  phone cameras to focus at 5-10 cm with narrow angle tolerance,
+  making count-time triage scanning fussy. The larger QR roughly
+  doubles fold tolerance per module and lets the operator hold a
+  ballot at 15-25 cm without focus hunting.
+
 ## [1.2.1] - 2026-05-01
 
 First real release. Self-contained offline voting app for office bearer
