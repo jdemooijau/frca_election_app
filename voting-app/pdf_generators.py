@@ -162,7 +162,7 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     y -= 4 * mm
 
     # QR image only (voting code moved to step 3)
-    qr_size = 24 * mm
+    qr_size = 32 * mm
     vote_url = f"{base_url}/v/{code}"
     qr_img = _generate_qr_image(vote_url)
     qr_x = label_x

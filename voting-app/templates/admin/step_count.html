@@ -22,6 +22,56 @@
     </div>
 </form>
 
+{% set rec = reconciliation %}
+<div style="margin: 14px 0; padding: 12px 14px; background: #fafafa;
+            border: 1px solid var(--grey); border-radius: 8px;">
+    <h3 style="margin: 0 0 10px; font-size: 14px; color: var(--navy);
+               text-transform: uppercase; letter-spacing: 0.5px;">Reconciliation</h3>
+    <table style="font-size: 14px; line-height: 1.7;">
+        <tr><td style="padding-right: 16px;">Attendees:</td><td><strong>{{ rec.attendees }}</strong></td></tr>
+        <tr><td style="padding-right: 16px;">Online used:</td><td>{{ rec.online_used }}</td></tr>
+        <tr><td style="padding-right: 16px;">Paper ballots:</td><td>{{ rec.paper }}</td></tr>
+        <tr><td style="padding-right: 16px;">Postal:</td><td>{{ rec.postal }}</td></tr>
+        <tr><td style="padding-right: 16px;">Gap:</td>
+            <td>
+                {% if rec.gap > 0 %}
+                    <span style="color: #555;">{{ rec.gap }} (within attendance)</span>
+                {% elif rec.gap == 0 %}
+                    <span style="color: #0a7;">Reconciled: every attendee voted.</span>
+                {% else %}
+                    <span style="color: #c00;"><strong>{{ rec.gap | abs }} more ballots than attendees</strong></span>
+                {% endif %}
+            </td></tr>
+        {% if rec.failed_scans > 0 %}
+        <tr><td style="padding-right: 16px;">Failed scan attempts:</td><td>{{ rec.failed_scans }}</td></tr>
+        {% endif %}
+    </table>
+    {% set big_gap = rec.gap > 0 and rec.gap > 2 and rec.gap > (rec.attendees // 10) %}
+    {% if big_gap %}
+    <p style="margin: 8px 0 0; font-size: 13px; color: #555;">
+        Larger gap than expected. Before finalising, consider asking the
+        room: "Did anyone try to vote but isn't sure it worked?"
+    </p>
+    {% endif %}
+</div>
+
+{% if reconciliation.gap < 0 %}
+<div role="alert" style="margin: 14px 0; padding: 12px 14px;
+     background: #ffe6e6; border: 1px solid #c00; border-radius: 8px;">
+    <strong>Ballot count exceeds attendance by {{ reconciliation.gap | abs }}.</strong>
+    Scan paper ballots to find duplicates.
+    <div style="margin-top: 8px;">
+        <a href="{{ url_for('admin_scan_ballots', election_id=sidebar_state.election.id) }}"
+           class="btn btn-primary btn-small">Scan paper ballots</a>
+    </div>
+</div>
+{% else %}
+<div style="margin: 8px 0 14px;">
+    <a href="{{ url_for('admin_scan_ballots', election_id=sidebar_state.election.id) }}"
+       class="btn btn-outline btn-small">Scan paper ballots</a>
+</div>
+{% endif %}
+
 <div class="btn-row" style="margin-bottom: 16px;">
     <a href="{{ url_for('admin_paper_votes', election_id=sidebar_state.election.id) }}" class="btn btn-gold">
         Enter Paper Votes (per candidate)

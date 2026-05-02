@@ -115,7 +115,7 @@
                     <td class="ts">{{ row.ts }}</td>
                     <td>{{ row.round_number or '' }}</td>
                     <td class="code">{{ row.code or '' }}</td>
-                    <td class="result"><span class="result-pill {{ pill_class }}">{{ row.result }}</span></td>
+                    <td class="result"><span class="result-pill {{ pill_class }}">{{ result_labels.get(row.result, row.result) }}</span></td>
                     <td><code>{{ row.path or '' }}</code></td>
                     <td>{{ row.ip or '' }}<br><span class="ua">{{ (row.user_agent or '')[:60] }}{% if (row.user_agent or '')|length > 60 %}…{% endif %}</span></td>
                     <td class="detail">{{ row.detail or '' }}</td>

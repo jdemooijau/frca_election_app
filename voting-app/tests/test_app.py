@@ -937,3 +937,136 @@ class TestDeleteElection:
             assert db.execute("SELECT COUNT(*) FROM postal_votes WHERE election_id = 1").fetchone()[0] == 0
             assert db.execute("SELECT COUNT(*) FROM round_counts WHERE election_id = 1").fetchone()[0] == 0
 
+
+# ---------------------------------------------------------------------------
+# Shared seed helper for scan endpoint tests
+# ---------------------------------------------------------------------------
+
+def _seed_count_phase_election(db, used_codes=None, unused_codes=None,
+                                paper_ballot_count=5):
+    """Seed an election in the count phase. Returns dict with id, name, codes.
+
+    display_phase=3 represents the count phase in the wizard sidebar.
+    voting_open=0 and paper_count_enabled=0 are correct defaults for count phase.
+    The codes table requires plaintext (NOT NULL DEFAULT ''), so the plain text
+    is stored alongside the hash for scan lookups.
+    """
+    from app import hash_code
+    used_codes = used_codes or []
+    unused_codes = unused_codes or []
+    cur = db.execute(
+        "INSERT INTO elections (name, election_date, current_round, max_rounds, "
+        "voting_open, display_phase, paper_count_enabled) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("Test Count Election", "2026-05-02", 1, 3, 0, 3, 0)
+    )
+    election_id = cur.lastrowid
+    for c in used_codes:
+        db.execute(
+            "INSERT INTO codes (election_id, code_hash, plaintext, used) VALUES (?, ?, ?, 1)",
+            (election_id, hash_code(c), c)
+        )
+    for c in unused_codes:
+        db.execute(
+            "INSERT INTO codes (election_id, code_hash, plaintext, used) VALUES (?, ?, ?, 0)",
+            (election_id, hash_code(c), c)
+        )
+    db.execute(
+        "INSERT INTO round_counts (election_id, round_number, participants, "
+        "paper_ballot_count, digital_ballot_count) VALUES (?, ?, ?, ?, ?)",
+        (election_id, 1, 50, paper_ballot_count, len(used_codes))
+    )
+    db.commit()
+    return {
+        "id": election_id,
+        "name": "Test Count Election",
+        "codes": list(used_codes) + list(unused_codes),
+        "used_codes": list(used_codes),
+        "unused_codes": list(unused_codes),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Task 18: reconciliation panel on the count step
+# ---------------------------------------------------------------------------
+
+def test_step_count_payload_includes_reconciliation_fields(client):
+    from app import app as flask_app, get_db
+    with flask_app.app_context():
+        info = _seed_count_phase_election(get_db(), used_codes=["KR4T7N", "AB3XY9"],
+                                          unused_codes=["JK5WL6"], paper_ballot_count=20)
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    rv = client.get(f"/admin/election/{info['id']}/step/count")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Reconciliation" in body
+    assert "Attendees" in body
+    assert "Paper ballots" in body
+    assert "Gap" in body
+
+
+def test_step_count_shows_red_banner_when_ballots_exceed_attendance(client):
+    from app import app as flask_app, get_db
+    with flask_app.app_context():
+        info = _seed_count_phase_election(get_db(), used_codes=["KR4T7N", "AB3XY9", "JK5WL6"],
+                                          unused_codes=[], paper_ballot_count=50)
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    rv = client.get(f"/admin/election/{info['id']}/step/count")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "exceeds attendance" in body
+    assert "Scan paper ballots" in body
+
+
+# ---------------------------------------------------------------------------
+# Task 19: e2e double-vote caught by scan
+# ---------------------------------------------------------------------------
+
+def test_e2e_double_vote_caught_by_scan(client):
+    """End-to-end: a brother votes online with code X, then a paper
+    ballot bearing the same QR is scanned at count. The scan must
+    decrement paper_ballot_count and create an audit row.
+    """
+    from app import app as flask_app, get_db
+    with flask_app.app_context():
+        info = _seed_count_phase_election(get_db(), used_codes=["KR4T7N"],
+                                          unused_codes=[], paper_ballot_count=10)
+    eid = info["id"]
+
+    # Sanity: starting state.
+    with flask_app.app_context():
+        rc = get_db().execute(
+            "SELECT paper_ballot_count FROM round_counts WHERE election_id = ? AND round_number = 1",
+            (eid,)
+        ).fetchone()
+        assert rc["paper_ballot_count"] == 10
+
+    # Establish admin session.
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+
+    # Act: scan the same code (simulating the operator finding the
+    # paper ballot bearing this voter's QR in the box).
+    rv = client.post(
+        f"/admin/elections/{eid}/scan-ballot-result",
+        json={"code": "KR4T7N"},
+    )
+    assert rv.status_code == 200
+    assert rv.get_json()["result"] == "match"
+
+    # Assert: paper_ballot_count decremented, audit row created.
+    with flask_app.app_context():
+        rc2 = get_db().execute(
+            "SELECT paper_ballot_count FROM round_counts WHERE election_id = ? AND round_number = 1",
+            (eid,)
+        ).fetchone()
+        assert rc2["paper_ballot_count"] == 9
+
+        audit = get_db().execute(
+            "SELECT result FROM voter_audit_log "
+            "WHERE election_id = ? AND result = 'paper_set_aside_at_count'",
+            (eid,)
+        ).fetchall()
+        assert len(audit) == 1

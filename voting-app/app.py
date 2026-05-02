@@ -83,6 +83,21 @@ DEFAULT_ADMIN_PASSWORD = "admin"
 CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 6
 
+# Human-readable labels for voter audit-log result codes.
+# Used by the admin voter-log view (voter_log.html).
+# Keep entries in alphabetical order; fall back to the raw value for any
+# result not listed here.
+RESULT_LABELS = {
+    "code_accepted":                   "Code accepted",
+    "paper_set_aside_at_count":        "Paper ballot set aside (already voted online)",
+    "rejected_already_used":           "Rejected: code already used",
+    "rejected_already_used_at_submit": "Rejected: code already used (at submit)",
+    "rejected_invalid_format":         "Rejected: invalid code format",
+    "rejected_unknown_code":           "Rejected: unknown code",
+    "rejected_voting_closed":          "Rejected: voting closed",
+    "vote_submitted":                  "Vote submitted",
+}
+
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
@@ -1834,6 +1849,37 @@ def _build_manage_view_payload(election_id):
         ),
     }
 
+    # Reconciliation panel inputs (paper-scan feature). gap > 0 means
+    # abstentions, gap == 0 means full turnout, gap < 0 means more
+    # ballots than attendees (double-vote).
+    used_codes_count = db.execute(
+        "SELECT COUNT(*) FROM codes WHERE election_id = ? AND used = 1",
+        (election_id,)
+    ).fetchone()[0]
+    in_person_participants_rec, paper_ballot_count_val, _ = get_round_counts(election_id, current_round)
+    try:
+        postal_voter_count_rec = db.execute(
+            "SELECT COUNT(*) FROM postal_votes WHERE election_id = ? AND round_number = ?",
+            (election_id, current_round)
+        ).fetchone()[0]
+    except Exception:
+        postal_voter_count_rec = 0
+    gap = (in_person_participants_rec or 0) - (used_codes_count + paper_ballot_count_val + postal_voter_count_rec)
+    failed_scans = db.execute(
+        "SELECT COUNT(*) FROM voter_audit_log WHERE election_id = ? "
+        "AND round_number = ? AND result LIKE 'rejected_%'",
+        (election_id, current_round)
+    ).fetchone()[0]
+
+    reconciliation = {
+        "attendees": in_person_participants_rec or 0,
+        "online_used": used_codes_count,
+        "paper": paper_ballot_count_val,
+        "postal": postal_voter_count_rec,
+        "gap": gap,
+        "failed_scans": failed_scans,
+    }
+
     return {
         "election": election,
         "results": results,
@@ -1855,6 +1901,7 @@ def _build_manage_view_payload(election_id):
         "voting_ever_opened": voting_ever_opened,
         "this_round_opened": this_round_opened,
         "sidebar_state": compute_sidebar_state(election_id),
+        "reconciliation": reconciliation,
     }
 
 
@@ -2371,6 +2418,7 @@ def admin_voter_log(election_id):
         limit=limit,
         distinct_results=distinct_results,
         repeat_offenders=repeat_offenders,
+        result_labels=RESULT_LABELS,
     )
 
 
@@ -3773,6 +3821,78 @@ def admin_count_persist(election_id, round_no):
         round_number=round_no
     )
     return ("", 200)
+
+
+@app.route("/admin/elections/<int:election_id>/scan-ballots", methods=["GET"],
+           endpoint="admin_scan_ballots")
+@admin_required
+def admin_scan_ballots(election_id):
+    db = get_db()
+    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+    if not election:
+        abort(404)
+    if election["voting_open"] or election["display_phase"] == 4:
+        flash("Scanning is only available during the count phase.", "error")
+        return redirect(url_for("admin_step_count", election_id=election_id))
+    return render_template("admin/scan_ballots.html", election=election)
+
+
+@app.route("/admin/elections/<int:election_id>/scan-ballot-result", methods=["POST"])
+@admin_required
+@csrf.exempt
+def admin_scan_ballot_result(election_id):
+    """Process one scanned QR. JSON body: {"code": "KR4T7N"}.
+
+    Response classes:
+        match       - code is currently used in this election; decrement
+                      paper_ballot_count and log an audit row
+        paper_only  - code exists but is not used; no-op
+        unknown     - code does not exist in this election
+    """
+    db = get_db()
+    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+    if not election:
+        abort(404)
+
+    if election["voting_open"] or election["display_phase"] == 4:
+        return jsonify({"error": "Scanning is only available during the count phase."}), 409
+
+    payload = request.get_json(silent=True) or {}
+    raw_code = (payload.get("code") or "").strip().upper()
+    if not raw_code:
+        return jsonify({"result": "unknown"}), 200
+
+    code_h = hash_code(raw_code)
+    row = db.execute(
+        "SELECT used FROM codes WHERE election_id = ? AND code_hash = ?",
+        (election_id, code_h)
+    ).fetchone()
+
+    if row is None:
+        return jsonify({"result": "unknown"}), 200
+    if row["used"] == 0:
+        return jsonify({"result": "paper_only"}), 200
+
+    # Match: decrement paper_ballot_count for the current round and audit.
+    current_round = election["current_round"] or 1
+    cur = db.execute(
+        "UPDATE round_counts SET paper_ballot_count = paper_ballot_count - 1 "
+        "WHERE election_id = ? AND round_number = ? AND paper_ballot_count > 0",
+        (election_id, current_round)
+    )
+    if cur.rowcount == 0:
+        db.commit()
+        log_voter_audit(election_id, raw_code, "paper_set_aside_at_count",
+                        "Paper ballot scanned but paper_ballot_count was already 0",
+                        round_number=current_round)
+        return jsonify({"result": "match",
+                        "warning": "paper_ballot_count is already 0"}), 200
+
+    db.commit()
+    log_voter_audit(election_id, raw_code, "paper_set_aside_at_count",
+                    "Paper ballot scanned during count, code already burned online",
+                    round_number=current_round)
+    return jsonify({"result": "match"}), 200
 
 
 # ---------------------------------------------------------------------------
