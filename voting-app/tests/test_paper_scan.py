@@ -229,3 +229,27 @@ def test_audit_log_page_renders_paper_set_aside_label(client, scan_election):
     # We check the label is present, which is sufficient.
     assert "set aside" in body.lower()
     assert "online" in body.lower()
+
+
+# ---------------------------------------------------------------------------
+# Task 14: template smoke test
+# ---------------------------------------------------------------------------
+
+def test_scan_ballots_template_renders():
+    from app import app as flask_app
+    from flask import render_template
+    with flask_app.test_request_context():
+        # Provide a stub election object so url_for() and {{ election.name }} work.
+        class _Stub:
+            id = 1
+            name = "Test"
+        # The template references admin_scan_ballot_result, which exists,
+        # and admin_step_count, which exists. Just render and confirm
+        # the result is non-empty HTML.
+        from jinja2 import TemplateNotFound
+        try:
+            html = render_template("admin/scan_ballots.html", election=_Stub())
+        except TemplateNotFound:
+            html = ""
+        assert "frcdd-scanner-video" in html
+        assert "/admin/elections/1/scan-ballot-result" in html
