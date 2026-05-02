@@ -98,7 +98,8 @@
         } else if (result === 'paper_only') {
             resultEl.style.background = '#e6f6ee';
             resultEl.style.color = '#0a7a3a';
-            resultEl.textContent = 'Verified paper ballot OK';
+            resultEl.textContent = 'Ballot code ' + formatted +
+                '. Verified paper ballot OK';
             flashColor('#0a7', 300);
             beep(150, 880);
         } else {

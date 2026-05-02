@@ -78,17 +78,20 @@ def _draw_warning_strip(c, x, bottom_y, w, text):
 
 
 def _calc_code_slip_height(wifi_password):
-    """Calculate the content height needed for a code slip."""
+    """Calculate the content height needed for a code slip.
+
+    Sized so 6 slips (3 rows x 2 cols) fit on A4 in dual-sided printing:
+    rows = floor((297 - 16 + 6) / (cell_h + 6)) = floor(287 / 92.5) = 3.
+    Total target: <= 89.67 mm.
+    """
     h = 0
-    h += 10 * mm  # header ("Vote Digitally" + rule + top padding)
-    h += 17 * mm  # step 1 (WiFi) + gap to step 2
+    h += 9 * mm   # header ("Vote Digitally" + rule + top padding)
+    h += 14 * mm  # step 1 (WiFi) + gap to step 2
     h += 3.5 * mm  # password / "No password needed" line
-    h += 32 * mm  # step 2 (QR row: label + QR/code side by side)
-    h += 28 * mm  # dashed separator + step 3 (fallback)
-    # Step 3 grew from 17mm to 28mm in 2026-05 to make room for the
-    # 36mm QR (previously 24mm) without crowding the OR-pill row.
+    h += 31 * mm  # step 2 (QR row: label + 36mm QR)
+    h += 24 * mm  # dashed separator + step 3 (fallback url + code)
     h += _WARNING_STRIP_H  # warning strip
-    h += 2 * mm   # bottom padding
+    h += 1 * mm   # bottom padding
     return h
 
 
@@ -119,7 +122,7 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     c.setLineWidth(1.5)
     c.line(x + 3 * mm, y, x + w - 3 * mm, y)
     c.setLineWidth(1)
-    y -= 6 * mm
+    y -= 5 * mm
 
     # --- Step number circle helper ---
     def _step_circle(sx, sy, num, active=True):
@@ -154,14 +157,14 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
         c.drawString(label_x, y, f"Password: {wifi_password}")
     else:
         c.drawString(label_x, y, "No password needed")
-    y -= 7 * mm
+    y -= 4 * mm
 
     # --- Step 2: Scan QR code ---
     _step_circle(tx, y, 2)
     c.setFont("Helvetica", 10)
     c.setFillColor(HexColor("#777777"))
     c.drawString(label_x, y, "Scan QR code with your phone camera")
-    y -= 2 * mm
+    y -= 1 * mm
 
     # QR image only (voting code moved to step 3)
     qr_size = 36 * mm
@@ -173,7 +176,7 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     y -= qr_size + 2 * mm
 
     # --- OR divider + manual fallback (anchored above warning) ---
-    y3 = bottom_y + _WARNING_STRIP_H + 14 * mm
+    y3 = bottom_y + _WARNING_STRIP_H + 10 * mm
     or_y = y3 + 7 * mm  # centre line for the OR pill
 
     # Draw line on each side of the "OR" pill
