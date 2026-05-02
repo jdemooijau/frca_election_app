@@ -160,3 +160,33 @@ def test_endpoint_rejects_when_finalised(client):
     assert "count phase" in (body.get("error") or "").lower()
 
 
+def test_match_clamps_at_zero_paper_count(client):
+    from app import app as flask_app, get_db
+    from tests.test_app import _seed_count_phase_election
+    with flask_app.app_context():
+        db = get_db()
+        info = _seed_count_phase_election(db, used_codes=["KR4T7N"], unused_codes=[],
+                                          paper_ballot_count=0)
+
+    rv = _post_scan(client, info["id"], "KR4T7N")
+    assert rv.status_code == 200
+    body = rv.get_json()
+    assert body["result"] == "match"
+    assert "warning" in body
+
+    from app import get_db as get_db_2
+    with flask_app.app_context():
+        db2 = get_db_2()
+        row = db2.execute(
+            "SELECT paper_ballot_count FROM round_counts "
+            "WHERE election_id = ? AND round_number = 1",
+            (info["id"],)
+        ).fetchone()
+        assert row["paper_ballot_count"] == 0  # not negative
+
+        audit_count = db2.execute(
+            "SELECT COUNT(*) AS n FROM voter_audit_log "
+            "WHERE election_id = ? AND result = 'paper_set_aside_at_count'",
+            (info["id"],)
+        ).fetchone()["n"]
+        assert audit_count == 1  # warning path still logs
