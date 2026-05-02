@@ -172,7 +172,11 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
 
     # --- OR divider + manual fallback (anchored above warning) ---
     y3 = bottom_y + _WARNING_STRIP_H + 14 * mm
-    or_y = y3 + 7 * mm  # centre line for the OR pill
+    # Place the OR pill in the middle of the gap between the QR's
+    # bottom edge and the "Go to" text. A fixed offset above y3 would
+    # let the pill overlap the QR's lower-right alignment pattern with
+    # the 32mm QR, hurting scan reliability at angles.
+    or_y = (y + y3) / 2
 
     # Draw line on each side of the "OR" pill
     or_text = "OR"
