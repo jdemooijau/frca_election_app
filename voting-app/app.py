@@ -1849,6 +1849,37 @@ def _build_manage_view_payload(election_id):
         ),
     }
 
+    # Reconciliation panel inputs (paper-scan feature). gap > 0 means
+    # abstentions, gap == 0 means full turnout, gap < 0 means more
+    # ballots than attendees (double-vote).
+    used_codes_count = db.execute(
+        "SELECT COUNT(*) FROM codes WHERE election_id = ? AND used = 1",
+        (election_id,)
+    ).fetchone()[0]
+    in_person_participants_rec, paper_ballot_count_val, _ = get_round_counts(election_id, current_round)
+    try:
+        postal_voter_count_rec = db.execute(
+            "SELECT COUNT(*) FROM postal_votes WHERE election_id = ? AND round_number = ?",
+            (election_id, current_round)
+        ).fetchone()[0]
+    except Exception:
+        postal_voter_count_rec = 0
+    gap = (in_person_participants_rec or 0) - (used_codes_count + paper_ballot_count_val + postal_voter_count_rec)
+    failed_scans = db.execute(
+        "SELECT COUNT(*) FROM voter_audit_log WHERE election_id = ? "
+        "AND round_number = ? AND result LIKE 'rejected_%'",
+        (election_id, current_round)
+    ).fetchone()[0]
+
+    reconciliation = {
+        "attendees": in_person_participants_rec or 0,
+        "online_used": used_codes_count,
+        "paper": paper_ballot_count_val,
+        "postal": postal_voter_count_rec,
+        "gap": gap,
+        "failed_scans": failed_scans,
+    }
+
     return {
         "election": election,
         "results": results,
@@ -1870,6 +1901,7 @@ def _build_manage_view_payload(election_id):
         "voting_ever_opened": voting_ever_opened,
         "this_round_opened": this_round_opened,
         "sidebar_state": compute_sidebar_state(election_id),
+        "reconciliation": reconciliation,
     }
 
 
