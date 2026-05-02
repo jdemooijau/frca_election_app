@@ -83,6 +83,21 @@ DEFAULT_ADMIN_PASSWORD = "admin"
 CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 6
 
+# Human-readable labels for voter audit-log result codes.
+# Used by the admin voter-log view (voter_log.html).
+# Keep entries in alphabetical order; fall back to the raw value for any
+# result not listed here.
+RESULT_LABELS = {
+    "code_accepted":                   "Code accepted",
+    "paper_set_aside_at_count":        "Paper ballot set aside (already voted online)",
+    "rejected_already_used":           "Rejected: code already used",
+    "rejected_already_used_at_submit": "Rejected: code already used (at submit)",
+    "rejected_invalid_format":         "Rejected: invalid code format",
+    "rejected_unknown_code":           "Rejected: unknown code",
+    "rejected_voting_closed":          "Rejected: voting closed",
+    "vote_submitted":                  "Vote submitted",
+}
+
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
@@ -2371,6 +2386,7 @@ def admin_voter_log(election_id):
         limit=limit,
         distinct_results=distinct_results,
         repeat_offenders=repeat_offenders,
+        result_labels=RESULT_LABELS,
     )
 
 

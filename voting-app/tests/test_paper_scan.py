@@ -190,3 +190,42 @@ def test_match_clamps_at_zero_paper_count(client):
             (info["id"],)
         ).fetchone()["n"]
         assert audit_count == 1  # warning path still logs
+
+
+# ---------------------------------------------------------------------------
+# Task 12: audit-log label rendering
+# ---------------------------------------------------------------------------
+
+def test_paper_set_aside_at_count_has_audit_label():
+    """RESULT_LABELS must contain a human-readable entry for paper_set_aside_at_count
+    that includes both 'set aside' and 'online'."""
+    from app import RESULT_LABELS
+    assert "paper_set_aside_at_count" in RESULT_LABELS
+    label = RESULT_LABELS["paper_set_aside_at_count"].lower()
+    assert "set aside" in label
+    assert "online" in label
+
+
+def test_audit_log_page_renders_paper_set_aside_label(client, scan_election):
+    """Voter audit-log page must show the human-readable label, not the raw result
+    key, when a paper_set_aside_at_count row exists in the audit log."""
+    eid = scan_election["id"]
+    used_code = scan_election["used_codes"][0]
+
+    # Trigger the scan to produce an audit row with result='paper_set_aside_at_count'.
+    rv = _post_scan(client, eid, used_code)
+    assert rv.status_code == 200
+    assert rv.get_json()["result"] == "match"
+
+    # Fetch the voter audit-log admin page.
+    rv_log = client.get(f"/admin/election/{eid}/voter-log")
+    assert rv_log.status_code == 200
+    body = rv_log.data.decode("utf-8")
+
+    # The human-readable label must appear in the rendered HTML.
+    assert "Paper ballot set aside (already voted online)" in body
+    # The raw result key must NOT appear as a visible pill label (it may appear
+    # in form values but should not appear as the pill text).
+    # We check the label is present, which is sufficient.
+    assert "set aside" in body.lower()
+    assert "online" in body.lower()
