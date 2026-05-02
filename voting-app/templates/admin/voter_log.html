@@ -54,12 +54,12 @@
 
     {% if repeat_offenders %}
     <div style="padding: 14px 18px; border: 2px solid #C0392B; border-radius: 8px; background: #FFEAE8; color: #6B1A12; margin-bottom: 16px;">
-        <strong>&#9888; Codes that were accepted/submitted more than once:</strong>
+        <strong>&#9888; Codes with repeated events (same event fired more than once):</strong>
         <ul style="margin: 8px 0 0 18px;">
             {% for r in repeat_offenders %}
             <li>
-                <code>{{ r.code }}</code> — {{ r.n }} times.
-                <a href="{{ url_for('admin_voter_log', election_id=election.id, code=r.code) }}">View entries</a>
+                <code>{{ r.code }}</code>: {{ result_labels.get(r.result, r.result) }} {{ r.n }} times.
+                <a href="{{ url_for('admin_voter_log', election_id=election.id, code=r.code, result=r.result) }}">View entries</a>
             </li>
             {% endfor %}
         </ul>
