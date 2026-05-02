@@ -3827,33 +3827,33 @@ def admin_count_persist(election_id, round_no):
            endpoint="admin_scan_ballots")
 @admin_required
 def admin_scan_ballots(election_id):
+    """Render the scanner page. Always reachable so the chairman can
+    open the camera UI for testing or rehearsal in any phase. The
+    underlying scan endpoint keeps its phase guards, so an accidental
+    scan during voting or after finalisation is a server-side no-op
+    (the JS surfaces the 409 as a notice in the page)."""
     db = get_db()
     election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
     if not election:
         abort(404)
-    if election["voting_open"] or election["display_phase"] == 4:
-        flash("Scanning is only available during the count phase.", "error")
-        return redirect(url_for("admin_step_count", election_id=election_id))
     return render_template("admin/scan_ballots.html", election=election)
 
 
 @app.route("/scanner", methods=["GET"])
 @admin_required
 def admin_scanner_shortcut():
-    """Phone-friendly shortcut. Resolves to the most recent election in
-    count phase (voting closed, not yet finalised) so the chairman can
-    type /scanner instead of the full /admin/elections/<id>/scan-ballots
-    URL on his phone. Falls back to the admin dashboard if no election
-    is currently in count phase.
-    """
+    """Phone-friendly shortcut. Resolves to the most recent election so
+    the chairman can type /scanner instead of the full
+    /admin/elections/<id>/scan-ballots URL on his phone, in any phase.
+    Falls back to the admin dashboard only if no election exists at
+    all. The scanner page renders unconditionally; phase enforcement
+    lives on the underlying scan endpoint."""
     db = get_db()
     election = db.execute(
-        "SELECT id FROM elections "
-        "WHERE voting_open = 0 AND display_phase != 4 "
-        "ORDER BY id DESC LIMIT 1"
+        "SELECT id FROM elections ORDER BY id DESC LIMIT 1"
     ).fetchone()
     if not election:
-        flash("No election is currently in the count phase.", "error")
+        flash("No election exists yet.", "error")
         return redirect(url_for("admin_dashboard"))
     return redirect(url_for("admin_scan_ballots", election_id=election["id"]))
 

@@ -268,7 +268,10 @@ def test_scan_ballots_page_renders(client, scan_election):
     assert "frcdd-scanner-video" in body
 
 
-def test_scan_ballots_page_redirects_when_voting_open(client):
+def test_scan_ballots_page_renders_even_when_voting_open(client):
+    """The scanner page is reachable in any phase so the chairman can
+    open the camera UI for testing or rehearsal. Phase enforcement is
+    on the underlying scan endpoint, not the page."""
     from app import app as flask_app, get_db
     from tests.test_app import _seed_count_phase_election
     with flask_app.app_context():
@@ -278,8 +281,8 @@ def test_scan_ballots_page_redirects_when_voting_open(client):
         db.commit()
 
     rv = client.get(f"/admin/elections/{info['id']}/scan-ballots", follow_redirects=False)
-    assert rv.status_code == 302
-    assert "/step/count" in rv.headers["Location"]
+    assert rv.status_code == 200
+    assert "frcdd-scanner-video" in rv.get_data(as_text=True)
 
 
 def test_scan_endpoint_requires_admin():
@@ -321,30 +324,36 @@ def test_scan_endpoint_requires_admin():
         _os.unlink(db_path)
 
 
-def test_scanner_shortcut_redirects_to_active_election(client, scan_election):
+def test_scanner_shortcut_redirects_to_most_recent_election(client, scan_election):
     """GET /scanner redirects to the scan-ballots page for the most
-    recent election in count phase."""
+    recent election regardless of phase."""
     eid = scan_election["id"]
     rv = client.get("/scanner", follow_redirects=False)
     assert rv.status_code == 302
     assert f"/admin/elections/{eid}/scan-ballots" in rv.headers["Location"]
 
 
-def test_scanner_shortcut_falls_back_when_no_count_phase_election(client):
-    """GET /scanner redirects to the admin dashboard with a flash when
-    no election is currently in count phase."""
+def test_scanner_shortcut_resolves_even_when_finalised(client):
+    """GET /scanner still resolves to a finalised election's scan page
+    so the chairman can land on the camera UI for testing or rehearsal."""
     from app import app as flask_app, get_db
     from tests.test_app import _seed_count_phase_election
     with flask_app.app_context():
         info = _seed_count_phase_election(get_db(), used_codes=["KR4T7N"], unused_codes=[])
-        # Move it past count: finalised.
         get_db().execute("UPDATE elections SET display_phase = 4 WHERE id = ?", (info["id"],))
         get_db().commit()
 
     rv = client.get("/scanner", follow_redirects=False)
     assert rv.status_code == 302
+    assert f"/admin/elections/{info['id']}/scan-ballots" in rv.headers["Location"]
+
+
+def test_scanner_shortcut_falls_back_when_no_election_exists(client):
+    """GET /scanner redirects to the admin dashboard with a flash only
+    when no election exists at all."""
+    rv = client.get("/scanner", follow_redirects=False)
+    assert rv.status_code == 302
     assert "/admin" in rv.headers["Location"]
-    # Should not be the scan-ballots URL.
     assert "/scan-ballots" not in rv.headers["Location"]
 
 
