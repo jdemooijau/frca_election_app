@@ -1,13 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Scan paper ballots - {{ election.name }}{% endblock %}
+{% block title %}Check ballot - {{ election.name }}{% endblock %}
 {% block content %}
 <div class="container" style="max-width: 480px;">
-    <h1 style="margin: 0 0 8px;">Scan paper ballots</h1>
-    <p style="font-size: 14px; color: #666; margin: 0 0 12px;">
-        Hold each ballot's QR under the camera. Green = paper-only,
-        keep counting. Red = already voted online, set aside. Yellow =
-        unknown, set aside or rescan.
-    </p>
+    <h1 style="margin: 0 0 12px; font-size: 20px;">Check if ballot was used online</h1>
 
     <div id="frcdd-scanner-frame" style="position: relative;
          width: 100%; aspect-ratio: 1/1; background: #000;
@@ -18,14 +13,12 @@
              inset: 0; opacity: 0; pointer-events: none;"></div>
     </div>
 
-    <div style="display: flex; gap: 16px; justify-content: space-around;
-                margin: 12px 0; font-size: 16px;">
-        <div>Scanned: <strong id="frcdd-scan-count">0</strong></div>
-        <div>Set aside: <strong id="frcdd-aside-count">0</strong></div>
+    <div id="frcdd-scan-result" style="margin: 16px 0; padding: 18px 14px;
+         border-radius: 8px; text-align: center; font-size: 18px;
+         font-weight: 600; min-height: 60px; background: #f4f4f4;
+         color: #888; line-height: 1.4;">
+        Hold a ballot's QR under the camera.
     </div>
-
-    <div id="frcdd-scan-last" style="min-height: 22px; font-size: 14px;
-         color: #555; text-align: center;"></div>
 
     <div id="frcdd-scan-notice" style="display: none; padding: 10px;
          background: #ffe6e6; border: 1px solid #c00; border-radius: 6px;
@@ -48,16 +41,12 @@
 (function() {
     var video = document.getElementById('frcdd-scanner-video');
     var flash = document.getElementById('frcdd-scanner-flash');
-    var scanCountEl = document.getElementById('frcdd-scan-count');
-    var asideCountEl = document.getElementById('frcdd-aside-count');
-    var lastEl = document.getElementById('frcdd-scan-last');
+    var resultEl = document.getElementById('frcdd-scan-result');
     var noticeEl = document.getElementById('frcdd-scan-notice');
     var muteBtn = document.getElementById('frcdd-mute-btn');
     var csrf = document.getElementById('frcdd-csrf').value;
     var endpoint = document.getElementById('frcdd-endpoint').value;
 
-    var scanCount = 0;
-    var asideCount = 0;
     var muted = false;
     var lastSeen = new Map();
     var detector = null;
@@ -91,25 +80,31 @@
         setTimeout(function() { flash.style.opacity = '0'; }, durationMs);
     }
 
-    function showResult(result, code, warning) {
+    function formatCode(code) {
+        if (!code) return '';
+        if (code.length === 6) return code.slice(0, 3) + ' ' + code.slice(3);
+        return code;
+    }
+
+    function showResult(result, code) {
+        var formatted = formatCode(code);
         if (result === 'match') {
-            asideCount += 1;
-            asideCountEl.textContent = asideCount;
-            lastEl.textContent = 'Set aside ' + code;
+            resultEl.style.background = '#fdecea';
+            resultEl.style.color = '#a40000';
+            resultEl.textContent = 'Ballot code ' + formatted +
+                ' was used to vote digitally';
             flashColor('#c00', 1000);
             beep(600, 320);
-            if (warning) {
-                noticeEl.textContent = 'Warning: ' + warning;
-                noticeEl.style.display = 'block';
-            }
         } else if (result === 'paper_only') {
-            scanCount += 1;
-            scanCountEl.textContent = scanCount;
-            lastEl.textContent = '&#x2713; Paper-only (' + code + ')';
+            resultEl.style.background = '#e6f6ee';
+            resultEl.style.color = '#0a7a3a';
+            resultEl.textContent = 'Verified paper ballot OK';
             flashColor('#0a7', 300);
             beep(150, 880);
         } else {
-            lastEl.textContent = 'Unknown QR. Set aside or rescan.';
+            resultEl.style.background = '#fff8e1';
+            resultEl.style.color = '#7a5c00';
+            resultEl.textContent = 'Unknown QR. Not from this election.';
             flashColor('#cc0', 1000);
             beep(120, 660);
             setTimeout(function() { beep(120, 660); }, 180);
@@ -126,16 +121,13 @@
             },
             body: JSON.stringify({code: code}),
         }).then(function(r) {
-            if (r.status === 409) {
-                noticeEl.textContent = 'Scanning is only available during the count phase.';
-                noticeEl.style.display = 'block';
-                return null;
-            }
             return r.json();
         }).then(function(j) {
-            if (j) showResult(j.result, code, j.warning);
+            if (j) showResult(j.result, code);
         }).catch(function() {
-            lastEl.textContent = 'Network error. Retrying scan.';
+            resultEl.style.background = '#f4f4f4';
+            resultEl.style.color = '#888';
+            resultEl.textContent = 'Network error. Try again.';
         });
     }
 

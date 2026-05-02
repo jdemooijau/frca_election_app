@@ -266,7 +266,7 @@ def test_scan_ballots_page_renders(client, scan_election):
     rv = client.get(f"/admin/elections/{eid}/scan-ballots")
     assert rv.status_code == 200
     body = rv.get_data(as_text=True)
-    assert "Scan paper ballots" in body
+    assert "Check if ballot was used online" in body
     assert "frcdd-scanner-video" in body
 
 
