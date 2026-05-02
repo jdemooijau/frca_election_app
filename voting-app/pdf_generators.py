@@ -84,7 +84,9 @@ def _calc_code_slip_height(wifi_password):
     h += 17 * mm  # step 1 (WiFi) + gap to step 2
     h += 3.5 * mm  # password / "No password needed" line
     h += 32 * mm  # step 2 (QR row: label + QR/code side by side)
-    h += 17 * mm  # dashed separator + step 3 (fallback)
+    h += 28 * mm  # dashed separator + step 3 (fallback)
+    # Step 3 grew from 17mm to 28mm in 2026-05 to make room for the
+    # 36mm QR (previously 24mm) without crowding the OR-pill row.
     h += _WARNING_STRIP_H  # warning strip
     h += 2 * mm   # bottom padding
     return h
@@ -159,10 +161,10 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     c.setFont("Helvetica", 10)
     c.setFillColor(HexColor("#777777"))
     c.drawString(label_x, y, "Scan QR code with your phone camera")
-    y -= 4 * mm
+    y -= 2 * mm
 
     # QR image only (voting code moved to step 3)
-    qr_size = 32 * mm
+    qr_size = 36 * mm
     vote_url = f"{base_url}/v/{code}"
     qr_img = _generate_qr_image(vote_url)
     qr_x = label_x
@@ -172,11 +174,7 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
 
     # --- OR divider + manual fallback (anchored above warning) ---
     y3 = bottom_y + _WARNING_STRIP_H + 14 * mm
-    # Place the OR pill in the middle of the gap between the QR's
-    # bottom edge and the "Go to" text. A fixed offset above y3 would
-    # let the pill overlap the QR's lower-right alignment pattern with
-    # the 32mm QR, hurting scan reliability at angles.
-    or_y = (y + y3) / 2
+    or_y = y3 + 7 * mm  # centre line for the OR pill
 
     # Draw line on each side of the "OR" pill
     or_text = "OR"

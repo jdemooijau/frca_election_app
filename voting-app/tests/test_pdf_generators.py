@@ -559,22 +559,22 @@ def test_printer_pack_zip_instructions_content():
     assert "6_attendance_register.pdf" in instructions
 
 
-def test_code_slip_qr_size_is_32mm():
-    """Regression: the QR rendered on the code slip must be at least 32 mm
+def test_code_slip_qr_size_is_36mm():
+    """Regression: the QR rendered on the code slip must be at least 36 mm
     wide so phone cameras can scan it reliably during count-time triage.
     See docs/superpowers/specs/2026-05-02-paper-scan-and-phone-receipt-design.md.
     """
     import inspect
     from pdf_generators import draw_code_slip
     src = inspect.getsource(draw_code_slip)
-    assert "qr_size = 32 * mm" in src, (
-        "draw_code_slip must use a 32 mm QR for reliable count-time scanning"
+    assert "qr_size = 36 * mm" in src, (
+        "draw_code_slip must use a 36 mm QR for reliable count-time scanning"
     )
 
 
 def test_dual_sided_ballots_pdf_still_generates_with_larger_qr():
     """Regression: the dual-sided grid layout must still produce a PDF
-    without overflowing cells when the QR is 32 mm."""
+    without overflowing cells when the QR is 36 mm."""
     pdf_bytes = _generate_sample_pdf().getvalue()
     assert pdf_bytes.startswith(b"%PDF-")
     assert b"/Image" in pdf_bytes
