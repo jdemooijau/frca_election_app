@@ -1851,12 +1851,9 @@ def _build_manage_view_payload(election_id):
 
     # Reconciliation panel inputs (paper-scan feature). gap > 0 means
     # abstentions, gap == 0 means full turnout, gap < 0 means more
-    # ballots than attendees (double-vote).
-    used_codes_count = db.execute(
-        "SELECT COUNT(*) FROM codes WHERE election_id = ? AND used = 1",
-        (election_id,)
-    ).fetchone()[0]
-    in_person_participants_rec, paper_ballot_count_val, _ = get_round_counts(election_id, current_round)
+    # ballots than attendees (double-vote). Digital count must be
+    # round-scoped; codes.used is cumulative across rounds.
+    in_person_participants_rec, paper_ballot_count_val, used_codes_count = get_round_counts(election_id, current_round)
     try:
         postal_voter_count_rec = db.execute(
             "SELECT COUNT(*) FROM postal_votes WHERE election_id = ? AND round_number = ?",
@@ -2399,13 +2396,16 @@ def admin_voter_log(election_id):
         (election_id,)
     ).fetchall()]
 
-    # Same-code repeats — flag any code that produced more than one
-    # 'code_accepted' or 'vote_submitted'
+    # Same-code repeats: flag a code only when the SAME event fires more
+    # than once. A normal vote produces one 'code_accepted' (on /vote) plus
+    # one 'vote_submitted' (on /submit), so grouping the two together would
+    # mark every successful voter as a repeat offender.
     repeat_offenders = db.execute(
-        "SELECT code, COUNT(*) AS n FROM voter_audit_log "
+        "SELECT code, result, COUNT(*) AS n FROM voter_audit_log "
         "WHERE election_id = ? AND code IS NOT NULL "
         "AND result IN ('code_accepted', 'vote_submitted') "
-        "GROUP BY code HAVING n > 1 ORDER BY n DESC",
+        "GROUP BY code, result HAVING n > 1 "
+        "ORDER BY n DESC, code",
         (election_id,)
     ).fetchall()
 
