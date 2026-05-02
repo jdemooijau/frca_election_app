@@ -85,11 +85,11 @@ def _calc_code_slip_height(wifi_password):
     Total target: <= 89.67 mm.
     """
     h = 0
-    h += 9 * mm   # header ("Vote Digitally" + rule + top padding)
+    h += 10 * mm  # header ("Vote Digitally" + rule + top padding)
     h += 14 * mm  # step 1 (WiFi) + gap to step 2
     h += 3.5 * mm  # password / "No password needed" line
     h += 31 * mm  # step 2 (QR row: label + 36mm QR)
-    h += 24 * mm  # dashed separator + step 3 (fallback url + code)
+    h += 23 * mm  # dashed separator + step 3 (fallback url + code)
     h += _WARNING_STRIP_H  # warning strip
     h += 1 * mm   # bottom padding
     return h
@@ -122,7 +122,7 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     c.setLineWidth(1.5)
     c.line(x + 3 * mm, y, x + w - 3 * mm, y)
     c.setLineWidth(1)
-    y -= 5 * mm
+    y -= 6 * mm
 
     # --- Step number circle helper ---
     def _step_circle(sx, sy, num, active=True):
@@ -176,7 +176,7 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     y -= qr_size + 2 * mm
 
     # --- OR divider + manual fallback (anchored above warning) ---
-    y3 = bottom_y + _WARNING_STRIP_H + 10 * mm
+    y3 = bottom_y + _WARNING_STRIP_H + 9 * mm
     or_y = y3 + 7 * mm  # centre line for the OR pill
 
     # Draw line on each side of the "OR" pill
