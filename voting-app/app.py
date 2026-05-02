@@ -3792,6 +3792,9 @@ def admin_scan_ballot_result(election_id):
     if not election:
         abort(404)
 
+    if election["voting_open"] or election["display_phase"] == 4:
+        return jsonify({"error": "Scanning is only available during the count phase."}), 409
+
     payload = request.get_json(silent=True) or {}
     raw_code = (payload.get("code") or "").strip().upper()
     if not raw_code:

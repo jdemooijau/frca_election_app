@@ -128,3 +128,35 @@ def test_empty_code_returns_unknown(client, scan_election):
     rv = _post_scan(client, eid, "")
     assert rv.status_code == 200
     assert rv.get_json() == {"result": "unknown"}
+
+
+def test_endpoint_rejects_when_voting_open(client):
+    from app import app as flask_app, get_db
+    from tests.test_app import _seed_count_phase_election
+    with flask_app.app_context():
+        db = get_db()
+        info = _seed_count_phase_election(db, used_codes=["KR4T7N"], unused_codes=[])
+        db.execute("UPDATE elections SET voting_open = 1 WHERE id = ?", (info["id"],))
+        db.commit()
+
+    rv = _post_scan(client, info["id"], "KR4T7N")
+    assert rv.status_code == 409
+    body = rv.get_json() or {}
+    assert "count phase" in (body.get("error") or "").lower()
+
+
+def test_endpoint_rejects_when_finalised(client):
+    from app import app as flask_app, get_db
+    from tests.test_app import _seed_count_phase_election
+    with flask_app.app_context():
+        db = get_db()
+        info = _seed_count_phase_election(db, used_codes=["KR4T7N"], unused_codes=[])
+        db.execute("UPDATE elections SET display_phase = 4 WHERE id = ?", (info["id"],))
+        db.commit()
+
+    rv = _post_scan(client, info["id"], "KR4T7N")
+    assert rv.status_code == 409
+    body = rv.get_json() or {}
+    assert "count phase" in (body.get("error") or "").lower()
+
+
