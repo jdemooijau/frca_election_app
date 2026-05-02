@@ -937,3 +937,50 @@ class TestDeleteElection:
             assert db.execute("SELECT COUNT(*) FROM postal_votes WHERE election_id = 1").fetchone()[0] == 0
             assert db.execute("SELECT COUNT(*) FROM round_counts WHERE election_id = 1").fetchone()[0] == 0
 
+
+# ---------------------------------------------------------------------------
+# Shared seed helper for scan endpoint tests
+# ---------------------------------------------------------------------------
+
+def _seed_count_phase_election(db, used_codes=None, unused_codes=None,
+                                paper_ballot_count=5):
+    """Seed an election in the count phase. Returns dict with id, name, codes.
+
+    display_phase=3 represents the count phase in the wizard sidebar.
+    voting_open=0 and paper_count_enabled=0 are correct defaults for count phase.
+    The codes table requires plaintext (NOT NULL DEFAULT ''), so the plain text
+    is stored alongside the hash for scan lookups.
+    """
+    from app import hash_code
+    used_codes = used_codes or []
+    unused_codes = unused_codes or []
+    cur = db.execute(
+        "INSERT INTO elections (name, election_date, current_round, max_rounds, "
+        "voting_open, display_phase, paper_count_enabled) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("Test Count Election", "2026-05-02", 1, 3, 0, 3, 0)
+    )
+    election_id = cur.lastrowid
+    for c in used_codes:
+        db.execute(
+            "INSERT INTO codes (election_id, code_hash, plaintext, used) VALUES (?, ?, ?, 1)",
+            (election_id, hash_code(c), c)
+        )
+    for c in unused_codes:
+        db.execute(
+            "INSERT INTO codes (election_id, code_hash, plaintext, used) VALUES (?, ?, ?, 0)",
+            (election_id, hash_code(c), c)
+        )
+    db.execute(
+        "INSERT INTO round_counts (election_id, round_number, participants, "
+        "paper_ballot_count, digital_ballot_count) VALUES (?, ?, ?, ?, ?)",
+        (election_id, 1, 50, paper_ballot_count, len(used_codes))
+    )
+    db.commit()
+    return {
+        "id": election_id,
+        "name": "Test Count Election",
+        "codes": list(used_codes) + list(unused_codes),
+        "used_codes": list(used_codes),
+        "unused_codes": list(unused_codes),
+    }
