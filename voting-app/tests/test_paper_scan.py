@@ -253,3 +253,30 @@ def test_scan_ballots_template_renders():
             html = ""
         assert "frcdd-scanner-video" in html
         assert "/admin/elections/1/scan-ballot-result" in html
+
+
+# ---------------------------------------------------------------------------
+# Task 16: GET route smoke tests
+# ---------------------------------------------------------------------------
+
+def test_scan_ballots_page_renders(client, scan_election):
+    eid = scan_election["id"]
+    rv = client.get(f"/admin/elections/{eid}/scan-ballots")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Scan paper ballots" in body
+    assert "frcdd-scanner-video" in body
+
+
+def test_scan_ballots_page_redirects_when_voting_open(client):
+    from app import app as flask_app, get_db
+    from tests.test_app import _seed_count_phase_election
+    with flask_app.app_context():
+        db = get_db()
+        info = _seed_count_phase_election(db, used_codes=["KR4T7N"], unused_codes=[])
+        db.execute("UPDATE elections SET voting_open = 1 WHERE id = ?", (info["id"],))
+        db.commit()
+
+    rv = client.get(f"/admin/elections/{info['id']}/scan-ballots", follow_redirects=False)
+    assert rv.status_code == 302
+    assert "/step/count" in rv.headers["Location"]

@@ -3791,6 +3791,20 @@ def admin_count_persist(election_id, round_no):
     return ("", 200)
 
 
+@app.route("/admin/elections/<int:election_id>/scan-ballots", methods=["GET"],
+           endpoint="admin_scan_ballots")
+@admin_required
+def admin_scan_ballots(election_id):
+    db = get_db()
+    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+    if not election:
+        abort(404)
+    if election["voting_open"] or election["display_phase"] == 4:
+        flash("Scanning is only available during the count phase.", "error")
+        return redirect(url_for("admin_step_count", election_id=election_id))
+    return render_template("admin/scan_ballots.html", election=election)
+
+
 @app.route("/admin/elections/<int:election_id>/scan-ballot-result", methods=["POST"])
 @admin_required
 @csrf.exempt
