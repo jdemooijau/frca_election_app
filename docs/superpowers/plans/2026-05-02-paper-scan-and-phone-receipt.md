@@ -10,6 +10,11 @@
 
 **Reference docs:** [`docs/superpowers/specs/2026-05-02-paper-scan-and-phone-receipt-design.md`](../specs/2026-05-02-paper-scan-and-phone-receipt-design.md)
 
+> **Scope note (2026-05-02):** Implementation is currently restricted to Part B (the QR scanner and reconciliation panel). Section 2 (Part A. Phone receipt, Tasks 2-5) is deferred and must be skipped. The integrity gap is fully closed by Part B alone; the deferred receipt feature only addressed the voter's psychological reassurance after a re-scan and can be added in a later cycle without changes to Part B.
+>
+> **Active task list:** 1, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 (16 tasks).
+> **Skip:** Tasks 2, 3, 4, 5.
+
 ---
 
 ## File map
@@ -135,7 +140,9 @@ a ballot at 15-25cm without focus hunting."
 
 ---
 
-## Section 2: Part A. Phone receipt
+## Section 2: Part A. Phone receipt (DEFERRED — SKIP THIS SECTION)
+
+> All tasks in this section (2, 3, 4, 5) are out of scope for the current implementation cycle. Skip directly to Section 3 (Task 6). The tasks remain documented for a future cycle.
 
 ### Task 2: Pass election context to the confirmation route
 
