@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-05-02
+
+### Fixed
+
+- Reconciliation panel on the admin count step now uses the
+  per-round digital ballot count instead of the cumulative
+  `codes.used = 1` total. In round 2+ the cumulative count summed
+  burned codes from prior rounds, inflating the Online used cell and
+  producing spurious "more ballots than attendees" gaps.
+- Voter-log repeat-offender row now states which event repeated
+  (`code_accepted` vs `vote_submitted`) and passes that result
+  through to the View entries link, so the drill-down matches the
+  row instead of mixing event types.
+- Code-slip layout vertical balance restored after the 36 mm QR
+  enlargement: header height +1 mm, OR-pill anchor lifted 1 mm to
+  preserve clearance.
+
+### Removed
+
+- Duplicate "Generated Codes" on-screen list on the Codes step. The
+  Code Slips PDF printed from the same page is the canonical artifact
+  for distributing codes; the redundant monospace list added clutter
+  without new information.
+
 ## [1.3.0] - 2026-05-02
 
 ### Added
