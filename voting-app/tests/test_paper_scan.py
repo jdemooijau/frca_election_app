@@ -280,3 +280,42 @@ def test_scan_ballots_page_redirects_when_voting_open(client):
     rv = client.get(f"/admin/elections/{info['id']}/scan-ballots", follow_redirects=False)
     assert rv.status_code == 302
     assert "/step/count" in rv.headers["Location"]
+
+
+def test_scan_endpoint_requires_admin():
+    """The scan endpoint and the scanner page both require admin auth.
+    Without an admin session, the response must redirect to login."""
+    import tempfile
+    import os as _os
+    from app import app as flask_app, get_db, init_db
+    import app as _app_module
+    from tests.test_app import _seed_count_phase_election
+
+    # Isolate this test with its own temp database so code uniqueness
+    # constraints do not collide with codes inserted by earlier tests.
+    db_fd, db_path = tempfile.mkstemp(suffix=".db")
+    original_db_path = _app_module.DB_PATH
+    _app_module.DB_PATH = db_path
+    flask_app.config["WTF_CSRF_ENABLED"] = False
+    flask_app.config["TESTING"] = True
+    try:
+        with flask_app.app_context():
+            init_db()
+            info = _seed_count_phase_election(get_db(), used_codes=["KR4T7N"], unused_codes=[])
+
+        # Use a fresh test client with no admin session.
+        with flask_app.test_client() as anon:
+            rv = anon.get(f"/admin/elections/{info['id']}/scan-ballots", follow_redirects=False)
+            assert rv.status_code in (302, 401, 403), \
+                f"Expected redirect or auth error, got {rv.status_code}"
+
+            rv = anon.post(
+                f"/admin/elections/{info['id']}/scan-ballot-result",
+                json={"code": "KR4T7N"},
+            )
+            assert rv.status_code in (302, 401, 403), \
+                f"Expected redirect or auth error, got {rv.status_code}"
+    finally:
+        _app_module.DB_PATH = original_db_path
+        _os.close(db_fd)
+        _os.unlink(db_path)

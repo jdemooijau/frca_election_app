@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Paper-ballot QR scanner page on the admin count step. Reads each
   ballot's QR via the device camera (continuous video, browser
   `BarcodeDetector` with vendored `jsQR` fallback). When a scanned QR
-  matches a code already burned online, the scanner halts on the
+  matches a code already burned online, the scanner flags the
   match, atomically decrements `paper_ballot_count` for the current
   round, and writes a `paper_set_aside_at_count` audit-log row. Visual
   flash and audible beep distinguish match / paper-only / unknown
