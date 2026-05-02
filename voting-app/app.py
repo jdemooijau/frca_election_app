@@ -3775,6 +3775,61 @@ def admin_count_persist(election_id, round_no):
     return ("", 200)
 
 
+@app.route("/admin/elections/<int:election_id>/scan-ballot-result", methods=["POST"])
+@admin_required
+@csrf.exempt
+def admin_scan_ballot_result(election_id):
+    """Process one scanned QR. JSON body: {"code": "KR4T7N"}.
+
+    Response classes:
+        match       - code is currently used in this election; decrement
+                      paper_ballot_count and log an audit row
+        paper_only  - code exists but is not used; no-op
+        unknown     - code does not exist in this election
+    """
+    db = get_db()
+    election = db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+    if not election:
+        abort(404)
+
+    payload = request.get_json(silent=True) or {}
+    raw_code = (payload.get("code") or "").strip().upper()
+    if not raw_code:
+        return jsonify({"result": "unknown"}), 200
+
+    code_h = hash_code(raw_code)
+    row = db.execute(
+        "SELECT used FROM codes WHERE election_id = ? AND code_hash = ?",
+        (election_id, code_h)
+    ).fetchone()
+
+    if row is None:
+        return jsonify({"result": "unknown"}), 200
+    if row["used"] == 0:
+        return jsonify({"result": "paper_only"}), 200
+
+    # Match: decrement paper_ballot_count for the current round and audit.
+    current_round = election["current_round"] or 1
+    cur = db.execute(
+        "UPDATE round_counts SET paper_ballot_count = paper_ballot_count - 1 "
+        "WHERE election_id = ? AND round_number = ? AND paper_ballot_count > 0",
+        (election_id, current_round)
+    )
+    if cur.rowcount == 0:
+        db.commit()
+        log_voter_audit(election_id, raw_code, "paper_set_aside_at_count",
+                        "Paper ballot scanned but paper_ballot_count was already 0",
+                        round_number=current_round)
+        return jsonify({"result": "match",
+                        "warning": "paper_ballot_count is already 0"}), 200
+
+    log_voter_audit(election_id, raw_code, "paper_set_aside_at_count",
+                    "Paper ballot scanned during count, code already burned online",
+                    round_number=current_round)
+    db.commit()
+    return jsonify({"result": "match"}), 200
+
+
 # ---------------------------------------------------------------------------
 # Projector display
 # ---------------------------------------------------------------------------

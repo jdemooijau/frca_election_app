@@ -59,3 +59,32 @@ def _post_scan(client, election_id, code):
         f"/admin/elections/{election_id}/scan-ballot-result",
         json={"code": code},
     )
+
+
+def test_match_decrements_paper_count_and_logs_audit(client, scan_election):
+    eid = scan_election["id"]
+    used_code = scan_election["used_codes"][0]
+
+    rv = _post_scan(client, eid, used_code)
+    assert rv.status_code == 200
+    assert rv.get_json() == {"result": "match"}
+
+    # paper_ballot_count must have decremented by exactly 1.
+    from app import app as flask_app, get_db
+    with flask_app.app_context():
+        db = get_db()
+        row = db.execute(
+            "SELECT paper_ballot_count FROM round_counts "
+            "WHERE election_id = ? AND round_number = 1",
+            (eid,)
+        ).fetchone()
+        assert row["paper_ballot_count"] == 4  # was seeded at 5
+
+        # An audit row must exist with the correct result string.
+        audit = db.execute(
+            "SELECT result, code FROM voter_audit_log "
+            "WHERE election_id = ? AND result = 'paper_set_aside_at_count'",
+            (eid,)
+        ).fetchall()
+        assert len(audit) == 1
+        assert audit[0]["code"] == used_code
