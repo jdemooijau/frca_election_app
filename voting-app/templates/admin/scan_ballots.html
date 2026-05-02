@@ -43,5 +43,172 @@
        value="{{ url_for('admin_scan_ballot_result', election_id=election.id) }}">
 
 <script src="{{ url_for('static', filename='vendor/jsqr.min.js') }}"></script>
-{% block scanner_scripts %}{% endblock %}
+{% block scanner_scripts %}
+<script>
+(function() {
+    var video = document.getElementById('frcdd-scanner-video');
+    var flash = document.getElementById('frcdd-scanner-flash');
+    var scanCountEl = document.getElementById('frcdd-scan-count');
+    var asideCountEl = document.getElementById('frcdd-aside-count');
+    var lastEl = document.getElementById('frcdd-scan-last');
+    var noticeEl = document.getElementById('frcdd-scan-notice');
+    var muteBtn = document.getElementById('frcdd-mute-btn');
+    var csrf = document.getElementById('frcdd-csrf').value;
+    var endpoint = document.getElementById('frcdd-endpoint').value;
+
+    var scanCount = 0;
+    var asideCount = 0;
+    var muted = false;
+    var lastSeen = new Map();
+    var detector = null;
+
+    muteBtn.addEventListener('click', function() {
+        muted = !muted;
+        muteBtn.textContent = muted ? 'Unmute' : 'Mute';
+    });
+
+    function beep(durationMs, freq) {
+        if (muted) return;
+        try {
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            gain.gain.value = 0.15;
+            osc.start();
+            setTimeout(function() {
+                osc.stop();
+                ctx.close();
+            }, durationMs);
+        } catch (e) { /* AudioContext may be unavailable; ignore */ }
+    }
+
+    function flashColor(color, durationMs) {
+        flash.style.background = color;
+        flash.style.opacity = '0.6';
+        setTimeout(function() { flash.style.opacity = '0'; }, durationMs);
+    }
+
+    function showResult(result, code, warning) {
+        if (result === 'match') {
+            asideCount += 1;
+            asideCountEl.textContent = asideCount;
+            lastEl.textContent = 'Set aside ' + code;
+            flashColor('#c00', 1000);
+            beep(600, 320);
+            if (warning) {
+                noticeEl.textContent = 'Warning: ' + warning;
+                noticeEl.style.display = 'block';
+            }
+        } else if (result === 'paper_only') {
+            scanCount += 1;
+            scanCountEl.textContent = scanCount;
+            lastEl.textContent = '&#x2713; Paper-only (' + code + ')';
+            flashColor('#0a7', 300);
+            beep(150, 880);
+        } else {
+            lastEl.textContent = 'Unknown QR. Set aside or rescan.';
+            flashColor('#cc0', 1000);
+            beep(120, 660);
+            setTimeout(function() { beep(120, 660); }, 180);
+        }
+    }
+
+    function postCode(code) {
+        fetch(endpoint, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf,
+            },
+            body: JSON.stringify({code: code}),
+        }).then(function(r) {
+            if (r.status === 409) {
+                noticeEl.textContent = 'Scanning is only available during the count phase.';
+                noticeEl.style.display = 'block';
+                return null;
+            }
+            return r.json();
+        }).then(function(j) {
+            if (j) showResult(j.result, code, j.warning);
+        }).catch(function() {
+            lastEl.textContent = 'Network error. Retrying scan.';
+        });
+    }
+
+    function handleQrText(text) {
+        var m = text.match(/(?:^|\/)v\/([A-Z0-9]+)\/?$/i);
+        var code = m ? m[1].toUpperCase() : text.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        if (!code || code.length < 4) {
+            showResult('unknown', '');
+            return;
+        }
+        var now = Date.now();
+        var last = lastSeen.get(code);
+        if (last && (now - last) < 3000) return;
+        lastSeen.set(code, now);
+        postCode(code);
+    }
+
+    function setupDetector() {
+        if ('BarcodeDetector' in window) {
+            try {
+                detector = new BarcodeDetector({formats: ['qr_code']});
+                return 'native';
+            } catch (e) { /* fall through to jsQR */ }
+        }
+        return 'jsqr';
+    }
+
+    function startCamera() {
+        return navigator.mediaDevices.getUserMedia({
+            video: {facingMode: 'environment'}
+        }).then(function(stream) {
+            video.srcObject = stream;
+            return new Promise(function(resolve) { video.onloadedmetadata = resolve; });
+        });
+    }
+
+    function loopNative() {
+        if (!detector) return;
+        detector.detect(video).then(function(codes) {
+            if (codes && codes[0] && codes[0].rawValue) handleQrText(codes[0].rawValue);
+        }).catch(function() {}).finally(function() {
+            requestAnimationFrame(loopNative);
+        });
+    }
+
+    function loopJsQr() {
+        var canvas = document.createElement('canvas');
+        var ctx = canvas.getContext('2d');
+        function tick() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                var code = window.jsQR(img.data, img.width, img.height, {
+                    inversionAttempts: 'dontInvert',
+                });
+                if (code && code.data) handleQrText(code.data);
+            }
+            requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+    }
+
+    var mode = setupDetector();
+    startCamera().then(function() {
+        if (mode === 'native') loopNative();
+        else loopJsQr();
+    }).catch(function(err) {
+        noticeEl.textContent = 'Cannot access camera: ' + (err && err.message ? err.message : err);
+        noticeEl.style.display = 'block';
+    });
+})();
+</script>
+{% endblock %}
 {% endblock %}
