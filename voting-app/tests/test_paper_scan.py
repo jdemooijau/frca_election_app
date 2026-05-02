@@ -116,3 +116,15 @@ def test_paper_only_no_decrement_no_audit(client, scan_election):
         assert audit_count == 0
 
 
+def test_unknown_code_returns_unknown(client, scan_election):
+    eid = scan_election["id"]
+    rv = _post_scan(client, eid, "ZZZZZZ")
+    assert rv.status_code == 200
+    assert rv.get_json() == {"result": "unknown"}
+
+
+def test_empty_code_returns_unknown(client, scan_election):
+    eid = scan_election["id"]
+    rv = _post_scan(client, eid, "")
+    assert rv.status_code == 200
+    assert rv.get_json() == {"result": "unknown"}
