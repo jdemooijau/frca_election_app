@@ -216,9 +216,9 @@ Three display modes:
 
 Audit panel also exposes a count of `voter_audit` rows where `reason LIKE 'rejected_%'` for the current round, labelled "Failed scan attempts: N". A high N + a large positive gap is the classic "scan-trouble" signal.
 
-#### Sidebar link
+#### Entry point on the count step page
 
-`templates/admin/_sidebar.html` gains a "Scan paper ballots" link. Visible when the count phase is reachable: `voting_open == 0 AND display_phase IN (3)` for the round whose voting has just closed but not yet been finalised, mirroring the gating used by the existing paper-count helper (cross-check with the `2026-04-21-manage-page-phase-flow-design.md` mapping where `active = 4` is the counting state). When the election is finalised (`display_phase == 4`) or voting is still open, the link is hidden.
+The wizard sidebar (`compute_sidebar_state`, `app.py:477`) is generated from a fixed `WIZARD_STEPS` list and is not a free-form link area, so the scanner is reached as a tool from within the count step rather than as its own sidebar entry. The "Scan paper ballots" button is placed in `templates/admin/step_count.html` directly under the reconciliation panel, visible whenever that step is reachable. The same button is also rendered inside the non-modal banner shown when `gap < 0`. When the count step is not reachable (voting still open, or already finalised), the button is not rendered.
 
 ### Reuse of existing primitives
 
