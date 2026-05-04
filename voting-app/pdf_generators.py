@@ -216,37 +216,42 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     c.setFillColor(HexColor("#FFFFFF"))
     c.drawCentredString(pill_cx, or_y - 1.3 * mm, or_text)
 
-    # Fallback text: "Open browser to <url> and enter:" (with "(or <alt>)"
-    # when the QR target differs from the printed URL).
+    # Fallback text: "Type <url> (or http://<alt>) into your browser"
+    # (alt only when the QR target differs from the printed URL).
     c.setFont("Helvetica", 10)
     c.setFillColor(HexColor("#555555"))
-    c.drawString(tx, y3, "Open browser to")
-    url_x = tx + c.stringWidth("Open browser to ", "Helvetica", 10)
+    c.drawString(tx, y3, "Type")
+    url_x = tx + c.stringWidth("Type ", "Helvetica", 10)
     c.setFont("Helvetica-Bold", 10)
     c.setFillColor(HexColor("#000000"))
     c.drawString(url_x, y3, base_url_display)
     after_x = url_x + c.stringWidth(base_url_display + " ", "Helvetica-Bold", 10)
     if show_alt_url:
+        alt_with_scheme = f"http://{alt_url_display}"
         c.setFont("Helvetica", 10)
         c.setFillColor(HexColor("#555555"))
         c.drawString(after_x, y3, "(or")
         after_x += c.stringWidth("(or ", "Helvetica", 10)
         c.setFont("Helvetica-Bold", 10)
         c.setFillColor(HexColor("#000000"))
-        c.drawString(after_x, y3, alt_url_display)
-        after_x += c.stringWidth(alt_url_display, "Helvetica-Bold", 10)
+        c.drawString(after_x, y3, alt_with_scheme)
+        after_x += c.stringWidth(alt_with_scheme, "Helvetica-Bold", 10)
         c.setFont("Helvetica", 10)
         c.setFillColor(HexColor("#555555"))
         c.drawString(after_x, y3, ") ")
         after_x += c.stringWidth(") ", "Helvetica", 10)
     c.setFont("Helvetica", 10)
     c.setFillColor(HexColor("#555555"))
-    c.drawString(after_x, y3, "and enter:")
+    c.drawString(after_x, y3, "into your browser")
     y3 -= 5 * mm
+    c.setFont("Helvetica", 10)
+    c.setFillColor(HexColor("#555555"))
+    c.drawString(tx, y3, "and enter this code:")
+    code_x = tx + c.stringWidth("and enter this code:  ", "Helvetica", 10)
     formatted_code = f"{code[:3]} {code[3:]}"
-    c.setFont("Courier-Bold", 18)
+    c.setFont("Courier-Bold", 14)
     c.setFillColor(HexColor("#000000"))
-    c.drawString(tx, y3, formatted_code)
+    c.drawString(code_x, y3, formatted_code)
 
     # --- Warning strip at bottom ---
     _draw_warning_strip(
@@ -692,6 +697,11 @@ def generate_paper_ballot_pdf(election_name, round_number, office_data,
             c.setFillColor(NAVY)
             c.setFont("Helvetica-Bold", title_pt)
             c.drawCentredString(cx, y, election_name)
+            line_inset = 4 * mm
+            line_y = y - 2 * mm
+            c.setStrokeColor(NAVY)
+            c.setLineWidth(0.5)
+            c.line(x + line_inset, line_y, x + col_w - line_inset, line_y)
 
             if round_number > 1:
                 y -= 4 * mm
@@ -1030,6 +1040,11 @@ def _draw_ballot_card(c, x, top_y, card_w, card_h, election_name,
     c.setFillColor(HexColor("#000000"))
     c.setFont("Helvetica-Bold", title_pt)
     c.drawCentredString(cx, y, election_name)
+    line_inset = 6 * mm
+    line_y = y - 2 * mm
+    c.setStrokeColor(HexColor("#000000"))
+    c.setLineWidth(0.5)
+    c.line(x + line_inset, line_y, x + card_w - line_inset, line_y)
     y -= heading_to_body_gap
 
     # ---- Draw offices ----
