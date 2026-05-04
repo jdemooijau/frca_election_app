@@ -572,6 +572,40 @@ def test_code_slip_qr_size_is_36mm():
     )
 
 
+def test_av_instructions_pdf_includes_qr_url_fallback():
+    """When qr_base_url differs from base_url, the AV instructions sheet
+    must list both URLs so the AV team has a literal-IP fallback if the
+    friendly hostname does not resolve."""
+    from pdf_generators import generate_av_instructions_pdf
+    from PyPDF2 import PdfReader
+    buf = generate_av_instructions_pdf(
+        election_name="Office Bearer Election 2026",
+        wifi_ssid="ChurchVote",
+        wifi_password="",
+        base_url="http://church.vote",
+        qr_base_url="http://10.0.0.2",
+    )
+    text = PdfReader(buf).pages[0].extract_text()
+    assert "church.vote/display" in text
+    assert "10.0.0.2/display" in text
+
+
+def test_av_instructions_pdf_omits_alt_when_urls_match():
+    """No '(or X)' fallback when qr_base_url equals base_url."""
+    from pdf_generators import generate_av_instructions_pdf
+    from PyPDF2 import PdfReader
+    buf = generate_av_instructions_pdf(
+        election_name="Office Bearer Election 2026",
+        wifi_ssid="ChurchVote",
+        wifi_password="",
+        base_url="http://10.0.0.2",
+        qr_base_url="http://10.0.0.2",
+    )
+    text = PdfReader(buf).pages[0].extract_text()
+    assert "10.0.0.2/display" in text
+    assert "if the first does not load" not in text
+
+
 def test_dual_sided_ballots_pdf_still_generates_with_larger_qr():
     """Regression: the dual-sided grid layout must still produce a PDF
     without overflowing cells when the QR is 36 mm."""
@@ -579,5 +613,107 @@ def test_dual_sided_ballots_pdf_still_generates_with_larger_qr():
     assert pdf_bytes.startswith(b"%PDF-")
     assert b"/Image" in pdf_bytes
     assert len(pdf_bytes) > 5000, "PDF appears truncated"
+
+
+# ---------------------------------------------------------------------------
+# QR vs printed-URL split (Android DNS workaround)
+# ---------------------------------------------------------------------------
+
+def test_qr_encodes_qr_base_url_when_provided(monkeypatch):
+    """When qr_base_url differs from base_url, the QR encodes qr_base_url."""
+    import pdf_generators
+    captured = []
+    real = pdf_generators._generate_qr_image
+    def _spy(url, size=120):
+        captured.append(url)
+        return real(url, size)
+    monkeypatch.setattr(pdf_generators, "_generate_qr_image", _spy)
+
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    pdf_generators.draw_code_slip(
+        c, 15 * mm, h - 15 * mm, 85 * mm, 82 * mm,
+        "KR4T7N", "ChurchVote", "",
+        "http://church.vote",
+        qr_base_url="http://192.168.8.100",
+    )
+    c.showPage()
+    c.save()
+
+    assert captured == ["http://192.168.8.100/v/KR4T7N"]
+
+
+def test_qr_falls_back_to_base_url_when_qr_base_url_missing(monkeypatch):
+    """Without qr_base_url, the QR encodes base_url (backward compat)."""
+    import pdf_generators
+    captured = []
+    real = pdf_generators._generate_qr_image
+    def _spy(url, size=120):
+        captured.append(url)
+        return real(url, size)
+    monkeypatch.setattr(pdf_generators, "_generate_qr_image", _spy)
+
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    pdf_generators.draw_code_slip(
+        c, 15 * mm, h - 15 * mm, 85 * mm, 82 * mm,
+        "KR4T7N", "ChurchVote", "",
+        "http://church.vote",
+    )
+    c.showPage()
+    c.save()
+
+    assert captured == ["http://church.vote/v/KR4T7N"]
+
+
+def test_slip_shows_alt_url_when_qr_url_differs():
+    """Slip text should show 'or 192.168.8.100' when QR uses a different host."""
+    buf = _generate_code_slips(
+        codes=["KR4T7N"],
+        base_url="http://church.vote",
+        qr_base_url="http://192.168.8.100",
+    )
+    text = _extract_text(buf, 0)
+    assert "church.vote" in text
+    assert "192.168.8.100" in text
+
+
+def test_slip_omits_alt_url_when_qr_url_matches():
+    """Slip should not show '(or ...)' when qr_base_url equals base_url."""
+    buf = _generate_code_slips(
+        codes=["KR4T7N"],
+        base_url="http://church.vote",
+        qr_base_url="http://church.vote",
+    )
+    text = _extract_text(buf, 0)
+    assert "(or" not in text
+
+
+def test_dual_sided_ballots_threads_qr_base_url(monkeypatch):
+    """Dual-sided generator must pass qr_base_url through to draw_code_slip."""
+    import pdf_generators
+    captured = []
+    real = pdf_generators._generate_qr_image
+    def _spy(url, size=120):
+        captured.append(url)
+        return real(url, size)
+    monkeypatch.setattr(pdf_generators, "_generate_qr_image", _spy)
+
+    generate_dual_sided_ballots_pdf(
+        election_name="Office Bearer Election 2026",
+        short_name="FRC Darling Downs",
+        round_number=1,
+        office_data=SAMPLE_OFFICE_DATA,
+        codes=["KR4T7N"],
+        wifi_ssid="ChurchVote",
+        wifi_password="",
+        base_url="http://church.vote",
+        qr_base_url="http://192.168.8.100",
+    )
+
+    assert captured, "QR generator was not invoked"
+    assert all(u.startswith("http://192.168.8.100/") for u in captured), captured
 
 

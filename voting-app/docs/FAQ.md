@@ -56,10 +56,10 @@ Vote. After submission your code is burned and the choice is final
 
 ### Can I see the result on my own phone?
 
-Yes. After voting, your phone shows a confirmation page with a "View
-Live Results" link to `/displayphone`, which mirrors what the projector
-shows the congregation. When the chairman finalises the election your
-phone automatically follows to the Final Results screen.
+Yes. After voting, your phone automatically shows the live ballot
+progress (and, once the chairman moves to Final Results, the elected
+brothers). It mirrors what the projector shows the congregation. No
+extra navigation needed - it's the same URL you arrived at.
 
 ### What about brothers without smartphones?
 

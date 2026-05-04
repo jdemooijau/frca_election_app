@@ -337,7 +337,8 @@ def _init_db_on(db):
         "congregation_short": "FRC",
         "wifi_ssid": "ChurchVote",
         "wifi_password": "",
-        "voting_base_url": "http://church.vote",
+        "voting_base_url": "http://10.0.0.2",
+        "voting_qr_url": "http://10.0.0.2",
         "admin_password": DEFAULT_ADMIN_PASSWORD,
         "setup_complete": "0",
     }
@@ -559,7 +560,17 @@ def compute_sidebar_state(election_id):
             summary = f"Closed - {elected} elected" if elected else "Closed - 0 elected"
             groups.insert(
                 1 + (r - 1),
-                {"label": f"Round {r}", "collapsed": True, "summary": summary, "entries": []},
+                {
+                    "label": f"Round {r}",
+                    "collapsed": True,
+                    "summary": summary,
+                    "entries": [],
+                    "url": url_for(
+                        "admin_round_results",
+                        election_id=election_id,
+                        round_number=r,
+                    ),
+                },
             )
 
     return {
@@ -974,6 +985,161 @@ def admin_step_minutes(election_id):
     return render_template("admin/step_minutes.html", election=election, sidebar_state=sidebar_state)
 
 
+@app.route("/admin/election/<int:election_id>/round/<int:round_number>/results",
+           methods=["GET"], endpoint="admin_round_results")
+@admin_required
+def admin_round_results(election_id, round_number):
+    """Read-only view of a closed prior round's vote tally and elected names.
+
+    Reachable from the wizard sidebar's collapsed Round-N entry once the
+    round has closed and the chairman has advanced past it. The page reuses
+    `_round_tally.html` (read-only — no Tally / Mark Elected buttons) and
+    surfaces Article 6a/6b thresholds as they applied at the time, using
+    that round's participants and remaining vacancies.
+    """
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    if round_number < 1 or round_number >= (election["current_round"] or 1):
+        abort(404)
+
+    in_person, paper_ballot_count, digital_ballot_count = get_round_counts(election_id, round_number)
+    postal_voter_count = (election["postal_voter_count"] or 0) if round_number == 1 else 0
+    participants = in_person + postal_voter_count
+    total_ballots = digital_ballot_count + paper_ballot_count + postal_voter_count
+
+    offices = db.execute(
+        "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
+        (election_id,)
+    ).fetchall()
+
+    results = []
+    thresholds = {}
+    for office in offices:
+        candidates = db.execute(
+            "SELECT * FROM candidates WHERE office_id = ? ORDER BY surname_sort_key(name)",
+            (office["id"],)
+        ).fetchall()
+
+        # Vacancies-at-start-of-round-k = original - elected in rounds < k.
+        original = (
+            office["original_vacancies"]
+            if office["original_vacancies"] is not None
+            else (office["vacancies"] or office["max_selections"])
+        )
+        elected_before_k = db.execute(
+            "SELECT COUNT(*) FROM candidates WHERE office_id = ? "
+            "AND elected = 1 AND elected_round IS NOT NULL AND elected_round < ?",
+            (office["id"], round_number)
+        ).fetchone()[0]
+        vacancies_at_round = max((original or 0) - elected_before_k, 0)
+
+        candidate_results = []
+        for cand in candidates:
+            digital = db.execute(
+                "SELECT COUNT(*) FROM votes WHERE candidate_id = ? AND round_number = ? AND election_id = ?",
+                (cand["id"], round_number, election_id)
+            ).fetchone()[0]
+            paper = db.execute(
+                "SELECT COALESCE(SUM(count), 0) FROM paper_votes WHERE candidate_id = ? AND round_number = ? AND election_id = ?",
+                (cand["id"], round_number, election_id)
+            ).fetchone()[0]
+            postal = 0
+            if round_number == 1:
+                postal = db.execute(
+                    "SELECT COALESCE(SUM(count), 0) FROM postal_votes WHERE candidate_id = ? AND election_id = ?",
+                    (cand["id"], election_id)
+                ).fetchone()[0]
+            total = digital + paper + postal
+
+            # Reconstruct the round's ballot. Round 1 always had every
+            # candidate; later rounds show only those who received any vote
+            # that round OR were elected that round.
+            on_ballot = (
+                round_number == 1
+                or total > 0
+                or cand["elected_round"] == round_number
+            )
+            if not on_ballot:
+                continue
+
+            elected_this_round = cand["elected_round"] == round_number
+            candidate_results.append({
+                "id": cand["id"],
+                "name": cand["name"],
+                # Force active=True so the partial renders the row regardless
+                # of the candidate's CURRENT active flag (which reflects
+                # later-round eligibility, not their round-N status).
+                "active": True,
+                "elected": elected_this_round,
+                "meets_threshold": elected_this_round,
+                "elected_round": cand["elected_round"],
+                "digital": digital,
+                "paper": paper,
+                "postal": postal,
+                "total": total,
+                "passes_6a": False,
+                "passes_6b": False,
+            })
+
+        office_for_view = {
+            "id": office["id"],
+            "name": office["name"],
+            # `offices.max_selections` is mutated each time admin_next_round
+            # fires (set to the next round's remaining vacancies). For a
+            # historical view we want what max_selections was AT round k.
+            # At round-start that equals the round's vacancies (assuming
+            # enough candidates carried forward), so we use that here. The
+            # alternative — the current DB value — would falsely trip the
+            # _round_tally Total > possible check for prior rounds.
+            "max_selections": vacancies_at_round,
+            "vacancies": vacancies_at_round,
+        }
+
+        item = {"office": office_for_view, "candidates": candidate_results}
+
+        if participants > 0 and vacancies_at_round > 0:
+            office_valid_votes = sum(c["total"] for c in candidate_results)
+            t6a, t6b = calculate_thresholds(vacancies_at_round, office_valid_votes, participants)
+            for c in candidate_results:
+                _, p6a, p6b = check_candidate_elected(c["total"], t6a, t6b)
+                c["passes_6a"] = p6a
+                c["passes_6b"] = p6b
+            item["valid_votes_cast"] = office_valid_votes
+            thresholds[office["id"]] = {
+                "vacancies": vacancies_at_round,
+                "valid_votes_cast": office_valid_votes,
+                "participants": participants,
+                "threshold_6a": t6a,
+                "threshold_6b": t6b,
+            }
+
+        results.append(item)
+
+    sidebar_state = compute_sidebar_state(election_id)
+    # The wizard's "election" view-model exposes voting_open as a Python
+    # bool. The partial reads `election.voting_open` to decide between
+    # ELECTED and TO BE ELECTED — we want the historical (closed) label.
+    election_view = {"voting_open": False, "current_round": round_number}
+
+    return render_template(
+        "admin/round_results.html",
+        election=election_view,
+        round_number=round_number,
+        results=results,
+        thresholds=thresholds,
+        participants=participants,
+        postal_voter_count=postal_voter_count,
+        total_ballots=total_ballots,
+        digital_ballot_count=digital_ballot_count,
+        paper_ballot_count=paper_ballot_count,
+        sidebar_state=sidebar_state,
+    )
+
+
 def hash_code(code):
     """Hash a voting code for fast lookup."""
     return hashlib.sha256(code.upper().encode()).hexdigest()
@@ -1075,7 +1241,7 @@ def inject_globals():
         "congregation_short": get_setting("congregation_short", "FRC"),
         "wifi_ssid": get_setting("wifi_ssid", "ChurchVote"),
         "wifi_password": get_setting("wifi_password", ""),
-        "voting_base_url": get_setting("voting_base_url", "http://church.vote"),
+        "voting_base_url": get_setting("voting_base_url", "http://10.0.0.2"),
     }
 
 
@@ -1120,6 +1286,7 @@ def admin_setup():
         wifi_ssid = request.form.get("wifi_ssid", "").strip()
         wifi_password = request.form.get("wifi_password", "").strip()
         voting_base_url = request.form.get("voting_base_url", "").strip()
+        voting_qr_url = request.form.get("voting_qr_url", "").strip()
         new_password = request.form.get("new_password", "").strip()
         confirm_password = request.form.get("confirm_password", "").strip()
 
@@ -1150,7 +1317,8 @@ def admin_setup():
         set_setting("congregation_short", congregation_short or congregation_name)
         set_setting("wifi_ssid", wifi_ssid or "ChurchVote")
         set_setting("wifi_password", wifi_password)
-        set_setting("voting_base_url", voting_base_url or "http://church.vote")
+        set_setting("voting_base_url", voting_base_url or "http://10.0.0.2")
+        set_setting("voting_qr_url", voting_qr_url or "http://10.0.0.2")
         if password_to_save is not None:
             set_setting("admin_password", password_to_save)
         set_setting("setup_complete", "1")
@@ -1173,7 +1341,8 @@ def _render_setup_form():
         congregation_short=get_setting("congregation_short", ""),
         wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
         wifi_password=get_setting("wifi_password", ""),
-        voting_base_url=get_setting("voting_base_url", "http://church.vote"),
+        voting_base_url=get_setting("voting_base_url", "http://10.0.0.2"),
+        voting_qr_url=get_setting("voting_qr_url", "http://10.0.0.2"),
     )
 
 
@@ -2865,6 +3034,18 @@ def voter_enter_code(prefill_code=None):
         "WHERE voting_open = 1 AND display_phase >= 3 "
         "ORDER BY id DESC LIMIT 1"
     ).fetchone()
+    # Rules-phase: chairman is on the Rules screen on the projector.
+    # voting_open is still 0 at this stage (it only flips to 1 when the
+    # chairman advances to phase 3), so detect on display_phase alone.
+    # Phones show an "opening in progress, ballot coming" message instead
+    # of the generic wait.
+    rules_phase_election = None
+    if not election:
+        rules_phase_election = db.execute(
+            "SELECT * FROM elections "
+            "WHERE display_phase = 2 "
+            "ORDER BY id DESC LIMIT 1"
+        ).fetchone()
 
     # QR scan with code: validate immediately and skip to ballot
     if prefill_code:
@@ -2891,7 +3072,7 @@ def voter_enter_code(prefill_code=None):
                 log_voter_audit(eid, code, "rejected_unknown_code",
                                 "QR scan code not in DB", round_number=rnd)
             elif code_row["used"]:
-                flash("This code has already been used.", "error")
+                flash("Your vote has already been registered with this code.", "error")
                 log_voter_audit(eid, code, "rejected_already_used",
                                 "QR scan code already burned", round_number=rnd)
             else:
@@ -2903,14 +3084,53 @@ def voter_enter_code(prefill_code=None):
                                 "QR scan accepted", round_number=rnd)
                 return redirect(url_for("voter_ballot"))
 
-        # Validation failed — fall through to enter_code page (no prefill)
+        # Validation failed - fall through to enter_code page (no prefill)
         prefill_code = None
+
+    # / mirrors the projector's display state for any phone that lands
+    # here. The wait/code-entry page (enter_code.html) is reserved for
+    # the narrow case "voting is open AND this voter has not voted yet"
+    # so they can enter their code. Otherwise we render the live display
+    # view, which gracefully handles every other phase (welcome / count /
+    # final results).
+    active_election, ctx = _build_display_data()
+    used_code = session.get("used_code")
+    sess_election_id = session.get("election_id")
+    voted_in_active = bool(
+        active_election
+        and used_code
+        and sess_election_id == active_election["id"]
+    )
+
+    if active_election:
+        phase = active_election["display_phase"] or 1
+        voting_open = bool(active_election["voting_open"])
+        # Render the live display view (phone.html / final.html) when
+        # phase 3 has moved past the entry-form moment (voting closed
+        # or this voter already voted) or any time we're at phase 4.
+        # Phases 1 and 2 keep their dedicated wait / opening copy on
+        # enter_code.html.
+        show_display = (
+            phase == 4
+            or (phase == 3 and (not voting_open or voted_in_active))
+        )
+        if show_display:
+            ctx["show_assist"] = (
+                _paper_count_active_for_round(db, active_election)
+                and voted_in_active
+            )
+            if phase == 4 and not active_election["show_results"]:
+                resp = make_response(render_template("display/final.html", **ctx))
+            else:
+                resp = make_response(render_template("display/phone.html", **ctx))
+            return no_cache(resp)
 
     resp = make_response(render_template(
         "voter/enter_code.html",
         election=election,
         prefill_code=prefill_code,
         wifi_ssid=get_setting("wifi_ssid", ""),
+        rules_phase=bool(rules_phase_election),
     ))
     return no_cache(resp)
 
@@ -2955,7 +3175,7 @@ def voter_validate_code():
         return redirect(url_for("voter_enter_code"))
 
     if code_row["used"]:
-        flash("This code has already been used.", "error")
+        flash("Your vote has already been registered with this code.", "error")
         log_voter_audit(eid, code, "rejected_already_used",
                         "Form submit code already burned", round_number=rnd)
         return redirect(url_for("voter_enter_code"))
@@ -3134,7 +3354,7 @@ def voter_submit():
             session.pop("code_hash", None)
             session.pop("election_id", None)
             session.pop("used_code", None)
-            flash("This code has already been used.", "error")
+            flash("Your vote has already been registered with this code.", "error")
             log_voter_audit(
                 election_id, code_for_log, "rejected_already_used_at_submit",
                 "Submit reached burn step but code was already used (race)",
@@ -3194,6 +3414,19 @@ def voter_confirmation():
         show_assist=show_assist,
     ))
     return no_cache(resp)
+
+
+@app.route("/next-voter", methods=["GET"])
+def next_voter():
+    # Confirmation keeps used_code/election_id in session so the page can
+    # show the count-assist button. When the previous voter hands the phone
+    # to the next voter, voter_enter_code would otherwise see voted_in_active
+    # and render the live display instead of the entry form. Clear the
+    # voter-state keys here so the next voter lands on enter_code.html.
+    session.pop("code_hash", None)
+    session.pop("election_id", None)
+    session.pop("used_code", None)
+    return redirect(url_for("voter_enter_code"))
 
 
 # ---------------------------------------------------------------------------
@@ -3273,13 +3506,26 @@ PAPER_COUNT_MAX_HELPERS = 20
 
 
 def _paper_count_active_for_round(db, election):
-    """True if paper count is enabled, the current round's session has not
-    been persisted or cancelled, and the helper cap has not been hit.
-    The button is shown regardless of voting state so voters who finish early
-    can opt in immediately.
+    """True if paper count is enabled, the chairman has not yet advanced
+    to Final Results (phase 4), the round is in a count-ready state
+    (either voting is closed, or voting is still open but all expected
+    ballots have been received - mirroring the projector's "All votes
+    received" panel), the current round's session has not been persisted
+    or cancelled, and the helper cap has not been hit.
     """
     if not election["paper_count_enabled"]:
         return False
+    if (election["display_phase"] or 1) >= 4:
+        return False
+    if election["voting_open"]:
+        # Allow the CTA when all expected ballots are in - same condition
+        # the projector uses to switch into its "All votes received" panel.
+        participants, paper, digital = get_round_counts(
+            election["id"], election["current_round"]
+        )
+        total_ballots = (paper or 0) + (digital or 0)
+        if not (participants > 0 and total_ballots >= participants):
+            return False
     sess = db.execute(
         "SELECT id, status FROM count_sessions WHERE election_id = ? AND round_no = ?",
         (election["id"], election["current_round"])
@@ -4012,18 +4258,22 @@ def _build_display_data():
         count_pass_6a = sum(1 for c in candidate_results if c["passes_6a"])
         count_pass_6b = sum(1 for c in candidate_results if c["passes_6b"])
 
-        # When the chairman has advanced to phase 4 (Final Results), the
-        # projector should also surface brothers elected in PRIOR rounds for
-        # this office, with their winning-round vote totals. Threshold and
-        # 6a/6b counts above stay current-round-only because the rules apply
-        # per round.
+        # When the chairman has advanced to phase 4 (Final Results), surface
+        # brothers elected in PRIOR rounds in a separate `previously_elected`
+        # list (with their winning-round vote totals). They are deliberately
+        # kept out of `candidate_results` so the per-office threshold checks,
+        # Blank/Spoilt/Total summary row, and Article 6a/6b denominators stay
+        # current-round-only (the rules apply per round). The template renders
+        # the prior-round names as a compact strip above the current-round
+        # candidates.
+        previously_elected = []
         phase_for_aggregation = election["display_phase"] or 1
         if phase_for_aggregation == 4 and current_round > 1:
             prior_elected = db.execute(
                 "SELECT * FROM candidates WHERE office_id = ? "
                 "AND elected = 1 AND elected_round IS NOT NULL "
                 "AND elected_round < ? "
-                "ORDER BY surname_sort_key(name)",
+                "ORDER BY elected_round, surname_sort_key(name)",
                 (office["id"], current_round)
             ).fetchall()
             for cand in prior_elected:
@@ -4042,15 +4292,11 @@ def _build_display_data():
                         "SELECT COALESCE(SUM(count), 0) FROM postal_votes WHERE candidate_id = ? AND election_id = ?",
                         (cand["id"], election["id"])
                     ).fetchone()[0]
-                candidate_results.append({
+                previously_elected.append({
                     "name": cand["name"],
                     "total": digital_p + paper_p + postal_p,
-                    "elected": True,
-                    "passes_6a": False,
-                    "passes_6b": False,
                     "elected_round": r,
                 })
-            candidate_results.sort(key=lambda c: _surname_sort_key(c["name"]))
 
         elected_count = sum(1 for c in candidate_results if c["elected"])
         remaining_vacancies = max(vacancies - elected_count, 0)
@@ -4084,6 +4330,7 @@ def _build_display_data():
             "remaining_vacancies": remaining_vacancies,
             "runoff_needed": runoff_needed,
             "inactive_names": inactive_names,
+            "previously_elected": previously_elected,
         })
 
     in_person, paper_ballot_count, used_codes = get_round_counts(election["id"], current_round)
@@ -4092,7 +4339,8 @@ def _build_display_data():
 
     wifi_ssid = get_setting("wifi_ssid", "")
     wifi_password = get_setting("wifi_password", "")
-    vote_url = get_setting("voting_base_url", "http://church.vote")
+    vote_url = get_setting("voting_base_url", "http://10.0.0.2")
+    vote_qr_url = get_setting("voting_qr_url", "http://10.0.0.2")
 
     paper_guide = [
         {
@@ -4163,6 +4411,7 @@ def _build_display_data():
         wifi_ssid=wifi_ssid,
         wifi_password=wifi_password,
         vote_url=vote_url,
+        vote_qr_url=vote_qr_url,
     )
     return election, ctx
 
@@ -4194,35 +4443,6 @@ def display():
         # Final Summary (final.html) is only shown when the chairman explicitly
         # advances to phase 4.
         return render_template("display/projector.html", **ctx)
-
-
-@app.route("/displayphone")
-def display_phone():
-    election, ctx = _build_display_data()
-    if not election:
-        return render_template("display/waiting.html")
-
-    # Surface the "Assist with Paper Counting" button on the live results page
-    # for any voter whose burned-code session is still around. Voters typically
-    # navigate here after submitting their vote, so this is where they can
-    # opt in once the chairman closes voting for the round.
-    show_assist = False
-    used_code = session.get("used_code")
-    sess_election_id = session.get("election_id")
-    if used_code and sess_election_id == election["id"]:
-        db = get_db()
-        if _paper_count_active_for_round(db, election):
-            show_assist = True
-    ctx["show_assist"] = show_assist
-
-    phase = election["display_phase"] or 1
-    if phase == 4:
-        if election["show_results"]:
-            return render_template("display/phone.html", **ctx)
-        return render_template("display/final.html", **ctx)
-    # Closing voting keeps the phone display on the live view (now revealing
-    # counts); final.html only renders once the chairman advances to phase 4.
-    return render_template("display/phone.html", **ctx)
 
 
 @app.route("/api/display-data")
@@ -4363,15 +4583,18 @@ def api_display_data():
             count_pass_6a = sum(1 for c in candidate_results if c["passes_6a"])
             count_pass_6b = sum(1 for c in candidate_results if c["passes_6b"])
 
-            # Phase 4: surface prior-round winners for this office with their
-            # winning-round vote totals, mirroring _build_display_data.
+            # Phase 4: surface prior-round winners for this office in a
+            # separate `previously_elected` list (mirrors _build_display_data).
+            # Kept out of `candidate_results` so per-round threshold maths and
+            # the Blank/Spoilt/Total summary stay current-round-only.
+            previously_elected = []
             phase_for_aggregation = election["display_phase"] or 1
             if phase_for_aggregation == 4 and current_round > 1:
                 prior_elected = db.execute(
                     "SELECT * FROM candidates WHERE office_id = ? "
                     "AND elected = 1 AND elected_round IS NOT NULL "
                     "AND elected_round < ? "
-                    "ORDER BY surname_sort_key(name)",
+                    "ORDER BY elected_round, surname_sort_key(name)",
                     (office["id"], current_round)
                 ).fetchall()
                 for cand in prior_elected:
@@ -4390,15 +4613,11 @@ def api_display_data():
                             "SELECT COALESCE(SUM(count), 0) FROM postal_votes WHERE candidate_id = ? AND election_id = ?",
                             (cand["id"], election["id"])
                         ).fetchone()[0]
-                    candidate_results.append({
+                    previously_elected.append({
                         "name": cand["name"],
                         "total": digital_p + paper_p + postal_p,
-                        "elected": True,
-                        "passes_6a": False,
-                        "passes_6b": False,
                         "elected_round": r,
                     })
-                candidate_results.sort(key=lambda c: _surname_sort_key(c["name"]))
 
             elected_count = sum(1 for c in candidate_results if c["elected"])
             remaining_vacancies = max(vacancies - elected_count, 0)
@@ -4426,6 +4645,7 @@ def api_display_data():
                 "elected_count": elected_count,
                 "remaining_vacancies": remaining_vacancies,
                 "runoff_needed": runoff_needed,
+                "previously_elected": previously_elected,
             })
 
         data["results"] = results
@@ -4498,7 +4718,8 @@ def admin_codes_pdf(election_id):
         short_name=get_setting("congregation_short", "FRC"),
         wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
         wifi_password=get_setting("wifi_password", ""),
-        base_url=get_setting("voting_base_url", "http://church.vote"),
+        base_url=get_setting("voting_base_url", "http://10.0.0.2"),
+        qr_base_url=get_setting("voting_qr_url", "http://10.0.0.2"),
     )
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
                      download_name="voting_codes.pdf")
@@ -4630,7 +4851,8 @@ def admin_dual_sided_ballots_pdf(election_id):
         codes=unused_codes,
         wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
         wifi_password=get_setting("wifi_password", ""),
-        base_url=get_setting("voting_base_url", "http://church.vote"),
+        base_url=get_setting("voting_base_url", "http://10.0.0.2"),
+        qr_base_url=get_setting("voting_qr_url", "http://10.0.0.2"),
         member_count=member_count,
     )
 
@@ -4694,7 +4916,8 @@ def admin_printer_pack_zip(election_id):
         codes=unused_codes,
         wifi_ssid=get_setting("wifi_ssid", "ChurchVote"),
         wifi_password=get_setting("wifi_password", ""),
-        base_url=get_setting("voting_base_url", "http://church.vote"),
+        base_url=get_setting("voting_base_url", "http://10.0.0.2"),
+        qr_base_url=get_setting("voting_qr_url", "http://10.0.0.2"),
         congregation_name=cong_name,
         members=[dict(m) for m in members],
         election_date=election["election_date"],
@@ -5087,14 +5310,15 @@ def force_canonical_host():
 
     A phone joined to ChurchVote that opens, say, bbc.com will resolve that
     hostname to the laptop and arrive here with Host=bbc.com. We 302 it to
-    voting_base_url so the URL bar reads church.vote. Admin access via the
-    raw IP, plus localhost/127.0.0.1 for local testing, is left alone.
+    voting_base_url so the URL bar reads the canonical voting host. Admin
+    access via the raw IP, plus localhost/127.0.0.1 for local testing, is
+    left alone.
     """
     path = request.path
     if path in _CPD_PROBE_PATHS or path.startswith("/static/"):
         return None
 
-    canonical_url = get_setting("voting_base_url", "http://church.vote")
+    canonical_url = get_setting("voting_base_url", "http://10.0.0.2")
     canonical_host = (urlparse(canonical_url).hostname or "").lower()
     if not canonical_host:
         return None
@@ -5119,9 +5343,9 @@ def force_canonical_host():
 @app.route("/.well-known/captive-portal")
 def captive_portal_api():
     """RFC 8908 Captive Portal API. Advertises the voting page so the OS
-    popup (triggered by DHCP option 114) opens church.vote directly."""
+    popup (triggered by DHCP option 114) opens the voting URL directly."""
     from flask import Response, json as flask_json
-    portal_url = get_setting("voting_base_url", "http://church.vote")
+    portal_url = get_setting("voting_base_url", "http://10.0.0.2")
     data = flask_json.dumps({"captive": True, "user-portal-url": portal_url})
     return Response(data, status=200, content_type="application/captive+json")
 
@@ -5179,8 +5403,8 @@ def favicon():
 @app.route("/<path:path>")
 def catch_all(path):
     """Redirect unknown paths to the canonical voting URL so the URL bar
-    shows church.vote rather than whatever foreign host the phone tried."""
-    canonical_url = get_setting("voting_base_url", "http://church.vote")
+    shows the voting host rather than whatever foreign host the phone tried."""
+    canonical_url = get_setting("voting_base_url", "http://10.0.0.2")
     return redirect(canonical_url.rstrip("/") + "/", code=302)
 
 

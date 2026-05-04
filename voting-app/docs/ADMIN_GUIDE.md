@@ -121,8 +121,8 @@ Click **Decide** in the sidebar. The step offers:
 - **Start Round N+1** - pick the carry-forward candidates with the
   checkboxes (already-elected ones are auto-disabled). The same code
   batch is reused; no re-printing.
-- **Show Final Results** - switches the projector and `/displayphone`
-  views to the Final Results page.
+- **Show Final Results** - switches both the projector and the
+  voters' phones to the Final Results page.
 
 For each subsequent round the chairman walks the Round group again
 (Welcome & Rules -> Voting -> Count & tally -> Decide).

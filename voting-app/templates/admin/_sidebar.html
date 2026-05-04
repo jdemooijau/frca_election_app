@@ -15,7 +15,11 @@
     {% for group in sidebar_state.groups %}
     <div class="wizard-sidebar-group-label">{{ group.label }}</div>
     {% if group.collapsed %}
+    {% if group.url %}
+    <a href="{{ group.url }}" class="wizard-sidebar-collapsed link">{{ group.summary }} &rsaquo;</a>
+    {% else %}
     <div class="wizard-sidebar-collapsed">{{ group.summary }}</div>
+    {% endif %}
     {% else %}
     {% for item in group["entries"] %}
     {% if item.state == 'locked' %}

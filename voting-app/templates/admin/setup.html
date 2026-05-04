@@ -55,11 +55,27 @@
             <label for="voting_base_url">Voting Base URL</label>
             <input type="text" id="voting_base_url" name="voting_base_url"
                    value="{{ voting_base_url }}"
-                   placeholder="http://church.vote"
+                   placeholder="http://10.0.0.2"
                    autocomplete="off">
             <p style="font-size: 14px; color: #666; margin-top: 4px;">
-                The URL encoded in QR codes on the code slips. Must match the laptop's
-                reserved IP on the church router. See SETUP.md for router configuration.
+                The URL printed on the code slip. Voters who type manually
+                use this. Set to the laptop's reserved IP. See SETUP.md for
+                router configuration.
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label for="voting_qr_url">QR Code URL</label>
+            <input type="text" id="voting_qr_url" name="voting_qr_url"
+                   value="{{ voting_qr_url }}"
+                   placeholder="http://10.0.0.2"
+                   autocomplete="off">
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                The URL encoded in the QR code. Usually the same as the
+                Voting Base URL above. Only set differently if you want a
+                friendly hostname printed but a literal IP encoded in the
+                QR (the IP avoids DNS issues on Android phones with mobile
+                data on).
             </p>
         </div>
 

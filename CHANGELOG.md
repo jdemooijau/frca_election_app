@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Read-only round-results page for any closed prior round, reachable
+  by clicking the collapsed "Round N - Closed - X elected" entry in
+  the wizard sidebar. The page reuses the count-step tally partial
+  to render that round's per-candidate digital/paper/postal totals,
+  Article 6a/6b thresholds (calculated against the round's actual
+  participants and the vacancies that were open at the start of that
+  round), and an ELECTED badge on candidates whose `elected_round`
+  matches. No action buttons; round 1 always shows every candidate,
+  later rounds show only those who received votes that round or were
+  elected that round.
+
+### Changed
+
+- Final-results projector view (phase 4 with details) now renders
+  prior-round winners in a separate "Previously elected" strip at the
+  top of each office card (with a R1/R2 round badge and their
+  winning-round vote total). Previously these brothers were merged
+  into the current-round candidate list, which mixed totals from
+  different rounds with the current round's threshold checks and
+  Blank/Spoilt/Total summary. The current-round candidate list,
+  Article 6a/6b lines, and the Total checkmark are now strictly
+  current-round-only; the prior winners are still visible for context
+  but cannot be confused with current-round arithmetic. The clean
+  Final Summary view (`final.html`, no counts) remains the canonical
+  merged "who was elected" screen.
+- Wizard sidebar's collapsed prior-round entry is now a clickable
+  link (with hover state and a chevron) instead of static italic
+  text.
+
 ## [1.3.1] - 2026-05-02
 
 ### Fixed

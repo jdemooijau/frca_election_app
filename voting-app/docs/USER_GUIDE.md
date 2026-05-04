@@ -267,8 +267,8 @@ Final Results** explicitly. It contains:
   narrative ready for the secretary to fill in (placeholders for
   chairman name, scripture reference, etc.)
 
-The projector and `/displayphone` views automatically switch to a
-clean Final Results screen showing the elected brothers.
+The projector and voter phones automatically switch to a clean
+Final Results screen showing the elected brothers.
 
 ---
 

@@ -82,38 +82,61 @@
 
     {% if wifi_ssid or vote_url %}
     {% set vote_host = vote_url | replace('http://', '') | replace('https://', '') | replace('/', '') %}
-    <div style="padding: 36px 64px; background: var(--grey-light); border-radius: 16px;
-                display: inline-block; text-align: left; border-top: 6px solid var(--gold);">
-        <div style="font-size: 24px; color: #555; text-transform: uppercase;
-                    letter-spacing: 3px; margin-bottom: 24px; text-align: center; font-weight: 600;">
-            To vote on your phone
-        </div>
-        <div style="display: grid; grid-template-columns: auto auto 1fr; column-gap: 28px; row-gap: 14px;
-                    align-items: baseline;">
-            {% if wifi_ssid %}
-            <span style="font-size: 28px; font-weight: 700; color: var(--gold);">1.</span>
-            <span style="font-size: 28px; color: #444;">Connect to WiFi</span>
-            <span style="font-size: 32px; font-weight: 700; color: var(--navy); font-family: 'Courier New', monospace;">
-                {{ wifi_ssid }}{% if wifi_password %} <span style="font-size: 22px; color: #888; font-weight: 400; font-family: inherit;">&nbsp;password: {{ wifi_password }}</span>{% endif %}
+    {% set vote_qr_host = (vote_qr_url or '') | replace('http://', '') | replace('https://', '') | replace('/', '') %}
+    {% set show_alt_host = vote_qr_host and vote_qr_host != vote_host %}
+    {% set _step_url_idx = 2 if wifi_ssid else 1 %}
+    <div style="padding: 44px 72px; background: #fff; border-radius: 20px;
+                display: inline-block; text-align: left; border-top: 8px solid var(--gold);
+                box-shadow: 0 8px 28px rgba(15, 33, 56, 0.08); max-width: 1100px;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 10px;">
+            <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24"
+                 fill="none" stroke="var(--navy)" stroke-width="1.7"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="2" width="12" height="20" rx="2.5"/>
+                <line x1="11" y1="18.5" x2="13" y2="18.5"/>
+            </svg>
+            <span style="font-size: 26px; color: #5b6573; text-transform: uppercase;
+                         letter-spacing: 5px; font-weight: 600;">
+                To vote on your phone
             </span>
-
-            <span style="font-size: 28px; font-weight: 700; color: var(--gold);">2.</span>
-            <span style="font-size: 28px; color: #444;">Open your browser</span>
-            <span></span>
-
-            <span style="font-size: 28px; font-weight: 700; color: var(--gold);">3.</span>
-            <span style="font-size: 28px; color: #444;">Go to</span>
-            <span style="font-size: 36px; font-weight: 700; color: var(--navy); font-family: 'Courier New', monospace;">{{ vote_host }}</span>
-            {% else %}
-            <span style="font-size: 28px; font-weight: 700; color: var(--gold);">1.</span>
-            <span style="font-size: 28px; color: #444;">Open your browser</span>
-            <span></span>
-
-            <span style="font-size: 28px; font-weight: 700; color: var(--gold);">2.</span>
-            <span style="font-size: 28px; color: #444;">Go to</span>
-            <span style="font-size: 36px; font-weight: 700; color: var(--navy); font-family: 'Courier New', monospace;">{{ vote_host }}</span>
-            {% endif %}
         </div>
+        <ol style="list-style: none; padding: 0; margin: 24px 0 0;
+                   display: flex; flex-direction: column; gap: 22px;">
+            {% if wifi_ssid %}
+            <li style="display: flex; align-items: baseline; gap: 32px;">
+                <span style="font-size: 64px; font-weight: 800; color: var(--gold);
+                             line-height: 1; min-width: 60px; text-align: right;">1</span>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 26px; color: #6b7480; font-weight: 500;
+                                letter-spacing: 0.3px; margin-bottom: 2px;">Connect to WiFi</div>
+                    <div style="font-size: 56px; font-weight: 700; color: var(--navy);
+                                line-height: 1.05; word-break: break-word;">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" width="48" height="48"
+                             fill="none" stroke="var(--navy)" stroke-width="1.7"
+                             stroke-linecap="round" stroke-linejoin="round"
+                             style="vertical-align: -8px; margin-right: 14px;">
+                            <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                            <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                            <circle cx="12" cy="20" r="1.2" fill="var(--navy)"/>
+                        </svg>{{ wifi_ssid }}{% if wifi_password %}<span style="font-size: 26px; color: #888; font-weight: 400; margin-left: 14px;">password: {{ wifi_password }}</span>{% endif %}
+                    </div>
+                </div>
+            </li>
+            {% endif %}
+            <li style="display: flex; align-items: baseline; gap: 32px;">
+                <span style="font-size: 64px; font-weight: 800; color: var(--gold);
+                             line-height: 1; min-width: 60px; text-align: right;">{{ _step_url_idx }}</span>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 26px; color: #6b7480; font-weight: 500;
+                                letter-spacing: 0.3px; margin-bottom: 2px;">Open browser to</div>
+                    <div style="font-size: 56px; font-weight: 700; color: var(--navy);
+                                line-height: 1.05; word-break: break-word;">
+                        {{ vote_host }}{% if show_alt_host %}<span style="display: inline-block; background: var(--navy); color: #fff; font-size: 28px; font-weight: 700; letter-spacing: 5px; padding: 8px 22px 6px; border-radius: 999px; margin: 0 22px; vertical-align: 0.32em;">OR</span>{{ vote_qr_host }}{% endif %}
+                    </div>
+                </div>
+            </li>
+        </ol>
     </div>
     {% endif %}
     {% endif %}

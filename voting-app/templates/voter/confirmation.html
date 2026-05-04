@@ -23,10 +23,10 @@
 
     <div style="text-align: center;">
         <h3 style="font-size: 18px; margin: 0 0 12px;">Next voter</h3>
-        <a href="{{ url_for('voter_enter_code') }}" class="btn btn-primary">
+        <a href="{{ url_for('next_voter') }}" class="btn btn-primary">
             Enter code or scan QR
         </a>
-        <a href="{{ url_for('display_phone') }}" class="btn btn-outline" style="margin-top: 12px;">
+        <a href="{{ url_for('voter_enter_code') }}" class="btn btn-outline" style="margin-top: 12px;">
             View Live Results
         </a>
     </div>
@@ -39,7 +39,7 @@
             <button type="submit" class="btn btn-outline btn-small">Count Votes</button>
         </form>
         <p style="font-size: 12px; color: #888; margin-top: 6px;">
-            Count paper ballots from your phone.
+            Tally along as the chairman reads each ballot, as a cross-check on the counters.
         </p>
     </div>
     {% endif %}
@@ -54,7 +54,7 @@
             try {
                 var data = JSON.parse(xhr.responseText);
                 if (data.active && data.display_phase === 4) {
-                    window.location.href = '/displayphone';
+                    window.location.href = '/';
                 }
             } catch (e) {}
         };

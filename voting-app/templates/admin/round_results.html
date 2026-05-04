@@ -1,0 +1,23 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}Round {{ round_number }} results - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}Round {{ round_number }} - Closed{% endblock %}
+{% block step_heading %}Round {{ round_number }} results{% endblock %}
+{% block step_content %}
+
+<p style="font-size: 14px; color: #555; margin-bottom: 14px;">
+    Read-only summary of the round {{ round_number }} vote tally and the
+    brothers elected. Article 6a/6b thresholds shown are those that applied
+    at the time, calculated from
+    <strong>{{ participants }}</strong> participant{{ '' if participants == 1 else 's' }}
+    and the round's
+    <strong>{{ total_ballots }}</strong> ballot{{ '' if total_ballots == 1 else 's' }}
+    ({{ digital_ballot_count }} digital{% if paper_ballot_count %} + {{ paper_ballot_count }} paper{% endif %}{% if postal_voter_count %} + {{ postal_voter_count }} postal{% endif %}).
+</p>
+
+{% if results %}
+{% include "admin/_round_tally.html" %}
+{% else %}
+<p style="color: #666;">No tally data is available for this round.</p>
+{% endif %}
+
+{% endblock %}

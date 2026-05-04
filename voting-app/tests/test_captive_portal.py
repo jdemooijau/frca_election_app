@@ -64,7 +64,7 @@ def test_catch_all_unknown_path_redirects_home(client):
     location = resp.headers["Location"]
     assert location.startswith("http://")
     assert location.endswith("/")
-    assert "church.vote" in location
+    assert "10.0.0.2" in location
 
 
 def test_captive_portal_routes_return_no_cache_headers(client):
@@ -97,7 +97,7 @@ def test_captive_portal_api_advertises_portal(client):
     data = json.loads(resp.data)
     assert data["captive"] is True
     assert data["user-portal-url"].startswith("http")
-    assert "church.vote" in data["user-portal-url"]
+    assert "10.0.0.2" in data["user-portal-url"]
 
 
 def test_well_known_captive_portal_advertises_portal(client):
@@ -112,20 +112,20 @@ def test_well_known_captive_portal_advertises_portal(client):
 def test_foreign_host_is_redirected_to_canonical(client):
     resp = client.get("/", headers={"Host": "bbc.com"})
     assert resp.status_code == 302
-    assert resp.headers["Location"].startswith("http://church.vote")
+    assert resp.headers["Location"].startswith("http://10.0.0.2")
 
 
 def test_foreign_host_redirect_preserves_path_and_query(client):
     resp = client.get("/vote?code=ABC123", headers={"Host": "example.com"})
     assert resp.status_code == 302
     location = resp.headers["Location"]
-    assert location.startswith("http://church.vote")
+    assert location.startswith("http://10.0.0.2")
     assert "/vote" in location
     assert "code=ABC123" in location
 
 
 def test_canonical_host_is_not_redirected(client):
-    resp = client.get("/admin/login", headers={"Host": "church.vote"})
+    resp = client.get("/admin/login", headers={"Host": "10.0.0.2"})
     assert resp.status_code == 200
     assert b"password" in resp.data.lower()
 
@@ -162,24 +162,16 @@ def test_landing_with_no_open_election_shows_waiting_message(client):
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.data.decode("utf-8").lower()
-    assert "voting" in body
-    assert "when voting opens" in body or "you'll be handed a card" in body
-
-
-def test_landing_with_no_open_election_mentions_wifi_ssid(client):
-    from app import set_setting
-    with app.app_context():
-        set_setting("wifi_ssid", "ChurchVote")
-    resp = client.get("/")
-    assert resp.status_code == 200
-    assert b"ChurchVote" in resp.data
+    assert "you are connected" in body
+    assert "wait for the election" in body
 
 
 def test_qr_scan_with_no_open_election_shows_waiting_message(client):
     resp = client.get("/v/ABCDEF")
     assert resp.status_code == 200
     body = resp.data.decode("utf-8").lower()
-    assert "when voting opens" in body or "you'll be handed a card" in body
+    assert "you are connected" in body
+    assert "wait for the election" in body
 
 
 def _seed_election(voting_open, display_phase):
@@ -202,17 +194,20 @@ def test_landing_voting_open_phase_1_shows_waiting(client):
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.data.decode("utf-8").lower()
-    assert "when voting opens" in body or "you'll be handed a card" in body
+    assert "you are connected" in body
     assert b'name="code"' not in resp.data
 
 
-def test_landing_voting_open_phase_2_shows_waiting(client):
-    """Chairman opened voting but is still on Rules phase - voters wait."""
-    _seed_election(voting_open=1, display_phase=2)
+def test_landing_phase_2_shows_rules_message(client):
+    """Chairman is on Rules phase (voting_open still 0) - phones show 'opening in progress' + double-vote warning."""
+    _seed_election(voting_open=0, display_phase=2)
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.data.decode("utf-8").lower()
-    assert "when voting opens" in body or "you'll be handed a card" in body
+    assert "opening in progress" in body
+    assert "soon receive a ballot" in body
+    assert "vote one way only" in body
+    assert "do not" in body and "ballot" in body
     assert b'name="code"' not in resp.data
 
 
@@ -225,34 +220,35 @@ def test_landing_voting_open_phase_3_shows_form(client):
     assert b"Submit Code" in resp.data
 
 
-def test_landing_voting_closed_phase_3_shows_waiting(client):
-    """Voting closed (between rounds) even with phase 3 still set - voters wait."""
+def test_landing_voting_closed_phase_3_shows_live_display(client):
+    """Voting closed at phase 3 (counting / between-rounds): / renders the
+    live display view, not the code-entry form. Voters cannot enter codes,
+    but they can watch ballot progress."""
     _seed_election(voting_open=0, display_phase=3)
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.data.decode("utf-8").lower()
-    assert "when voting opens" in body or "you'll be handed a card" in body
+    assert "ballots" in body
+    assert "participating" in body
+    assert "you are connected" not in body
     assert b'name="code"' not in resp.data
 
 
-def test_wait_page_mentions_qr_card_and_paper_ballot(client):
-    """Wait-page copy should tell voters about the QR code, the card, and the paper alternative."""
+def test_wait_page_mentions_qr_and_code(client):
+    """Wait-page copy should tell voters they will scan a QR or enter a code when voting opens."""
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.data.decode("utf-8").lower()
     assert "qr" in body
-    assert "card" in body
-    assert "paper ballot" in body
+    assert "code" in body
 
 
-def test_wait_page_warns_against_double_voting(client):
-    """A red warning must tell voters not to submit paper if they voted online."""
+def test_wait_page_prompts_attendance_register(client):
+    """Wait-page must prompt voters to sign the attendance register if not already done."""
     resp = client.get("/")
     assert resp.status_code == 200
-    body = resp.data.decode("utf-8")
-    assert "Vote one way only" in body
-    # Warning is rendered with a red accent (border colour or text colour).
-    assert "#C0392B" in body
+    body = resp.data.decode("utf-8").lower()
+    assert "attendance register" in body
 
 
 def _seed_election_with_candidates(voting_open, show_results, display_phase=3):
@@ -284,38 +280,146 @@ def _seed_election_with_candidates(voting_open, show_results, display_phase=3):
         return eid
 
 
+def _set_voted_session(client, eid, code="DEMOC1"):
+    """Mark the test client as a voter who has already voted in `eid`,
+    which is what triggers / to render the live results view."""
+    with client.session_transaction() as sess:
+        sess["used_code"] = code
+        sess["election_id"] = eid
+
+
 def test_phone_display_hides_candidates_while_voting_open(client):
     """Phone display must not leak candidate names or counts during a live round
     even if the chairman has flipped show_results on."""
-    _seed_election_with_candidates(voting_open=1, show_results=1)
-    resp = client.get("/displayphone")
+    eid = _seed_election_with_candidates(voting_open=1, show_results=1)
+    _set_voted_session(client, eid)
+    resp = client.get("/")
     assert resp.status_code == 200
     assert b"Smith John" not in resp.data
     assert b"Doe Jane" not in resp.data
 
 
 def test_phone_display_hides_candidates_while_voting_open_show_results_off(client):
-    _seed_election_with_candidates(voting_open=1, show_results=0)
-    resp = client.get("/displayphone")
+    eid = _seed_election_with_candidates(voting_open=1, show_results=0)
+    _set_voted_session(client, eid)
+    resp = client.get("/")
     assert resp.status_code == 200
     assert b"Smith John" not in resp.data
     assert b"Doe Jane" not in resp.data
 
 
-def test_phone_display_shows_candidates_when_round_closed(client):
-    """Once voting is closed, candidate names appear on the phone display."""
-    _seed_election_with_candidates(voting_open=0, show_results=1)
-    resp = client.get("/displayphone")
+def test_phone_display_hides_candidates_when_round_closed_pre_final(client):
+    """Voting closed but the chairman has not advanced to Final Results
+    (phase 4) yet. Phone must not leak candidate names during the count
+    even though show_results is on."""
+    eid = _seed_election_with_candidates(voting_open=0, show_results=1, display_phase=3)
+    _set_voted_session(client, eid)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Smith John" not in resp.data
+    assert b"Doe Jane" not in resp.data
+
+
+def test_phone_display_shows_candidates_at_final_results(client):
+    """Once the chairman advances to Final Results (display_phase=4),
+    candidate names appear on the phone display."""
+    eid = _seed_election_with_candidates(voting_open=0, show_results=1, display_phase=4)
+    _set_voted_session(client, eid)
+    resp = client.get("/")
     assert resp.status_code == 200
     assert b"Smith John" in resp.data
     assert b"Doe Jane" in resp.data
 
 
+def test_phone_display_at_final_results_works_without_session(client):
+    """Regression: a freshly-connected phone (no used_code in session)
+    landing on / at phase 4 must still see the live display, not the
+    'You are connected' wait page. Mirrors the projector's Final
+    Results state."""
+    _seed_election_with_candidates(voting_open=0, show_results=1, display_phase=4)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    body = resp.data.decode("utf-8")
+    assert "You are connected" not in body
+    assert b"Smith John" in resp.data
+    assert b"Doe Jane" in resp.data
+
+
+def test_phone_display_shows_elected_tag_when_projector_does(client):
+    """ELECTED tag must appear on the phone whenever it appears on the
+    projector: voting closed, show_results on, candidate marked elected.
+    Phone only enables this at display_phase=4 (when names render)."""
+    from app import app as flask_app, get_db
+    eid = _seed_election_with_candidates(voting_open=0, show_results=1, display_phase=4)
+    with flask_app.app_context():
+        get_db().execute(
+            "UPDATE candidates SET elected = 1 WHERE name = 'Smith John'"
+        )
+        get_db().commit()
+    _set_voted_session(client, eid)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Smith John" in resp.data
+    assert b"ELECTED" in resp.data
+    assert b'class="elected-tag"' in resp.data
+
+
+def test_phone_display_no_elected_tag_while_voting_open(client):
+    """ELECTED tag must not render next to a candidate name while voting
+    is open even if show_results is on. Mirrors the projector gate.
+
+    The literal string 'ELECTED' lives in the page's <script> as a JS
+    template, so we check the server-rendered candidate row directly.
+    """
+    from app import app as flask_app, get_db
+    eid = _seed_election_with_candidates(voting_open=1, show_results=1, display_phase=4)
+    with flask_app.app_context():
+        get_db().execute("UPDATE candidates SET elected = 1 WHERE name = 'Smith John'")
+        get_db().commit()
+    _set_voted_session(client, eid)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b'Smith John<span class="elected-tag">' not in resp.data
+
+
 def test_phone_display_shows_ballot_progress_while_voting_open(client):
     """Progress block (ballots / participating) must still render while voting is open."""
-    _seed_election_with_candidates(voting_open=1, show_results=0)
-    resp = client.get("/displayphone")
+    eid = _seed_election_with_candidates(voting_open=1, show_results=0)
+    _set_voted_session(client, eid)
+    resp = client.get("/")
     assert resp.status_code == 200
     body = resp.data.decode("utf-8").lower()
     assert "ballots" in body
     assert "participating" in body
+
+
+def test_next_voter_clears_session_so_entry_form_renders(client):
+    """Regression: after a voter votes, the confirmation page's
+    'Enter code or scan QR' button links to /next-voter. That route
+    must clear the previous voter's session keys so / renders the
+    code-entry form for the next voter, not the live results display.
+    """
+    eid = _seed_election_with_candidates(voting_open=1, show_results=0,
+                                         display_phase=3)
+    _set_voted_session(client, eid)
+
+    # With the voted session, / renders the live display (no entry form).
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b'name="code"' not in resp.data
+
+    # /next-voter clears session and 302s to /.
+    resp = client.get("/next-voter")
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/")
+
+    # Session keys are gone.
+    with client.session_transaction() as sess:
+        assert "used_code" not in sess
+        assert "election_id" not in sess
+        assert "code_hash" not in sess
+
+    # Now / renders the entry form (code input field present).
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b'name="code"' in resp.data

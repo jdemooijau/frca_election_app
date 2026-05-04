@@ -1524,6 +1524,14 @@ tr:nth-child(even) {
 .wizard-sidebar-collapsed {
     color: #6c757d; font-size: 11px; padding: 4px 8px; font-style: italic;
 }
+a.wizard-sidebar-collapsed.link {
+    display: block;
+    text-decoration: none;
+    border-radius: 4px;
+}
+a.wizard-sidebar-collapsed.link:hover {
+    background: #eef0f3; color: var(--navy); text-decoration: underline;
+}
 .wizard-main {
     flex: 1; min-width: 0;
     background: #fff; border: 1px solid var(--grey); border-radius: 8px;

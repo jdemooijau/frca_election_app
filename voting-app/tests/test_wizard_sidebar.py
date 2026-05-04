@@ -288,6 +288,54 @@ def test_old_codes_url_redirects_to_codes_step(election_with_codes):
     assert "/step/codes" in rv.location
 
 
+def _force_round_2(client_):
+    """Bump current_round to 2 so round 1 looks closed for the sidebar.
+
+    Sets a participant count for round 1 so the round-results helper can
+    compute thresholds and ballot totals."""
+    from app import get_db
+    with app.app_context():
+        db = get_db()
+        db.execute("UPDATE elections SET current_round = 2, voting_open = 0 WHERE id = 1")
+        db.execute(
+            "INSERT OR REPLACE INTO round_counts "
+            "(election_id, round_number, participants, paper_ballot_count, digital_ballot_count) "
+            "VALUES (1, 1, 8, 0, 0)"
+        )
+        db.commit()
+
+
+def test_sidebar_collapses_prior_round_with_results_link(election_with_codes):
+    """Once current_round > 1, the sidebar surfaces a clickable Round 1
+    summary linking to the read-only round-results page."""
+    _force_round_2(election_with_codes)
+    from app import compute_sidebar_state
+    with app.app_context():
+        state = compute_sidebar_state(election_id=1)
+    round1 = next(g for g in state["groups"] if g["label"] == "Round 1")
+    assert round1.get("collapsed") is True
+    assert "/admin/election/1/round/1/results" in round1.get("url", "")
+
+
+def test_round_results_page_renders_for_closed_prior_round(election_with_codes):
+    _force_round_2(election_with_codes)
+    rv = election_with_codes.get("/admin/election/1/round/1/results")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Round 1 results" in body
+    assert "wizard-sidebar" in body
+    # Office heading from the fixture
+    assert "Elder" in body
+
+
+def test_round_results_404s_for_current_or_future_round(election_with_codes):
+    _force_round_2(election_with_codes)
+    # Current round (2) is not yet closed -> 404
+    assert election_with_codes.get("/admin/election/1/round/2/results").status_code == 404
+    # Round 0 / negative are invalid
+    assert election_with_codes.get("/admin/election/1/round/0/results").status_code == 404
+
+
 def test_dashboard_manage_link_targets_step_open(election_with_codes):
     # Mark first-run setup complete so /admin renders the dashboard.
     from app import set_setting

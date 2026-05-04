@@ -338,10 +338,10 @@ def test_confirmation_hides_assist_when_disabled(client):
     assert b"Count Votes" not in resp.data
 
 
-def test_confirmation_shows_assist_even_while_voting_open(client):
-    """The assist button is visible whenever paper_count_enabled is on and the
-    session is not yet persisted/cancelled. Voting state does not gate it,
-    so voters who finish early can opt in without waiting for voting to close.
+def test_confirmation_hides_assist_while_voting_open(client):
+    """The assist button must NOT appear while voting is still open AND
+    not all expected ballots are in. Helpers should not start counting
+    while ballots are still being submitted.
     """
     election_id, codes = _setup_paper_count_election(client)
     # Open voting and leave open
@@ -351,7 +351,114 @@ def test_confirmation_shows_assist_even_while_voting_open(client):
         sess["election_id"] = election_id
     resp = client.get("/confirmation")
     assert resp.status_code == 200
+    assert b"Count Votes" not in resp.data
+
+
+def test_confirmation_shows_assist_when_all_votes_in_even_if_voting_open(client):
+    """The assist button must appear once all expected ballots are in,
+    matching the projector's 'All votes received' panel that promotes the
+    Count Votes button at this state. The chairman may not have flipped
+    voting closed yet but the count can begin.
+    """
+    from app import app as flask_app, get_db
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    # Force the round_counts to "all expected ballots are in".
+    with flask_app.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT OR REPLACE INTO round_counts "
+            "(election_id, round_number, participants, paper_ballot_count, digital_ballot_count) "
+            "VALUES (?, 1, 1, 0, 1)",
+            (election_id,)
+        )
+        db.commit()
+    with client.session_transaction() as sess:
+        sess["used_code"] = codes[0]
+        sess["election_id"] = election_id
+    resp = client.get("/confirmation")
+    assert resp.status_code == 200
     assert b"Count Votes" in resp.data
+
+
+def test_displayphone_count_cta_appears_only_when_round_closed(client):
+    """The post-vote live-results page (/) must hide the Count Votes CTA
+    while voting is open, show it after the round closes (during the
+    count), and hide it again once the chairman advances to Final
+    Results (phase 4)."""
+    from app import app as flask_app, get_db
+    election_id, codes = _setup_paper_count_election(client)
+    # Voting open
+    client.post(f"/admin/election/{election_id}/voting")
+    with client.session_transaction() as sess:
+        sess["used_code"] = codes[0]
+        sess["election_id"] = election_id
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Count Votes" not in resp.data
+
+    # Voting closed (still display_phase=3) - CTA shows
+    client.post(f"/admin/election/{election_id}/voting")
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Count Votes" in resp.data
+
+    # Chairman advances to Final Results (phase 4) - CTA disappears.
+    # Use show_results=1 so / renders phone.html (the live results
+    # template) rather than final.html.
+    with flask_app.app_context():
+        get_db().execute(
+            "UPDATE elections SET display_phase = 4, show_results = 1 WHERE id = ?",
+            (election_id,)
+        )
+        get_db().commit()
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Count Votes" not in resp.data
+
+
+def test_post_vote_count_cta_explains_helper_counter(client):
+    """When the count CTA appears on the post-vote live-results page,
+    it must explain that helpers cross-check the appointed counters by
+    tallying along as the chairman reads ballots."""
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")
+    client.post(f"/admin/election/{election_id}/voting")
+    with client.session_transaction() as sess:
+        sess["used_code"] = codes[0]
+        sess["election_id"] = election_id
+    resp = client.get("/")
+    assert resp.status_code == 200
+    body = resp.data.decode("utf-8").lower()
+    assert "cross-check" in body
+    assert "chairman" in body
+    assert "read" in body
+    assert "20 helpers" in body
+
+
+def test_root_shows_live_results_after_voting(client):
+    """After a voter submits their ballot, GET / must render the live
+    results page (former /displayphone). Regression: the user reported
+    that / 'only ever displays You are connected' after voting.
+    """
+    election_id, codes = _setup_paper_count_election(client)
+    client.post(f"/admin/election/{election_id}/voting")  # open
+
+    client.post("/vote", data={"code": codes[0]})
+    client.post("/submit", data={"confirm_partial": "1"})
+
+    with client.session_transaction() as sess:
+        assert sess.get("used_code") == codes[0]
+        assert sess.get("election_id") == election_id
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    body = resp.data.decode("utf-8")
+    # The wait page heading must NOT appear.
+    assert "You are connected" not in body
+    # The live-results page should render its progress block.
+    assert "ballots" in body.lower()
+    assert "participating" in body.lower()
 
 
 def test_real_voter_submit_keeps_election_id_for_assist_button(client):

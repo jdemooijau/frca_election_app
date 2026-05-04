@@ -96,12 +96,26 @@ def _calc_code_slip_height(wifi_password):
 
 
 def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
-                   base_url):
+                   base_url, qr_base_url=None):
     """Draw a modern B&W-optimised code slip in the given cell.
 
-    Layout: "Vote Digitally" header → Step 1 WiFi → Step 2 QR+code →
-    Step 3 fallback URL (subdued) → warning strip.
+    Layout: "Vote Digitally" header -> Step 1 WiFi -> Step 2 QR+code ->
+    Step 3 fallback URL (subdued) -> warning strip.
+
+    base_url is the human-readable URL printed on the slip (e.g.
+    'http://church.vote'). qr_base_url, if given and different, is
+    encoded in the QR code instead and shown as a fallback inline next
+    to base_url. This lets us print a friendly hostname while encoding
+    a literal IP in the QR, which avoids DNS routing issues on Android
+    phones that keep cellular as the default DNS path.
     """
+    def _strip_scheme(u):
+        return u.replace("http://", "").replace("https://", "").rstrip("/")
+
+    qr_url_for_encode = qr_base_url or base_url
+    show_alt_url = bool(qr_base_url) and qr_base_url != base_url
+    base_url_display = _strip_scheme(base_url)
+    alt_url_display = _strip_scheme(qr_base_url) if show_alt_url else ""
     cx = x + w / 2
     tx = x + 3 * mm
     bottom_y = top_y - cell_h
@@ -168,7 +182,7 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
 
     # QR image only (voting code moved to step 3)
     qr_size = 36 * mm
-    vote_url = f"{base_url}/v/{code}"
+    vote_url = f"{qr_url_for_encode}/v/{code}"
     qr_img = _generate_qr_image(vote_url)
     qr_x = label_x
     c.drawImage(qr_img, qr_x, y - qr_size, qr_size, qr_size)
@@ -202,15 +216,29 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     c.setFillColor(HexColor("#FFFFFF"))
     c.drawCentredString(pill_cx, or_y - 1.3 * mm, or_text)
 
-    # Fallback text: "Go to <url> and enter:"
+    # Fallback text: "Open browser to <url> and enter:" (with "(or <alt>)"
+    # when the QR target differs from the printed URL).
     c.setFont("Helvetica", 10)
     c.setFillColor(HexColor("#555555"))
-    c.drawString(tx, y3, "Go to")
-    url_x = tx + c.stringWidth("Go to ", "Helvetica", 10)
+    c.drawString(tx, y3, "Open browser to")
+    url_x = tx + c.stringWidth("Open browser to ", "Helvetica", 10)
     c.setFont("Helvetica-Bold", 10)
     c.setFillColor(HexColor("#000000"))
-    c.drawString(url_x, y3, base_url)
-    after_x = url_x + c.stringWidth(base_url + " ", "Helvetica-Bold", 10)
+    c.drawString(url_x, y3, base_url_display)
+    after_x = url_x + c.stringWidth(base_url_display + " ", "Helvetica-Bold", 10)
+    if show_alt_url:
+        c.setFont("Helvetica", 10)
+        c.setFillColor(HexColor("#555555"))
+        c.drawString(after_x, y3, "(or")
+        after_x += c.stringWidth("(or ", "Helvetica", 10)
+        c.setFont("Helvetica-Bold", 10)
+        c.setFillColor(HexColor("#000000"))
+        c.drawString(after_x, y3, alt_url_display)
+        after_x += c.stringWidth(alt_url_display, "Helvetica-Bold", 10)
+        c.setFont("Helvetica", 10)
+        c.setFillColor(HexColor("#555555"))
+        c.drawString(after_x, y3, ") ")
+        after_x += c.stringWidth(") ", "Helvetica", 10)
     c.setFont("Helvetica", 10)
     c.setFillColor(HexColor("#555555"))
     c.drawString(after_x, y3, "and enter:")
@@ -233,8 +261,9 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
 
 
 def generate_code_slips_pdf(codes, election_name, short_name, wifi_ssid,
-                            wifi_password, base_url, is_demo=False):
-    """Generate printable voting code cards — 6 per A4 page.
+                            wifi_password, base_url, is_demo=False,
+                            qr_base_url=None):
+    """Generate printable voting code cards. 6 per A4 page.
 
     Args:
         codes: list of voting code strings.
@@ -242,8 +271,10 @@ def generate_code_slips_pdf(codes, election_name, short_name, wifi_ssid,
         short_name: congregation short name (e.g. 'FRC Darling Downs').
         wifi_ssid: WiFi SSID to display.
         wifi_password: WiFi password to display (may be empty).
-        base_url: voting base URL (e.g. 'http://192.168.8.100:5000').
+        base_url: human-readable voting URL printed on the slip.
         is_demo: if True, add demo watermark and header per page.
+        qr_base_url: optional override for the URL encoded in the QR.
+            When set and different from base_url, the slip prints both.
 
     Returns:
         BytesIO buffer containing the PDF.
@@ -274,7 +305,8 @@ def generate_code_slips_pdf(codes, election_name, short_name, wifi_ssid,
             card_top_y = height - margin - row * (card_h + v_gap)
 
             draw_code_slip(c, card_x, card_top_y, card_w, card_h, code,
-                           wifi_ssid, wifi_password, base_url)
+                           wifi_ssid, wifi_password, base_url,
+                           qr_base_url=qr_base_url)
 
         c.showPage()
 
@@ -510,6 +542,13 @@ def generate_paper_ballot_pdf(election_name, round_number, office_data,
     # available width.
     scale = min(text_fit_cap, page_fit_cap) * 0.97
     scale = max(1.0, min(scale, 5.0))
+
+    # Sparse offices (<=2 candidates) hit the page-fit cap so loosely
+    # that the resulting font is comically large. Trim 40% so the body
+    # stays proportionate; residual slack moves into row spacing and
+    # vertical centering further down.
+    if max_cands_in_office <= 2:
+        scale = max(1.0, scale * 0.6)
 
     if two_office_cols:
         mid = (n_offices + 1) // 2
@@ -921,6 +960,11 @@ def _draw_ballot_card(c, x, top_y, card_w, card_h, election_name,
     scale = min(text_fit_cap, page_fit_cap) * 0.97
     scale = max(1.0, min(scale, 5.0))
 
+    # Sparse offices (<=2 candidates): trim 40% so the body font stays
+    # proportionate. Slack moves into row spacing and vertical centering.
+    if max_cands_in_office <= 2:
+        scale = max(1.0, scale * 0.6)
+
     # Per-element sizes (heading at base point sizes; body scales)
     title_pt = 12  # cards are larger than grid tiles, keep title at 12pt
     box_mm = 3 * scale
@@ -1038,7 +1082,8 @@ def _draw_ballot_card(c, x, top_y, card_w, card_h, election_name,
 def generate_dual_sided_ballots_pdf(election_name, short_name, round_number,
                                      office_data, codes, wifi_ssid,
                                      wifi_password, base_url,
-                                     member_count=0, is_demo=False):
+                                     member_count=0, is_demo=False,
+                                     qr_base_url=None):
     """Generate grid-based dual-sided ballots PDF for duplex printing.
 
     Odd pages contain a grid of mini paper ballots. Even pages contain a grid
@@ -1136,7 +1181,8 @@ def generate_dual_sided_ballots_pdf(election_name, short_name, round_number,
         for slot, code_str in enumerate(batch_codes):
             sx, stop_y = _slot_xy(slot, is_back=True)
             draw_code_slip(c, sx, stop_y, col_w, cell_h, code_str,
-                           wifi_ssid, wifi_password, base_url)
+                           wifi_ssid, wifi_password, base_url,
+                           qr_base_url=qr_base_url)
         c.showPage()
 
     c.save()
@@ -1209,7 +1255,8 @@ def generate_ballot_front_pdf(election_name, office_data, wifi_password,
 
 
 def generate_code_slips_back_pdf(codes, wifi_ssid, wifi_password, base_url,
-                                 office_data, member_count=0, is_demo=False):
+                                 office_data, member_count=0, is_demo=False,
+                                 qr_base_url=None):
     """Generate card-sized PDF with one code slip per page.
 
     Each page has a unique voting code + QR. The printer cannot duplicate
@@ -1228,7 +1275,8 @@ def generate_code_slips_back_pdf(codes, wifi_ssid, wifi_password, base_url,
 
     for code_str in codes:
         draw_code_slip(c, 0, cell_h, col_w, cell_h, code_str,
-                       wifi_ssid, wifi_password, base_url)
+                       wifi_ssid, wifi_password, base_url,
+                       qr_base_url=qr_base_url)
         c.showPage()
 
     c.save()
@@ -1238,7 +1286,7 @@ def generate_code_slips_back_pdf(codes, wifi_ssid, wifi_password, base_url,
 
 def generate_cards_duplex_pdf(election_name, office_data, codes, wifi_ssid,
                               wifi_password, base_url, member_count=0,
-                              is_demo=False):
+                              is_demo=False, qr_base_url=None):
     """Generate a card-sized PDF with interleaved front/back pages.
 
     Page layout: front, back, front, back, ... — 2N pages for N cards.
@@ -1264,7 +1312,8 @@ def generate_cards_duplex_pdf(election_name, office_data, codes, wifi_ssid,
 
         # Back (unique code + QR)
         draw_code_slip(c, 0, cell_h, col_w, cell_h, code_str,
-                       wifi_ssid, wifi_password, base_url)
+                       wifi_ssid, wifi_password, base_url,
+                       qr_base_url=qr_base_url)
         c.showPage()
 
     c.save()
@@ -1337,7 +1386,8 @@ def generate_attendance_register_pdf(members, congregation_name,
     return buf
 
 
-def generate_av_instructions_pdf(election_name, wifi_ssid, wifi_password, base_url):
+def generate_av_instructions_pdf(election_name, wifi_ssid, wifi_password,
+                                 base_url, qr_base_url=None):
     """Generate a one-page A4 instruction sheet for the AV team.
 
     The election admin prints this and hands it to the person running the
@@ -1349,6 +1399,9 @@ def generate_av_instructions_pdf(election_name, wifi_ssid, wifi_password, base_u
         wifi_ssid: SSID of the election WiFi network.
         wifi_password: password for the election WiFi network.
         base_url: configured voting base URL (e.g. "http://church.vote").
+        qr_base_url: optional alternative URL (typically the laptop's
+            literal IP). When set and different from base_url, the
+            handout shows both as fallbacks for the AV team to try.
 
     Returns:
         BytesIO buffer containing the PDF.
@@ -1385,14 +1438,25 @@ def generate_av_instructions_pdf(election_name, wifi_ssid, wifi_password, base_u
     body_style.leading = 19
 
     display_url = f"{base_url.rstrip('/')}/display"
+    alt_display_url = ""
+    if qr_base_url and qr_base_url.rstrip("/") != base_url.rstrip("/"):
+        alt_display_url = f"{qr_base_url.rstrip('/')}/display"
     password_text = wifi_password if wifi_password else "none"
+
+    if alt_display_url:
+        open_in_chrome_body = (
+            f"<b>{display_url}</b><br/>"
+            f"<font size=\"11\" color=\"#666666\">or "
+            f"<b>{alt_display_url}</b> if the first does not load.</font>"
+        )
+    else:
+        open_in_chrome_body = f"<b>{display_url}</b>"
 
     sections = [
         ("Connect to WiFi",
          f"Network: <b>{wifi_ssid}</b><br/>"
          f"Password: <b>{password_text}</b>"),
-        ("Open in Chrome",
-         f"<b>{display_url}</b>"),
+        ("Open in Chrome", open_in_chrome_body),
         ("Press F11 for fullscreen",
          "Adjust zoom with <b>Ctrl +</b> / <b>Ctrl -</b>. "
          "<b>Ctrl 0</b> resets to 100%."),
@@ -1444,7 +1508,7 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
                               office_data, codes, wifi_ssid, wifi_password,
                               base_url, congregation_name, members,
                               election_date=None, member_count=0,
-                              is_demo=False):
+                              is_demo=False, qr_base_url=None):
     """Generate a ZIP containing all PDFs needed for professional printing.
 
     Contents (filenames prefixed so they sort in the order described
@@ -1469,19 +1533,22 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
     # 2. Code slips back (N pages, card-sized)
     back_buf = generate_code_slips_back_pdf(
         codes, wifi_ssid, wifi_password, base_url, office_data,
-        member_count=member_count, is_demo=is_demo)
+        member_count=member_count, is_demo=is_demo,
+        qr_base_url=qr_base_url)
 
     # 3. Cards duplex (interleaved front/back, card-sized, 2N pages)
     cards_duplex_buf = generate_cards_duplex_pdf(
         election_name, office_data, codes,
         wifi_ssid, wifi_password, base_url,
-        member_count=member_count, is_demo=is_demo)
+        member_count=member_count, is_demo=is_demo,
+        qr_base_url=qr_base_url)
 
     # 4. Dual-sided grid layout (for home A4 printing fallback)
     dual_buf = generate_dual_sided_ballots_pdf(
         election_name, short_name, round_number, office_data, codes,
         wifi_ssid, wifi_password, base_url,
-        member_count=member_count, is_demo=is_demo)
+        member_count=member_count, is_demo=is_demo,
+        qr_base_url=qr_base_url)
 
     # 4. Counter sheet
     counter_buf = generate_counter_sheet_pdf(
@@ -1495,7 +1562,8 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
 
     # 6. AV team instructions (handout for the liturgy screen operator)
     av_buf = generate_av_instructions_pdf(
-        election_name, wifi_ssid, wifi_password, base_url)
+        election_name, wifi_ssid, wifi_password, base_url,
+        qr_base_url=qr_base_url)
 
     # 7. Instructions
     # One card per generated code. Multi-round elections generate codes

@@ -183,6 +183,38 @@
         line-height: 1.35;
         font-weight: 600;
     }
+    .count-cta {
+        background: var(--grey-light);
+        border: 2px solid var(--gold);
+        border-radius: 12px;
+        padding: 18px 16px;
+        margin-bottom: 14px;
+    }
+    .count-cta h2 {
+        font-size: 18px;
+        color: var(--navy);
+        margin: 0 0 8px;
+        text-align: center;
+    }
+    .count-cta p {
+        font-size: 14px;
+        color: #444;
+        line-height: 1.45;
+        margin: 0 0 10px;
+    }
+    .count-cta p:last-of-type { margin-bottom: 14px; }
+    .count-cta button {
+        width: 100%;
+        padding: 16px;
+        background: var(--navy);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 
@@ -205,15 +237,15 @@
     </div>
 
     {% if show_assist %}
-    <form method="POST" action="{{ url_for('count_join') }}" style="margin-bottom: 10px;">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 16px;">
-            Count Votes
-        </button>
-        <p style="font-size: 12px; color: #666; margin: 6px 0 0; text-align: center;">
-            Count paper ballots from your phone.
-        </p>
-    </form>
+    <div class="count-cta">
+        <h2>Cross-check the count</h2>
+        <p>Voting is closed. The chairman will now read each ballot aloud while the two appointed counters tally at the front.</p>
+        <p>Tap below to follow along on your phone. As each name is read, tap the candidate to add a vote. Your tallies are compared against the counters' as an independent check. Up to 20 helpers can join.</p>
+        <form method="POST" action="{{ url_for('count_join') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit">Count Votes</button>
+        </form>
+    </div>
     {% endif %}
 
     {% if total_ballots > participants and participants > 0 %}
@@ -243,16 +275,14 @@
     </div>
 
     <div id="results-container">
-        {% if not election.voting_open %}
+        {% if (election.display_phase or 1) == 4 %}
         {% for office in results %}
         {% if office.candidates %}
         <div class="office-block">
             <h3>{{ office.office_name }}</h3>
             {% for cand in office.candidates %}
             <div class="cand-row">
-                <span class="name">
-                    {{ cand.name }}{% if cand.elected %}<span class="elected-tag">ELECTED</span>{% endif %}
-                </span>
+                <span class="name">{{ cand.name }}{% if cand.elected and not election.voting_open and election.show_results %}<span class="elected-tag">ELECTED</span>{% endif %}</span>
                 {% if election.show_results %}
                 <span class="votes">{{ cand.total }}</span>
                 {% endif %}
@@ -281,13 +311,21 @@
         {% endif %}
     </div>
 
-    <a href="{{ url_for('voter_enter_code') }}" class="nav-btn">Back to voting</a>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 (function() {
+    // Snapshot the state we were rendered for so we can reload when the
+    // chairman moves to a state that would route us to a different
+    // template (e.g. back to phase 1, voting reopens, show_results
+    // flips at phase 4).
+    var renderedState = {
+        phase: {{ (election.display_phase or 1) | tojson }},
+        voting_open: {{ "true" if election.voting_open else "false" }},
+        show_results: {{ "true" if election.show_results else "false" }}
+    };
     function esc(t) {
         var d = document.createElement('div');
         d.appendChild(document.createTextNode(t));
@@ -302,9 +340,12 @@
             try { data = JSON.parse(xhr.responseText); } catch (e) { return; }
             if (!data.active) return;
 
-            // Switch to final.html only when the chairman explicitly advances
-            // to phase 4. Closing voting alone keeps the live view (with counts).
-            if (data.display_phase === 4) {
+            // Reload if any state that affects template routing has
+            // changed. The server picks the right template (phone.html /
+            // final.html / enter_code.html) on the next request.
+            if (data.display_phase !== renderedState.phase
+                || !!data.voting_open !== renderedState.voting_open
+                || !!data.show_results !== renderedState.show_results) {
                 location.reload();
                 return;
             }
@@ -344,20 +385,24 @@
                 }
             }
 
-            // Candidate listing only appears once the round is closed —
-            // while voting is open, the phone display shows the ballot
-            // progress only.
+            // Candidate listing only appears once the chairman advances
+            // to the Final Results phase (display_phase 4). While voting
+            // is open or being counted, the phone shows ballot progress
+            // only. ELECTED tags mirror the projector: visible only when
+            // voting is closed and show_results is on.
             var container = document.getElementById('results-container');
-            var closed = !data.voting_open;
-            var showCounts = !!data.show_results && closed;
-            if (data.results && closed) {
+            var finalPhase = data.display_phase === 4;
+            var showCounts = !!data.show_results && finalPhase;
+            if (data.results && finalPhase) {
                 var html = '';
                 data.results.forEach(function(office) {
                     if (!office.candidates || office.candidates.length === 0) return;
                     html += '<div class="office-block"><h3>' + esc(office.office_name) + '</h3>';
                     office.candidates.forEach(function(cand) {
                         html += '<div class="cand-row"><span class="name">' + esc(cand.name);
-                        if (cand.elected) html += '<span class="elected-tag">ELECTED</span>';
+                        if (cand.elected && !data.voting_open && showCounts) {
+                            html += '<span class="elected-tag">ELECTED</span>';
+                        }
                         html += '</span>';
                         if (showCounts) html += '<span class="votes">' + cand.total + '</span>';
                         html += '</div>';

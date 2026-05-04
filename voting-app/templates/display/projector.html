@@ -160,6 +160,42 @@
     }
     .all-votes-panel h2 { text-align: center; }
     .all-votes-panel p { text-align: center; }
+    .prior-elected {
+        background: #E8F8EE;
+        border-left: 4px solid var(--green);
+        border-radius: 6px;
+        padding: calc(8px * var(--proj-scale)) calc(12px * var(--proj-scale));
+        margin: calc(4px * var(--proj-scale)) 0 calc(10px * var(--proj-scale));
+        font-size: calc(18px * var(--proj-scale));
+        line-height: 1.35;
+    }
+    .prior-elected-title {
+        font-weight: 700;
+        color: #1E7A3F;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: calc(16px * var(--proj-scale));
+        margin-bottom: calc(4px * var(--proj-scale));
+    }
+    .prior-elected-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: calc(12px * var(--proj-scale));
+        padding: calc(2px * var(--proj-scale)) 0;
+        color: var(--navy);
+    }
+    .prior-elected-row .name { overflow-wrap: anywhere; font-weight: 600; }
+    .prior-elected-row .round-badge {
+        font-size: calc(14px * var(--proj-scale));
+        color: #1E7A3F;
+        font-weight: 700;
+        margin-left: calc(6px * var(--proj-scale));
+    }
+    .prior-elected-row .votes {
+        flex-shrink: 0;
+        font-weight: 700;
+    }
 </style>
 {% endblock %}
 
@@ -236,29 +272,25 @@
          style="{{ '' if show_instructions else 'display:none' }}">
         <div class="instructions-options">
             <div class="instruction-card">
-                <div class="instruction-icon">
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><rect x="5" y="1" width="14" height="22" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="20" x2="14" y2="20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                </div>
-                <h2>Option 1 — Vote Online</h2>
+                <h2><svg viewBox="0 0 24 24" fill="currentColor" width="0.9em" height="0.9em" style="vertical-align: -0.1em; margin-right: 14px;"><rect x="5" y="1" width="14" height="22" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="20" x2="14" y2="20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Option 1 — Vote Online</h2>
                 <ol>
                     {% if wifi_ssid %}
                     <li>Connect to WiFi: <strong>{{ wifi_ssid }}</strong>{% if wifi_password %} (password: <strong>{{ wifi_password }}</strong>){% endif %}</li>
                     {% endif %}
+                    {% set _vote_host = vote_url | replace('http://', '') | replace('https://', '') | replace('/', '') %}
+                    {% set _vote_qr_host = (vote_qr_url or '') | replace('http://', '') | replace('https://', '') | replace('/', '') %}
                     <li>Scan the <strong>QR code</strong> on your code slip
                         <div class="or-divider"><span>OR</span></div>
-                        Go to <strong>{{ vote_url }}</strong> and type in your code</li>
+                        Go to <strong>{{ _vote_host }}</strong>{% if _vote_qr_host and _vote_qr_host != _vote_host %} (or <strong>{{ _vote_qr_host }}</strong>){% endif %} and type in your code</li>
                     <li>Mark your selections and submit</li>
                 </ol>
                 <p style="margin-top: 12px; padding: 14px 18px; background: #FFF8DC; border-left: 6px solid #D4A017; border-radius: 8px; color: #5C4400; font-size: 34px; line-height: 1.3; font-weight: 600;">
-                    No phone? <strong>Borrow one.</strong> Your code slip is what identifies your vote.
+                    No phone? <strong>Borrow one.</strong> Your QR/code is unique.
                 </p>
             </div>
             <div class="options-divider"><span>OR</span></div>
             <div class="instruction-card">
-                <div class="instruction-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="1em" height="1em"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
-                </div>
-                <h2>Option 2 — Vote on Paper</h2>
+                <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="0.9em" height="0.9em" style="vertical-align: -0.1em; margin-right: 14px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>Option 2 — Vote on Paper</h2>
                 <ol>
                     <li>Mark your selections on the <strong>ballot paper</strong></li>
                     <li>Fold the ballot and hand it in for <strong>manual counting</strong></li>
@@ -284,9 +316,12 @@
         <div class="instruction-card instruction-warning instruction-warning-wide">
             <div class="instruction-warning-body">
                 <div class="instruction-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="1em" height="1em"><path d="M12 2L1 21h22L12 2z"/><line x1="12" y1="9" x2="12" y2="15"/><circle cx="12" cy="18" r="0.5" fill="currentColor"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="1em" height="1em"><path d="M12 2L1 21h22L12 2z"/><line x1="12" y1="9" x2="12" y2="15"/><circle cx="12" cy="18" r="0.6" fill="currentColor"/></svg>
                 </div>
-                <p class="warning-highlight">Do not hand in your paper ballot if you voted online.</p>
+                <div style="flex: 1;">
+                    <p class="warning-text" style="margin: 0 0 10px;">If anything fails on your phone, simply complete the paper ballot.</p>
+                    <p class="warning-highlight" style="margin: 0;">Do not hand in your paper ballot if you voted online.</p>
+                </div>
             </div>
         </div>
     </div>
@@ -330,6 +365,17 @@
             {% if office.candidates %}
             <div class="display-office">
                 <h2>For {{ office.office_name }}</h2>
+                {% if election.show_results and office.previously_elected %}
+                <div class="prior-elected">
+                    <div class="prior-elected-title">Previously elected</div>
+                    {% for prev in office.previously_elected %}
+                    <div class="prior-elected-row">
+                        <span class="name">Br. {{ prev.name }}<span class="round-badge">R{{ prev.elected_round }}</span></span>
+                        <span class="votes">{{ prev.total }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
                 {% if election.show_results and office.valid_votes_cast > 0 and office.vacancies > 0 %}
                 <div class="office-thresholds">
                     {% set pass6a = office.count_pass_6a >= office.vacancies %}
@@ -643,6 +689,18 @@
                 data.results.forEach(function(office) {
                     if (!office.candidates || office.candidates.length === 0) return;
                     html += '<div class="display-office"><h2>For ' + esc(office.office_name) + '</h2>';
+                    if (showCounts && Array.isArray(office.previously_elected) && office.previously_elected.length > 0) {
+                        html += '<div class="prior-elected">';
+                        html += '<div class="prior-elected-title">Previously elected</div>';
+                        office.previously_elected.forEach(function(prev) {
+                            html += '<div class="prior-elected-row">';
+                            html += '<span class="name">Br. ' + esc(prev.name) +
+                                    '<span class="round-badge">R' + prev.elected_round + '</span></span>';
+                            html += '<span class="votes">' + prev.total + '</span>';
+                            html += '</div>';
+                        });
+                        html += '</div>';
+                    }
                     var ovvc = office.valid_votes_cast || 0;
                     if (showCounts && ovvc > 0 && office.vacancies > 0) {
                         var t6a = office.threshold_6a || 0;

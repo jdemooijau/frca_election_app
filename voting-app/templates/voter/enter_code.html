@@ -17,7 +17,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="form-group" style="margin-top: 24px;">
-            <label for="code">Enter your code or scan QR</label>
+            <label for="code">Enter your code or scan QR with your camera</label>
 
             <div aria-live="polite" class="error-region">
                 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -47,47 +47,113 @@
         <button type="submit" class="btn btn-primary">Submit Code</button>
     </form>
 
-    <div style="text-align: center; margin-top: 16px;">
-        <a href="{{ url_for('display_phone') }}" class="btn btn-outline">
-            View Live Results
-        </a>
-    </div>
+    <script>
+    (function() {
+        // Poll for state changes so the page transitions automatically
+        // when the chairman closes voting or advances the phase. Only
+        // reload when the form is no longer valid for the current
+        // state - avoids clobbering input the voter is typing.
+        function check() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/api/display-data', true);
+            xhr.onload = function() {
+                if (xhr.status !== 200) return;
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    var stillCodeForm = data.active
+                        && data.voting_open
+                        && data.display_phase === 3;
+                    if (!stillCodeForm) {
+                        location.reload();
+                    }
+                } catch (e) {}
+            };
+            xhr.send();
+        }
+        setInterval(check, 5000);
+    })();
+    </script>
 
     {% else %}
-    <div style="text-align: center; padding: 32px 0 24px 0;">
-        <svg aria-hidden="true" width="56" height="56" viewBox="0 0 24 24"
-             fill="none" stroke="var(--navy)" stroke-width="1.5"
+    {% if rules_phase %}
+    <div style="text-align: center; padding: 48px 0 24px 0;">
+        <svg aria-hidden="true" width="72" height="72" viewBox="0 0 24 24"
+             fill="none" stroke="var(--navy)" stroke-width="1.6"
              stroke-linecap="round" stroke-linejoin="round"
-             style="margin-bottom: 16px; opacity: 0.85;">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12 7 12 12 15.5 14"/>
+             style="margin-bottom: 20px;">
+            <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+            <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+            <circle cx="12" cy="20" r="1" fill="var(--navy)"/>
         </svg>
-        <h2 style="font-size: 24px; color: var(--navy); margin: 0 0 16px 0;">You're connected{% if wifi_ssid %} to {{ wifi_ssid }}{% endif %}.</h2>
-        <div style="background: #FFFAF0; border-left: 4px solid var(--gold);
-                    padding: 14px 18px; border-radius: 6px; text-align: left;
-                    color: var(--navy); font-size: 15px; line-height: 1.45;
-                    font-weight: 600; margin-bottom: 12px;">
-            If you have not yet signed the attendance register, please do so now.
-        </div>
-        <div style="background: var(--grey-light); border-left: 4px solid var(--gold);
-                    padding: 16px 20px; border-radius: 6px; text-align: left;
-                    color: #444; font-size: 15px; line-height: 1.5;">
-            When voting opens you'll be handed a card with a QR code.
-            Scan it with your phone to vote here, or use the paper ballot
-            on the back.
-        </div>
-        <div style="margin-top: 14px; background: #FFEAE8; border-left: 4px solid #C0392B;
-                    padding: 14px 18px; border-radius: 6px; text-align: left;
-                    color: #6B1A12; font-size: 14px; line-height: 1.45;">
-            <strong style="color: #C0392B; display: block; margin-bottom: 4px;">
-                &#9888; Vote one way only.
-            </strong>
-            If you vote on your phone, do not also submit the paper ballot.
-        </div>
-        <div style="margin-top: 14px; color: #888; font-size: 13px; text-align: center;">
-            This page updates automatically when voting starts.
+        <h2 style="font-size: 28px; color: var(--navy); margin: 0 0 16px 0;">Opening in progress</h2>
+        <p style="font-size: 16px; color: #555; line-height: 1.5; max-width: 28em; margin: 0 auto;">
+            You will soon receive a ballot.
+        </p>
+    </div>
+    <div style="margin: 8px 0 24px 0; padding: 20px 22px;
+                background: #FFEAE8; border: 2px solid #C0392B;
+                border-radius: 10px; text-align: left;
+                color: #6B1A12; line-height: 1.45;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24"
+                 fill="none" stroke="#C0392B" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 style="flex-shrink: 0; margin-top: 2px;">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <div>
+                <strong style="display: block; font-size: 17px; color: #C0392B; margin-bottom: 4px;">
+                    Vote one way only
+                </strong>
+                <span style="font-size: 15px;">
+                    If you vote on your phone, <strong>do not</strong> also hand in the paper ballot.
+                </span>
+            </div>
         </div>
     </div>
+    {% else %}
+    <div style="text-align: center; padding: 48px 0 24px 0;">
+        <svg aria-hidden="true" width="72" height="72" viewBox="0 0 24 24"
+             fill="none" stroke="var(--navy)" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round"
+             style="margin-bottom: 20px;">
+            <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+            <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+            <circle cx="12" cy="20" r="1" fill="var(--navy)"/>
+        </svg>
+        <h2 style="font-size: 28px; color: var(--navy); margin: 0 0 20px 0;">You are connected</h2>
+        <p style="font-size: 16px; color: #555; line-height: 1.5; max-width: 28em; margin: 0 auto;">
+            Please wait for the election to open, then scan your QR code
+            or enter your ballot code to vote.
+        </p>
+    </div>
+    <div style="margin: 8px 0 24px 0; padding: 18px 20px;
+                background: #FFF3D6; border: 2px solid var(--gold);
+                border-radius: 10px; text-align: left;
+                color: var(--navy); line-height: 1.45;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24"
+                 fill="none" stroke="var(--gold)" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 style="flex-shrink: 0; margin-top: 2px;">
+                <path d="M9 11l3 3L22 4"/>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+            <div>
+                <strong style="display: block; font-size: 17px; margin-bottom: 4px;">
+                    Sign the attendance register
+                </strong>
+                <span style="font-size: 15px; color: #555;">
+                    If you have not yet signed the attendance register, please do so now.
+                </span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
     <script>
     (function() {
         function check() {
@@ -98,7 +164,7 @@
                 try {
                     var data = JSON.parse(xhr.responseText);
                     if (data.active && data.display_phase === 4) {
-                        window.location.href = '/displayphone';
+                        window.location.href = '/';
                         return;
                     }
                 } catch (e) {}

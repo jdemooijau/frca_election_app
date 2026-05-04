@@ -80,7 +80,7 @@ Set these up in the app before the dry run.
 | Scenario | How to test | Expected result |
 |----------|-------------|-----------------|
 | Invalid code | Type `XXXXXX` | "Invalid code" error message |
-| Code used twice | Re-enter a used code | "This code has already been used" error |
+| Code used twice | Re-enter a used code | "Your vote has already been registered with this code" error |
 | Phone shared | One brother votes, hands phone to next | Fresh code entry page |
 | Voting closed | Enter code when voting is closed | "Voting is not currently open" |
 | App restarted | Close and reopen the app | All data preserved |
