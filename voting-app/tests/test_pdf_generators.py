@@ -489,7 +489,7 @@ def test_printer_pack_zip_generates():
 
 
 def test_printer_pack_zip_contains_all_files():
-    """ZIP should contain exactly 8 files."""
+    """ZIP should contain exactly 9 files (incl. WiFi handout for sign-in)."""
     import zipfile
     buf = _generate_sample_zip()
     buf.seek(0)
@@ -503,7 +503,8 @@ def test_printer_pack_zip_contains_all_files():
         "4_dual_sided_ballots.pdf",
         "5_counter_sheet.pdf",
         "6_attendance_register.pdf",
-        "7_av_instructions.pdf",
+        "7_wifi_handout.pdf",
+        "8_av_instructions.pdf",
     }
     assert names == expected
 
@@ -557,6 +558,8 @@ def test_printer_pack_zip_instructions_content():
     assert "4_dual_sided_ballots.pdf" in instructions
     assert "5_counter_sheet.pdf" in instructions
     assert "6_attendance_register.pdf" in instructions
+    assert "7_wifi_handout.pdf" in instructions
+    assert "8_av_instructions.pdf" in instructions
 
 
 def test_code_slip_qr_size_is_36mm():
@@ -715,5 +718,235 @@ def test_dual_sided_ballots_threads_qr_base_url(monkeypatch):
 
     assert captured, "QR generator was not invoked"
     assert all(u.startswith("http://192.168.8.100/") for u in captured), captured
+
+
+# ---------------------------------------------------------------------------
+# WiFi handout PDF (sign-in table sheet, joined via WiFi QR)
+# ---------------------------------------------------------------------------
+
+
+def test_wifi_qr_payload_wpa():
+    """When a password is supplied, payload uses T:WPA and includes P:."""
+    from pdf_generators import _wifi_qr_payload
+    assert (_wifi_qr_payload("ChurchVote", "secret123")
+            == "WIFI:T:WPA;S:ChurchVote;P:secret123;;")
+
+
+def test_wifi_qr_payload_open_empty_string():
+    """Empty password means open network: T:nopass and no P: field."""
+    from pdf_generators import _wifi_qr_payload
+    assert _wifi_qr_payload("ChurchVote", "") == "WIFI:T:nopass;S:ChurchVote;;"
+
+
+def test_wifi_qr_payload_open_none():
+    """None password is treated the same as empty (open network)."""
+    from pdf_generators import _wifi_qr_payload
+    assert _wifi_qr_payload("ChurchVote", None) == "WIFI:T:nopass;S:ChurchVote;;"
+
+
+def test_wifi_qr_payload_escapes_special_chars():
+    """Per the WiFi QR standard, backslash, semicolon, comma, colon and
+    double-quote in SSID or password must be backslash-escaped."""
+    from pdf_generators import _wifi_qr_payload
+    # SSID contains all five reserved chars
+    payload = _wifi_qr_payload('a;b,c:d"e\\f', "p;w")
+    assert payload == 'WIFI:T:WPA;S:a\\;b\\,c\\:d\\"e\\\\f;P:p\\;w;;'
+
+
+def test_wifi_handout_pdf_generates():
+    """Smoke test: WiFi handout PDF generates without error."""
+    from pdf_generators import generate_wifi_handout_pdf
+    buf = generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="secret123",
+        qr_base_url="http://10.0.0.2",
+    )
+    assert buf is not None
+    assert buf.getbuffer().nbytes > 0
+
+
+def test_wifi_handout_pdf_is_one_page():
+    """Handout is a single A4 sheet."""
+    from PyPDF2 import PdfReader
+    from pdf_generators import generate_wifi_handout_pdf
+    buf = generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="secret123",
+        qr_base_url="http://10.0.0.2",
+    )
+    reader = PdfReader(buf)
+    assert len(reader.pages) == 1
+
+
+def test_wifi_handout_pdf_shows_title():
+    """Page header reads 'Prepare your wifi connection' followed by
+    'scan both codes:'."""
+    from PyPDF2 import PdfReader
+    from pdf_generators import generate_wifi_handout_pdf
+    buf = generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="secret123",
+        qr_base_url="http://10.0.0.2",
+    )
+    text = PdfReader(buf).pages[0].extract_text()
+    assert "Prepare your wifi connection" in text
+    assert "(optional)" in text
+    assert "scan both codes" in text
+
+
+def test_wifi_handout_pdf_shows_numbered_labels():
+    """Each QR is marked with its number (1 above the WiFi QR,
+    2 above the URL QR) so voters know which to scan first."""
+    from PyPDF2 import PdfReader
+    from pdf_generators import generate_wifi_handout_pdf
+    buf = generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="secret123",
+        qr_base_url="http://10.0.0.2",
+    )
+    text = PdfReader(buf).pages[0].extract_text()
+    assert "1" in text
+    assert "2" in text
+
+
+def test_wifi_handout_pdf_shows_ssid_under_first_qr():
+    """The WiFi network name is printed under QR 1 as a fallback so
+    voters whose phone cameras cannot scan the WIFI: payload still see
+    which network to connect to."""
+    from PyPDF2 import PdfReader
+    from pdf_generators import generate_wifi_handout_pdf
+    buf = generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="secret123",
+        qr_base_url="http://10.0.0.2",
+    )
+    text = PdfReader(buf).pages[0].extract_text()
+    assert "ChurchVote" in text
+
+
+def test_wifi_handout_pdf_shows_url_under_second_qr():
+    """The URL is printed under QR 2 as a fallback so voters can type
+    it manually if they cannot scan the QR."""
+    from PyPDF2 import PdfReader
+    from pdf_generators import generate_wifi_handout_pdf
+    buf = generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="secret123",
+        qr_base_url="http://10.0.0.2",
+    )
+    text = PdfReader(buf).pages[0].extract_text()
+    assert "10.0.0.2" in text
+
+
+def test_wifi_handout_pdf_embeds_qr_image():
+    """A QR raster must be embedded in the PDF (not just text)."""
+    from pdf_generators import generate_wifi_handout_pdf
+    pdf_bytes = generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="secret123",
+        qr_base_url="http://10.0.0.2",
+    ).getvalue()
+    assert pdf_bytes.startswith(b"%PDF-")
+    assert b"/Image" in pdf_bytes
+
+
+def test_wifi_handout_pdf_renders_two_qrs(monkeypatch):
+    """Page produces exactly two QRs: a WIFI: payload (joins the
+    network) and a URL pointing at qr_base_url (loads the page so
+    voters can confirm the connection works)."""
+    import pdf_generators
+    captured = []
+    real = pdf_generators._generate_qr_image
+
+    def _spy(data, size=120):
+        captured.append(data)
+        return real(data, size)
+
+    monkeypatch.setattr(pdf_generators, "_generate_qr_image", _spy)
+    pdf_generators.generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="secret123",
+        qr_base_url="http://10.0.0.2",
+    )
+    assert len(captured) == 2, f"expected 2 QRs, got {len(captured)}: {captured}"
+    wifi_qrs = [d for d in captured if d.startswith("WIFI:")]
+    url_qrs = [d for d in captured if d.startswith("http://10.0.0.2")]
+    assert len(wifi_qrs) == 1, f"expected 1 WIFI QR, got: {captured}"
+    assert "S:ChurchVote" in wifi_qrs[0]
+    assert len(url_qrs) == 1, f"expected 1 URL QR for 10.0.0.2, got: {captured}"
+
+
+def test_wifi_handout_pdf_copies_param_produces_n_pages():
+    """When copies=N, the PDF has N identical pages so they can be torn
+    off and handed out across the pews."""
+    from PyPDF2 import PdfReader
+    from pdf_generators import generate_wifi_handout_pdf
+    buf = generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="secret123",
+        qr_base_url="http://10.0.0.2",
+        copies=10,
+    )
+    reader = PdfReader(buf)
+    assert len(reader.pages) == 10
+
+
+def test_wifi_handout_pdf_copies_does_not_reencode_qrs(monkeypatch):
+    """Generating N copies must not regenerate the QR images N times.
+    The QR raster is identical across pages, so we render it once and
+    reuse the ImageReader. Otherwise a 10-copy print bloats the PDF
+    and slows pack assembly."""
+    import pdf_generators
+    counter = {"n": 0}
+    real = pdf_generators._generate_qr_image
+
+    def _spy(data, size=120):
+        counter["n"] += 1
+        return real(data, size)
+
+    monkeypatch.setattr(pdf_generators, "_generate_qr_image", _spy)
+    pdf_generators.generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="secret123",
+        qr_base_url="http://10.0.0.2",
+        copies=10,
+    )
+    # Two unique QRs (WiFi + URL); should be generated once each, not 20 times.
+    assert counter["n"] == 2, f"expected 2 QR generations, got {counter['n']}"
+
+
+def test_printer_pack_zip_wifi_handout_has_ten_copies():
+    """The printer pack ships 10 copies of the WiFi handout so people
+    can take a stack and hand them out in the pews."""
+    import zipfile
+    from PyPDF2 import PdfReader
+    buf = _generate_sample_zip()
+    buf.seek(0)
+    with zipfile.ZipFile(buf) as zf:
+        data = zf.read("7_wifi_handout.pdf")
+    reader = PdfReader(io.BytesIO(data))
+    assert len(reader.pages) == 10
+
+
+def test_wifi_handout_pdf_open_network_uses_nopass(monkeypatch):
+    """Open network (no password) still produces a valid two-QR page
+    with a T:nopass WiFi payload."""
+    import pdf_generators
+    captured = []
+    real = pdf_generators._generate_qr_image
+
+    def _spy(data, size=120):
+        captured.append(data)
+        return real(data, size)
+
+    monkeypatch.setattr(pdf_generators, "_generate_qr_image", _spy)
+    pdf_generators.generate_wifi_handout_pdf(
+        wifi_ssid="ChurchVote",
+        wifi_password="",
+        qr_base_url="http://10.0.0.2",
+    )
+    wifi_qrs = [d for d in captured if d.startswith("WIFI:")]
+    assert len(wifi_qrs) == 1
+    assert "T:nopass" in wifi_qrs[0]
 
 

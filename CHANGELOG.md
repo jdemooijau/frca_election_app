@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Printer pack now includes a `7_wifi_handout.pdf` (10 identical A4
+  copies) headed with a WiFi icon, "Prepare your wifi connection",
+  a prominent oversized "(optional)" line, and "scan both codes:".
+  Two stacked numbered QRs follow: (1) the standard `WIFI:` payload
+  (iOS Camera / Android 10+ recognise it as a "Join Network" prompt)
+  with the SSID printed beneath, and (2) the bare voting URL so
+  voters can confirm the page loads end-to-end, with the URL printed
+  beneath. The 10-copy stack is intended to be passed down the pews
+  so members can prepare their phones while waiting for ballots. The
+  previous AV-team handout becomes `8_av_instructions.pdf`.
+  (#wifi-qr-handout)
 - Read-only round-results page for any closed prior round, reachable
   by clicking the collapsed "Round N - Closed - X elected" entry in
   the wizard sidebar. The page reuses the count-step tally partial

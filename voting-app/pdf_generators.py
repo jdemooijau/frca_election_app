@@ -35,6 +35,29 @@ GOLD = HexColor("#D4A843")
 # ---------------------------------------------------------------------------
 
 
+def _wifi_qr_payload(ssid, password):
+    """Build the standard WIFI: QR payload that iOS Camera and Android
+    recognise as a "Join Network" prompt.
+
+    Format: WIFI:T:<auth>;S:<ssid>;P:<password>;;
+    Empty/None password -> open network (T:nopass, no P field).
+    Reserved characters (\\ ; , : ") in ssid/password are backslash-escaped
+    per the de-facto standard documented at
+    https://github.com/zxing/zxing/wiki/Barcode-Contents.
+    """
+    def _escape(s):
+        out = []
+        for ch in s:
+            if ch in ('\\', ';', ',', ':', '"'):
+                out.append('\\')
+            out.append(ch)
+        return ''.join(out)
+
+    if not password:
+        return f"WIFI:T:nopass;S:{_escape(ssid)};;"
+    return f"WIFI:T:WPA;S:{_escape(ssid)};P:{_escape(password)};;"
+
+
 def _generate_qr_image(url, size=120):
     """Generate a QR code image as a ReportLab-compatible ImageReader object."""
     qr = qrcode.QRCode(
@@ -1519,6 +1542,129 @@ def generate_av_instructions_pdf(election_name, wifi_ssid, wifi_password,
     return buf
 
 
+def _draw_wifi_icon(c, cx, cy, size):
+    """Draw a stylised WiFi icon (3 concentric arcs + a dot) centred
+    on (cx, cy). Used as an attention-grabber on the sign-in handout."""
+    c.setStrokeColor(NAVY)
+    c.setLineCap(1)  # round line caps so arc ends look clean
+    # Three arcs of increasing radius, each spanning ~70 deg around the top.
+    # ReportLab arc angles are CCW from 3 o'clock; 55 deg + 70 extent
+    # gives an upward fan from upper-right to upper-left.
+    arc_specs = [
+        (size * 0.30, 3.0),
+        (size * 0.55, 3.0),
+        (size * 0.80, 3.0),
+    ]
+    for r, lw in arc_specs:
+        c.setLineWidth(lw)
+        c.arc(cx - r, cy - r, cx + r, cy + r, 55, 70)
+    # Dot at the source.
+    c.setFillColor(NAVY)
+    c.circle(cx, cy, size * 0.07, fill=1, stroke=0)
+    c.setLineWidth(1)
+
+
+def _draw_number_badge(c, cx, cy, num, radius=6.5 * mm, font_size=24):
+    """Draw a navy filled circle with a centred white number."""
+    c.setFillColor(NAVY)
+    c.circle(cx, cy, radius, fill=1, stroke=0)
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.setFont("Helvetica-Bold", font_size)
+    # Vertical centring on the circle's centre: drawCentredString places
+    # the baseline at y, so shift y down by ~0.33 * font_size (in points).
+    c.drawCentredString(cx, cy - font_size * 0.33, str(num))
+
+
+def generate_wifi_handout_pdf(wifi_ssid, wifi_password, qr_base_url,
+                              copies=1):
+    """Generate an A4 sheet with two stacked QR codes, repeated `copies`
+    times.
+
+    Designed to sit on the sign-in table beside the attendance register
+    so voters can verify their phone reaches the election WiFi while they
+    wait for ballots. Each page contains:
+
+      - WiFi icon (top, attention-grabber)
+      - Heading: "Prepare your wifi connection" / "(optional)" /
+        "scan both codes:"
+      - Numbered "1" badge, then WiFi QR (WIFI: payload), then SSID text
+      - Numbered "2" badge, then URL QR (qr_base_url), then URL text
+
+    Args:
+        wifi_ssid: SSID of the election WiFi network.
+        wifi_password: password for the election WiFi network. Empty/None
+            indicates an open network.
+        qr_base_url: bare URL the second QR opens, typically the literal
+            IP form (e.g. "http://10.0.0.2").
+        copies: number of identical pages to emit (default 1). The
+            printer pack uses 10 so a stack can be handed out in the pews.
+
+    Returns:
+        BytesIO buffer containing the PDF.
+    """
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    page_w, page_h = A4
+    cx = page_w / 2
+
+    # Render the QR rasters once; reuse across copies.
+    qr1_img = _generate_qr_image(_wifi_qr_payload(wifi_ssid, wifi_password))
+    qr2_img = _generate_qr_image(qr_base_url)
+
+    qr_size = 72 * mm
+    qr_x = (page_w - qr_size) / 2
+    badge_radius = 6.5 * mm
+    caption_gap = 6 * mm
+    section_gap = 10 * mm
+
+    def _render_page():
+        # WiFi icon (attention-grabber).
+        _draw_wifi_icon(c, cx, page_h - 22 * mm, 14 * mm)
+
+        # Heading.
+        title_y = page_h - 42 * mm
+        c.setFont("Helvetica-Bold", 22)
+        c.setFillColor(NAVY)
+        c.drawCentredString(cx, title_y, "Prepare your wifi connection")
+        # Prominent "(optional)" line under the title (deliberately
+        # bigger than the title so the eye lands on the disclaimer).
+        c.setFont("Helvetica-Bold", 28)
+        c.setFillColor(NAVY)
+        c.drawCentredString(cx, title_y - 13 * mm, "(optional)")
+        c.setFont("Helvetica", 14)
+        c.setFillColor(HexColor("#444444"))
+        c.drawCentredString(cx, title_y - 24 * mm, "scan both codes:")
+
+        # --- QR 1: WiFi join ---
+        badge1_y = title_y - 36 * mm
+        _draw_number_badge(c, cx, badge1_y, 1,
+                           radius=badge_radius, font_size=24)
+        qr1_top = badge1_y - badge_radius - 4 * mm
+        qr1_y = qr1_top - qr_size
+        c.drawImage(qr1_img, qr_x, qr1_y, qr_size, qr_size)
+        c.setFont("Helvetica-Bold", 14)
+        c.setFillColor(HexColor("#000000"))
+        c.drawCentredString(cx, qr1_y - caption_gap, wifi_ssid)
+
+        # --- QR 2: URL test ---
+        badge2_y = qr1_y - caption_gap - section_gap - badge_radius
+        _draw_number_badge(c, cx, badge2_y, 2,
+                           radius=badge_radius, font_size=24)
+        qr2_top = badge2_y - badge_radius - 4 * mm
+        qr2_y = qr2_top - qr_size
+        c.drawImage(qr2_img, qr_x, qr2_y, qr_size, qr_size)
+        c.setFont("Helvetica-Bold", 14)
+        c.setFillColor(HexColor("#000000"))
+        c.drawCentredString(cx, qr2_y - caption_gap, qr_base_url)
+
+    for _ in range(copies):
+        _render_page()
+        c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf
+
+
 def generate_printer_pack_zip(election_name, short_name, round_number,
                               office_data, codes, wifi_ssid, wifi_password,
                               base_url, congregation_name, members,
@@ -1536,7 +1682,8 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
         4_dual_sided_ballots.pdf  — grid layout for home duplex printing
         5_counter_sheet.pdf       — tally sheet for counting paper ballots
         6_attendance_register.pdf — sign-in sheet for election day
-        7_av_instructions.pdf     — handout for the AV team
+        7_wifi_handout.pdf        — A4 sheet with big WiFi QR for sign-in table
+        8_av_instructions.pdf     — handout for the AV team
 
     Returns:
         BytesIO buffer containing the ZIP.
@@ -1575,12 +1722,20 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
         members, congregation_name,
         election_name=election_name, election_date=election_date)
 
-    # 6. AV team instructions (handout for the liturgy screen operator)
+    # 6. WiFi handout (sign-in table sheet: WiFi QR + URL QR for
+    #    confirming end-to-end reachability before ballots arrive).
+    #    10 copies so a stack can be passed down the pews.
+    wifi_buf = generate_wifi_handout_pdf(
+        wifi_ssid, wifi_password,
+        qr_base_url=qr_base_url or base_url,
+        copies=10)
+
+    # 7. AV team instructions (handout for the liturgy screen operator)
     av_buf = generate_av_instructions_pdf(
         election_name, wifi_ssid, wifi_password, base_url,
         qr_base_url=qr_base_url)
 
-    # 7. Instructions
+    # 8. Instructions
     # One card per generated code. Multi-round elections generate codes
     # for all rounds at once (members x max_rounds), so the printer pack
     # produces all the cards needed for the whole election.
@@ -1668,7 +1823,17 @@ Three printing workflows are provided. Pick ONE based on your equipment:
    order. Print on A4.
 
 
-7. 7_av_instructions.pdf  (1 page)
+7. 7_wifi_handout.pdf  (10 pages)
+   ─────────────────────────────
+   A4 sheet with two QR codes: (1) joins the election WiFi,
+   (2) opens the voting site to confirm the connection works.
+   Designed to sit on the sign-in table next to the attendance
+   register, with copies passed down the pews so anyone can
+   prepare their connection before ballots arrive. The PDF
+   contains 10 identical copies; print all pages on A4.
+
+
+8. 8_av_instructions.pdf  (1 page)
    ─────────────────────────────
    One-page handout for the AV team running the liturgy screen.
    The election admin gives this to the AV operator on the day.
@@ -1686,7 +1851,8 @@ PRINTING SUMMARY
   4_dual_sided_ballots.pdf    A4          x1        {total_cards} cards (cut)    Duplex (A4 fallback)
   5_counter_sheet.pdf         A4          x2-3      tally sheet         Simplex
   6_attendance_register.pdf   A4          x1-2      sign-in sheet       Simplex
-  7_av_instructions.pdf       A4          x1-2      AV handout          Simplex
+  7_wifi_handout.pdf          A4          x10       WiFi QR for pews    Simplex
+  8_av_instructions.pdf       A4          x1-2      AV handout          Simplex
 
 For questions, contact the election administrator.
 """
@@ -1701,7 +1867,8 @@ For questions, contact the election administrator.
         zf.writestr("4_dual_sided_ballots.pdf", dual_buf.getvalue())
         zf.writestr("5_counter_sheet.pdf", counter_buf.getvalue())
         zf.writestr("6_attendance_register.pdf", attendance_buf.getvalue())
-        zf.writestr("7_av_instructions.pdf", av_buf.getvalue())
+        zf.writestr("7_wifi_handout.pdf", wifi_buf.getvalue())
+        zf.writestr("8_av_instructions.pdf", av_buf.getvalue())
         zf.writestr("0_INSTRUCTIONS.txt", instructions)
 
     zip_buf.seek(0)
