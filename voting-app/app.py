@@ -2565,15 +2565,16 @@ def admin_voter_log(election_id):
         (election_id,)
     ).fetchall()]
 
-    # Same-code repeats: flag a code only when the SAME event fires more
-    # than once. A normal vote produces one 'code_accepted' (on /vote) plus
-    # one 'vote_submitted' (on /submit), so grouping the two together would
-    # mark every successful voter as a repeat offender.
+    # Possible double vote: flag any code with more than one
+    # 'vote_submitted' event. The DB burn-on-submit logic should make
+    # this impossible, so seeing it means a real integrity bug.
+    # Multiple 'code_accepted' events are NOT flagged: voters routinely
+    # test-scan the voting QR at the sign-in table before voting.
     repeat_offenders = db.execute(
-        "SELECT code, result, COUNT(*) AS n FROM voter_audit_log "
+        "SELECT code, COUNT(*) AS n FROM voter_audit_log "
         "WHERE election_id = ? AND code IS NOT NULL "
-        "AND result IN ('code_accepted', 'vote_submitted') "
-        "GROUP BY code, result HAVING n > 1 "
+        "AND result = 'vote_submitted' "
+        "GROUP BY code HAVING n > 1 "
         "ORDER BY n DESC, code",
         (election_id,)
     ).fetchall()

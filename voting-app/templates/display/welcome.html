@@ -42,20 +42,6 @@
     {% endif %}
     {% else %}
     <h1 style="font-size: 64px; color: var(--navy); margin: 0 0 56px 0; line-height: 1.1; font-weight: 700;">{{ congregation_name }}</h1>
-
-    {% if offices %}
-    <div style="display: flex; justify-content: center; gap: 48px; flex-wrap: wrap; margin-bottom: 56px;">
-        {% for office in offices %}
-        <div style="padding: 28px 56px; background: var(--grey-light); border-radius: 12px; min-width: 240px;">
-            <div style="font-size: 40px; font-weight: 700; color: var(--navy);">{{ office.name }}</div>
-            <div style="font-size: 30px; color: var(--gold); margin-top: 4px;">
-                {{ office.vacancies or office.max_selections }}
-                {% if (office.vacancies or office.max_selections) == 1 %}vacancy{% else %}vacancies{% endif %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
     {% endif %}
 
     {% if election.current_round > 1 %}
@@ -139,6 +125,10 @@
                 </div>
             </li>
         </ol>
+    </div>
+    <div style="margin-top: 36px; font-size: 52px; color: #4b5563;
+                font-weight: 600; letter-spacing: 0.3px; line-height: 1.2;">
+        Please wait for the election meeting to be opened
     </div>
     {% endif %}
     {% endif %}

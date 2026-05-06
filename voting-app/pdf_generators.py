@@ -106,13 +106,17 @@ def _calc_code_slip_height(wifi_password):
     Sized so 6 slips (3 rows x 2 cols) fit on A4 in dual-sided printing:
     rows = floor((297 - 16 + 6) / (cell_h + 6)) = floor(287 / 92.5) = 3.
     Total target: <= 89.67 mm.
+
+    Layout: header / two-column body (left = step circle + QR for
+    Step 1 above Step 2; right = text instructions for each step,
+    separated by a vertical divider down the middle of the card) /
+    warning strip. Sized to fill the A4 grid budget so 6 slips fit
+    per page without wasted bottom whitespace.
     """
     h = 0
     h += 10 * mm  # header ("Vote Digitally" + rule + top padding)
-    h += 14 * mm  # step 1 (WiFi) + gap to step 2
-    h += 3.5 * mm  # password / "No password needed" line
-    h += 31 * mm  # step 2 (QR row: label + 36mm QR)
-    h += 23 * mm  # dashed separator + step 3 (fallback url + code)
+    h += 34 * mm  # step 1 row (30 mm WiFi QR + small padding)
+    h += 37 * mm  # step 2 row (30 mm voting QR + text incl. code)
     h += _WARNING_STRIP_H  # warning strip
     h += 1 * mm   # bottom padding
     return h
@@ -122,8 +126,8 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
                    base_url, qr_base_url=None):
     """Draw a modern B&W-optimised code slip in the given cell.
 
-    Layout: "Vote Digitally" header -> Step 1 WiFi -> Step 2 QR+code ->
-    Step 3 fallback URL (subdued) -> warning strip.
+    Layout: "Vote with phone" header -> two-column body (Step 1 + Step 2
+    QRs on the left, vertical divider, text on the right) -> warning.
 
     base_url is the human-readable URL printed on the slip (e.g.
     'http://church.vote'). qr_base_url, if given and different, is
@@ -150,10 +154,10 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     c.roundRect(x, bottom_y, w, cell_h, 2 * mm)
     c.setLineWidth(1)
 
-    # --- Header: "Vote Digitally" + rule ---
+    # --- Header: "Vote with phone" + rule ---
     c.setFont("Helvetica-Bold", 13)
     c.setFillColor(HexColor("#000000"))
-    c.drawCentredString(cx, y, "Vote Digitally")
+    c.drawCentredString(cx, y, "Vote with phone")
     y -= 3.5 * mm
     c.setStrokeColor(HexColor("#000000"))
     c.setLineWidth(1.5)
@@ -177,109 +181,142 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
         c.setFont("Helvetica-Bold", 9)
         c.drawCentredString(sx + r, cy - 1.2 * mm, str(num))
 
-    # --- Step 1: Connect to WiFi ---
-    _step_circle(tx, y, 1)
-    label_x = tx + 9 * mm
-    c.setFont("Helvetica", 10)
-    c.setFillColor(HexColor("#777777"))
-    c.drawString(label_x, y, "Connect to WiFi")
-    ssid_x = label_x + c.stringWidth("Connect to WiFi ", "Helvetica", 10)
-    c.setFont("Helvetica-Bold", 10)
-    c.setFillColor(HexColor("#000000"))
-    c.drawString(ssid_x, y, wifi_ssid)
-    y -= 4 * mm
-    c.setFont("Helvetica", 8)
-    c.setFillColor(HexColor("#888888"))
-    if wifi_password:
-        c.drawString(label_x, y, f"Password: {wifi_password}")
-    else:
-        c.drawString(label_x, y, "No password needed")
-    y -= 4 * mm
+    # --- Two-column body: QRs on the left (Step 1 above Step 2),
+    # vertical divider, all text instructions on the right. Both QRs
+    # at the same size so neither feels secondary. ---
+    content_top_y = y
+    content_bottom_y = bottom_y + _WARNING_STRIP_H + 1 * mm
+    left_col_w = 47 * mm
+    divider_x = x + left_col_w
+    text_x = divider_x + 8 * mm  # generous gap before instructions
+    label_x = tx + 9 * mm  # left edge of QR area (after step circle)
 
-    # --- Step 2: Scan QR code ---
-    _step_circle(tx, y, 2)
-    c.setFont("Helvetica", 10)
-    c.setFillColor(HexColor("#777777"))
-    c.drawString(label_x, y, "Scan QR code with your phone camera")
-    y -= 1 * mm
-
-    # QR image only (voting code moved to step 3)
-    qr_size = 36 * mm
-    vote_url = f"{qr_url_for_encode}/v/{code}"
-    qr_img = _generate_qr_image(vote_url)
-    qr_x = label_x
-    c.drawImage(qr_img, qr_x, y - qr_size, qr_size, qr_size)
-
-    y -= qr_size + 2 * mm
-
-    # --- OR divider + manual fallback (anchored above warning) ---
-    y3 = bottom_y + _WARNING_STRIP_H + 9 * mm
-    or_y = y3 + 7 * mm  # centre line for the OR pill
-
-    # Draw line on each side of the "OR" pill
-    or_text = "OR"
-    c.setFont("Helvetica-Bold", 8)
-    or_w = c.stringWidth(or_text, "Helvetica-Bold", 8) + 6 * mm  # pill width
-    line_left = tx + 2 * mm
-    line_right = x + w - 5 * mm
-    pill_cx = x + w / 2
-    pill_left = pill_cx - or_w / 2
-    pill_right = pill_cx + or_w / 2
-
+    # Vertical divider line down the middle of the content area.
     c.setStrokeColor(HexColor("#CCCCCC"))
     c.setLineWidth(0.75)
-    c.line(line_left, or_y, pill_left - 1 * mm, or_y)
-    c.line(pill_right + 1 * mm, or_y, line_right, or_y)
+    c.line(divider_x, content_bottom_y, divider_x, content_top_y)
 
-    # Draw "OR" pill (rounded rect with dark fill)
-    pill_h = 4.5 * mm
-    c.setFillColor(HexColor("#333333"))
-    c.roundRect(pill_left, or_y - pill_h / 2, or_w, pill_h,
-                pill_h / 2, fill=1, stroke=0)
+    # === Step 1: Connect to WiFi ===
+    step1_top_y = content_top_y
+    _step_circle(tx, step1_top_y, 1)
+
+    wifi_qr_size = 30 * mm
+    wifi_qr_top = step1_top_y + 4 * mm
+    wifi_qr_bottom = wifi_qr_top - wifi_qr_size
+    wifi_qr_img = _generate_qr_image(
+        _wifi_qr_payload(wifi_ssid, wifi_password))
+    c.drawImage(wifi_qr_img, label_x, wifi_qr_bottom,
+                wifi_qr_size, wifi_qr_size)
+
+    # Right-column text for Step 1: "Connect to [WiFi icon]" then SSID
+    # in bold on its own line below.
+    text_y = step1_top_y
+    c.setFont("Helvetica", 11)
+    c.setFillColor(HexColor("#777777"))
+    c.drawString(text_x, text_y, "Connect to")
+    icon_x = text_x + c.stringWidth("Connect to ", "Helvetica", 11)
+    _draw_wifi_icon(c, icon_x + 2.5 * mm, text_y, 4.5 * mm)
+    text_y -= 8 * mm
+    c.setFont("Helvetica-Bold", 16)
+    c.setFillColor(HexColor("#000000"))
+    c.drawString(text_x, text_y, wifi_ssid)
+    text_y -= 6 * mm
+    c.setFont("Helvetica", 9)
+    c.setFillColor(HexColor("#888888"))
+    if wifi_password:
+        c.drawString(text_x, text_y, f"Password: {wifi_password}")
+    else:
+        c.drawString(text_x, text_y, "No password needed")
+
+    # === Step 2: Voting QR + manual fallback ===
+    step2_top_y = step1_top_y - 34 * mm
+    _step_circle(tx, step2_top_y, 2)
+
+    # Voting QR. 30 mm: slightly below the original 32 mm spec floor;
+    # acceptable because the slip is now handed out in good light at
+    # the sign-in table and scanned at close range (15-25 cm). Confirm
+    # count-time scanning still holds before shrinking further.
+    vote_qr_size = 30 * mm
+    vote_qr_top = step2_top_y + 4 * mm
+    vote_qr_bottom = vote_qr_top - vote_qr_size
+    vote_url = f"{qr_url_for_encode}/v/{code}"
+    vote_qr_img = _generate_qr_image(vote_url)
+    c.drawImage(vote_qr_img, label_x, vote_qr_bottom,
+                vote_qr_size, vote_qr_size)
+
+    # Vertical "If QR fails" hint along the divider, replacing the
+    # horizontal OR pill. Reads bottom-to-top, centred on the voting QR.
+    hint_text = "If QR fails"
+    hint_font_size = 9
+    c.setFont("Helvetica-Bold", hint_font_size)
+    hint_text_w = c.stringWidth(hint_text, "Helvetica-Bold",
+                                hint_font_size)
+    hint_cy = (vote_qr_top + vote_qr_bottom) / 2
+    # White mask so the divider line does not show through the text.
+    mask_w = 5 * mm
+    mask_h = hint_text_w + 4
     c.setFillColor(HexColor("#FFFFFF"))
-    c.drawCentredString(pill_cx, or_y - 1.3 * mm, or_text)
+    c.rect(divider_x - mask_w / 2, hint_cy - mask_h / 2,
+           mask_w, mask_h, fill=1, stroke=0)
+    # Rotated text. After translate + rotate(90), drawString writes
+    # bottom-to-top with the baseline running along the screen +y axis.
+    c.saveState()
+    c.translate(divider_x + 1.2 * mm, hint_cy - hint_text_w / 2)
+    c.rotate(90)
+    c.setFillColor(HexColor("#333333"))
+    c.drawString(0, 0, hint_text)
+    c.restoreState()
 
-    # Fallback text: "Type <url> (or http://<alt>) into your browser"
-    # (alt only when the QR target differs from the printed URL).
+    # Right-column text for Step 2 (no "Scan QR" preamble; modern
+    # users know how QR works).
+    text_y = vote_qr_top - 3 * mm
     c.setFont("Helvetica", 10)
     c.setFillColor(HexColor("#555555"))
-    c.drawString(tx, y3, "Type")
-    url_x = tx + c.stringWidth("Type ", "Helvetica", 10)
+    c.drawString(text_x, text_y, "Type")
+    url_x = text_x + c.stringWidth("Type ", "Helvetica", 10)
     c.setFont("Helvetica-Bold", 10)
     c.setFillColor(HexColor("#000000"))
-    c.drawString(url_x, y3, base_url_display)
-    after_x = url_x + c.stringWidth(base_url_display + " ", "Helvetica-Bold", 10)
+    c.drawString(url_x, text_y, base_url_display)
+    text_y -= 4.5 * mm
+
     if show_alt_url:
         alt_with_scheme = f"http://{alt_url_display}"
         c.setFont("Helvetica", 10)
         c.setFillColor(HexColor("#555555"))
-        c.drawString(after_x, y3, "(or")
-        after_x += c.stringWidth("(or ", "Helvetica", 10)
+        c.drawString(text_x, text_y, "(or")
+        paren_x = text_x + c.stringWidth("(or ", "Helvetica", 10)
         c.setFont("Helvetica-Bold", 10)
         c.setFillColor(HexColor("#000000"))
-        c.drawString(after_x, y3, alt_with_scheme)
-        after_x += c.stringWidth(alt_with_scheme, "Helvetica-Bold", 10)
+        c.drawString(paren_x, text_y, alt_with_scheme)
+        after_x = paren_x + c.stringWidth(alt_with_scheme,
+                                          "Helvetica-Bold", 10)
         c.setFont("Helvetica", 10)
         c.setFillColor(HexColor("#555555"))
-        c.drawString(after_x, y3, ") ")
-        after_x += c.stringWidth(") ", "Helvetica", 10)
+        c.drawString(after_x, text_y, ")")
+        text_y -= 4.5 * mm
+
     c.setFont("Helvetica", 10)
     c.setFillColor(HexColor("#555555"))
-    c.drawString(after_x, y3, "into your browser")
-    y3 -= 5 * mm
+    c.drawString(text_x, text_y, "into your browser")
+    text_y -= 7 * mm
+
     c.setFont("Helvetica", 10)
     c.setFillColor(HexColor("#555555"))
-    c.drawString(tx, y3, "and enter this code:")
-    code_x = tx + c.stringWidth("and enter this code:  ", "Helvetica", 10)
+    c.drawString(text_x, text_y, "and enter this code:")
+    text_y -= 6 * mm
+
     formatted_code = f"{code[:3]} {code[3:]}"
     c.setFont("Courier-Bold", 14)
     c.setFillColor(HexColor("#000000"))
-    c.drawString(code_x, y3, formatted_code)
+    c.drawString(text_x, text_y, formatted_code)
+
+    # Drop y below the row so the warning strip can anchor.
+    y = vote_qr_bottom - 1 * mm
 
     # --- Warning strip at bottom ---
     _draw_warning_strip(
         c, x, bottom_y, w,
-        "\u26A0 Do not submit the paper ballot if you voted digitally"
+        "\u26A0 Do not submit the paper ballot if you voted with your phone"
     )
 
 
@@ -938,7 +975,7 @@ def _draw_ballot_card(c, x, top_y, card_w, card_h, election_name,
 
     # Always draw the warning strip at the bottom; even an empty card
     # gets it.
-    warning_text = "\u26A0 Do not submit this ballot if you voted digitally (see reverse)"
+    warning_text = "\u26A0 Do not submit this ballot if you voted with your phone (see reverse)"
     if not office_data_combined:
         # Title only, then warning.
         c.setFillColor(HexColor("#000000"))
@@ -1544,35 +1581,40 @@ def generate_av_instructions_pdf(election_name, wifi_ssid, wifi_password,
 
 def _draw_wifi_icon(c, cx, cy, size):
     """Draw a stylised WiFi icon (3 concentric arcs + a dot) centred
-    on (cx, cy). Used as an attention-grabber on the sign-in handout."""
+    on (cx, cy). Works at both small inline sizes and large standalone
+    sizes; line width is adaptive so the inner arc stays visibly
+    separated from the dot rather than blobbing into it."""
     c.setStrokeColor(NAVY)
     c.setLineCap(1)  # round line caps so arc ends look clean
-    # Three arcs of increasing radius, each spanning ~70 deg around the top.
-    # ReportLab arc angles are CCW from 3 o'clock; 55 deg + 70 extent
-    # gives an upward fan from upper-right to upper-left.
-    arc_specs = [
-        (size * 0.30, 3.0),
-        (size * 0.55, 3.0),
-        (size * 0.80, 3.0),
-    ]
-    for r, lw in arc_specs:
-        c.setLineWidth(lw)
-        c.arc(cx - r, cy - r, cx + r, cy + r, 55, 70)
+    # Adaptive line width: thin for inline icons, bolder for standalone.
+    # Below ~6 mm the original 3 pt width covered most of the inner
+    # arc's radius, producing a black blob.
+    line_w = 1.3 if size < 6 * mm else 3.0
+    c.setLineWidth(line_w)
+    # Three concentric arcs over the dot, opening upward across a 90-
+    # degree fan (45 deg to 135 deg). Wider span + better-spaced radii
+    # make the icon read clearly even at 3-4 mm.
+    for r in (size * 0.42, size * 0.71, size):
+        c.arc(cx - r, cy - r, cx + r, cy + r, 45, 90)
     # Dot at the source.
     c.setFillColor(NAVY)
-    c.circle(cx, cy, size * 0.07, fill=1, stroke=0)
+    c.circle(cx, cy, max(0.5, size * 0.10), fill=1, stroke=0)
     c.setLineWidth(1)
 
 
-def _draw_number_badge(c, cx, cy, num, radius=6.5 * mm, font_size=24):
-    """Draw a navy filled circle with a centred white number."""
+def _draw_number_badge(c, cx, cy, num, radius=11 * mm, font_size=32):
+    """Draw a navy circle with a small white 'Step' label above a
+    larger white digit. Used as the step indicator next to the QRs
+    on the WiFi handout sheet."""
     c.setFillColor(NAVY)
     c.circle(cx, cy, radius, fill=1, stroke=0)
     c.setFillColor(HexColor("#FFFFFF"))
+    # Small "Step" label in the upper half.
+    c.setFont("Helvetica-Bold", 10)
+    c.drawCentredString(cx, cy + 5 * mm, "Step")
+    # Big digit in the lower half.
     c.setFont("Helvetica-Bold", font_size)
-    # Vertical centring on the circle's centre: drawCentredString places
-    # the baseline at y, so shift y down by ~0.33 * font_size (in points).
-    c.drawCentredString(cx, cy - font_size * 0.33, str(num))
+    c.drawCentredString(cx, cy - 8 * mm, str(num))
 
 
 def generate_wifi_handout_pdf(wifi_ssid, wifi_password, qr_base_url,
@@ -1613,9 +1655,11 @@ def generate_wifi_handout_pdf(wifi_ssid, wifi_password, qr_base_url,
 
     qr_size = 72 * mm
     qr_x = (page_w - qr_size) / 2
-    badge_radius = 6.5 * mm
+    badge_radius = 11 * mm
+    badge_gap = 8 * mm  # horizontal gap between badge and QR
+    badge_cx = qr_x - badge_gap - badge_radius
     caption_gap = 6 * mm
-    section_gap = 10 * mm
+    section_gap = 14 * mm
 
     def _render_page():
         # WiFi icon (attention-grabber).
@@ -1635,24 +1679,22 @@ def generate_wifi_handout_pdf(wifi_ssid, wifi_password, qr_base_url,
         c.setFillColor(HexColor("#444444"))
         c.drawCentredString(cx, title_y - 24 * mm, "scan both codes:")
 
-        # --- QR 1: WiFi join ---
-        badge1_y = title_y - 36 * mm
-        _draw_number_badge(c, cx, badge1_y, 1,
-                           radius=badge_radius, font_size=24)
-        qr1_top = badge1_y - badge_radius - 4 * mm
+        # --- QR 1: WiFi join (badge to the left, vertically centred) ---
+        qr1_top = title_y - 32 * mm
         qr1_y = qr1_top - qr_size
         c.drawImage(qr1_img, qr_x, qr1_y, qr_size, qr_size)
+        _draw_number_badge(c, badge_cx, qr1_y + qr_size / 2, 1,
+                           radius=badge_radius, font_size=32)
         c.setFont("Helvetica-Bold", 14)
         c.setFillColor(HexColor("#000000"))
         c.drawCentredString(cx, qr1_y - caption_gap, wifi_ssid)
 
-        # --- QR 2: URL test ---
-        badge2_y = qr1_y - caption_gap - section_gap - badge_radius
-        _draw_number_badge(c, cx, badge2_y, 2,
-                           radius=badge_radius, font_size=24)
-        qr2_top = badge2_y - badge_radius - 4 * mm
+        # --- QR 2: URL test (badge to the left, vertically centred) ---
+        qr2_top = qr1_y - caption_gap - section_gap
         qr2_y = qr2_top - qr_size
         c.drawImage(qr2_img, qr_x, qr2_y, qr_size, qr_size)
+        _draw_number_badge(c, badge_cx, qr2_y + qr_size / 2, 2,
+                           radius=badge_radius, font_size=32)
         c.setFont("Helvetica-Bold", 14)
         c.setFillColor(HexColor("#000000"))
         c.drawCentredString(cx, qr2_y - caption_gap, qr_base_url)

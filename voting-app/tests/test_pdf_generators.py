@@ -94,7 +94,7 @@ def test_dual_sided_ballots_pdf_odd_pages_are_paper_ballots():
     buf = _generate_sample_pdf()
     reader = PdfReader(buf)
     text = reader.pages[0].extract_text()
-    assert "Do not submit this ballot if you voted digitally" in text
+    assert "Do not submit this ballot if you voted with your phone" in text
 
 
 def test_dual_sided_ballots_pdf_even_pages_are_code_slips():
@@ -128,14 +128,17 @@ def test_dual_sided_ballots_pdf_wifi_on_code_slips():
 
 
 def test_dual_sided_ballots_pdf_wifi_step_comes_first():
-    """WiFi connection instruction must come before QR scanning instruction."""
+    """Step 1 (WiFi) text must appear before Step 2 (voting fallback)
+    text in the slip's reading order."""
     from PyPDF2 import PdfReader
     buf = _generate_sample_pdf()
     reader = PdfReader(buf)
     text = reader.pages[1].extract_text()
-    wifi_pos = text.find("Connect")
-    scan_pos = text.find("Scan")
-    assert wifi_pos < scan_pos, "WiFi connection step must come before QR scan step"
+    connect_pos = text.find("Connect")
+    type_pos = text.find("Type")
+    assert connect_pos != -1, "Step 1 'Connect' label missing"
+    assert type_pos != -1, "Step 2 'Type' fallback missing"
+    assert connect_pos < type_pos, "Step 1 must come before Step 2"
 
 
 def test_dual_sided_ballots_pdf_does_not_burn_codes():
@@ -203,7 +206,7 @@ def test_code_slip_has_vote_digitally_header():
     """Code slips should show 'Vote Digitally' header."""
     buf = _generate_code_slips(codes=SAMPLE_CODES[:1])
     text = _extract_text(buf, 0)
-    assert "Vote Digitally" in text
+    assert "Vote with phone" in text
 
 
 def test_code_slip_renders_at_small_dimensions():
@@ -232,7 +235,7 @@ def test_card_header_shows_vote_digitally():
     """Code slip header should show 'Vote Digitally'."""
     buf = _generate_code_slips(codes=["KR4T7N"])
     text = _extract_text(buf, 0)
-    assert "Vote Digitally" in text
+    assert "Vote with phone" in text
 
 
 def test_card_shows_wifi_ssid():
@@ -288,16 +291,16 @@ def test_dual_sided_ballot_back_shows_code_slip_content():
     """Back pages of dual-sided ballots should show code slip content."""
     buf = _generate_sample_pdf()
     text = _extract_text(buf, 1)  # page 1 = first back page
-    assert "Vote Digitally" in text
+    assert "Vote with phone" in text
     assert "ChurchVote" in text
     assert "KR4" in text or "AB3" in text
 
 
 def test_dual_sided_ballot_front_has_warning():
-    """Front ballot should include a warning about digital voting."""
+    """Front ballot should include a warning about phone voting."""
     buf = _generate_sample_pdf()
     text = _extract_text(buf, 0)  # page 0 = first front page
-    assert "voted digitally" in text.lower()
+    assert "voted with your phone" in text.lower()
 
 
 def test_dual_sided_ballot_back_has_warning():
@@ -562,17 +565,62 @@ def test_printer_pack_zip_instructions_content():
     assert "8_av_instructions.pdf" in instructions
 
 
-def test_code_slip_qr_size_is_36mm():
-    """Regression: the QR rendered on the code slip must be at least 36 mm
-    wide so phone cameras can scan it reliably during count-time triage.
-    See docs/superpowers/specs/2026-05-02-paper-scan-and-phone-receipt-design.md.
+def test_code_slip_voting_qr_meets_minimum_size():
+    """Regression: the voting QR on the code slip must be at least 30 mm.
+    The original spec called for 32 mm; the slip's dual-QR layout
+    shrinks the voting QR a notch but stays well above the 24 mm
+    panic floor where camera focus-hunting and fold tolerance bite. See
+    docs/superpowers/specs/2026-05-02-paper-scan-and-phone-receipt-design.md.
     """
     import inspect
+    import re
     from pdf_generators import draw_code_slip
     src = inspect.getsource(draw_code_slip)
-    assert "qr_size = 36 * mm" in src, (
-        "draw_code_slip must use a 36 mm QR for reliable count-time scanning"
+    m = re.search(r"vote_qr_size\s*=\s*([\d.]+)\s*\*\s*mm", src)
+    assert m, "vote_qr_size assignment not found in draw_code_slip"
+    size_mm = float(m.group(1))
+    assert size_mm >= 30, (
+        f"voting QR shrank below 30 mm floor: {size_mm} mm"
     )
+
+
+def test_code_slip_renders_wifi_qr_at_step_1(monkeypatch):
+    """Step 1 ('Connect to WiFi') must render a WIFI: payload QR so
+    voters can join the network from the slip itself, not just text."""
+    import io
+    import pdf_generators
+    from reportlab.pdfgen import canvas as rl_canvas
+    captured = []
+    real = pdf_generators._generate_qr_image
+
+    def _spy(data, size=120):
+        captured.append(data)
+        return real(data, size)
+
+    monkeypatch.setattr(pdf_generators, "_generate_qr_image", _spy)
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    pdf_generators.draw_code_slip(
+        c, 15 * mm, h - 15 * mm, 90 * mm, 90 * mm,
+        "KR4T7N", "ChurchVote", "secret123",
+        "http://10.0.0.2",
+    )
+    c.showPage()
+    c.save()
+    wifi_qrs = [d for d in captured if d.startswith("WIFI:")]
+    assert wifi_qrs, f"no WiFi QR rendered on code slip: {captured}"
+    assert "S:ChurchVote" in wifi_qrs[0]
+
+
+def test_code_slip_height_within_grid_budget():
+    """The card-sized layout must stay within ~89.67 mm so 6 slips
+    (3 rows x 2 cols) still fit on A4 in the dual-sided printing path."""
+    from pdf_generators import _calc_code_slip_height
+    h_with_pwd = _calc_code_slip_height("secret123") / mm
+    h_open = _calc_code_slip_height("") / mm
+    assert h_with_pwd <= 89.67, f"slip height {h_with_pwd:.2f} mm exceeds budget"
+    assert h_open <= 89.67, f"slip height {h_open:.2f} mm exceeds budget"
 
 
 def test_av_instructions_pdf_includes_qr_url_fallback():
@@ -644,7 +692,10 @@ def test_qr_encodes_qr_base_url_when_provided(monkeypatch):
     c.showPage()
     c.save()
 
-    assert captured == ["http://192.168.8.100/v/KR4T7N"]
+    # The slip emits a WiFi QR (Step 1) and a voting QR (Step 2); only
+    # the voting QR participates in the qr_base_url routing contract.
+    voting_qrs = [u for u in captured if not u.startswith("WIFI:")]
+    assert voting_qrs == ["http://192.168.8.100/v/KR4T7N"]
 
 
 def test_qr_falls_back_to_base_url_when_qr_base_url_missing(monkeypatch):
@@ -668,7 +719,8 @@ def test_qr_falls_back_to_base_url_when_qr_base_url_missing(monkeypatch):
     c.showPage()
     c.save()
 
-    assert captured == ["http://church.vote/v/KR4T7N"]
+    voting_qrs = [u for u in captured if not u.startswith("WIFI:")]
+    assert voting_qrs == ["http://church.vote/v/KR4T7N"]
 
 
 def test_slip_shows_alt_url_when_qr_url_differs():
@@ -717,7 +769,11 @@ def test_dual_sided_ballots_threads_qr_base_url(monkeypatch):
     )
 
     assert captured, "QR generator was not invoked"
-    assert all(u.startswith("http://192.168.8.100/") for u in captured), captured
+    # Each slip emits a WiFi QR (WIFI: payload) plus a voting QR; the
+    # routing contract applies only to the voting QRs.
+    voting_qrs = [u for u in captured if not u.startswith("WIFI:")]
+    assert voting_qrs, "no voting QRs captured"
+    assert all(u.startswith("http://192.168.8.100/") for u in voting_qrs), voting_qrs
 
 
 # ---------------------------------------------------------------------------
@@ -795,8 +851,8 @@ def test_wifi_handout_pdf_shows_title():
 
 
 def test_wifi_handout_pdf_shows_numbered_labels():
-    """Each QR is marked with its number (1 above the WiFi QR,
-    2 above the URL QR) so voters know which to scan first."""
+    """Each QR is marked 'Step 1' / 'Step 2' so voters know which
+    to scan first."""
     from PyPDF2 import PdfReader
     from pdf_generators import generate_wifi_handout_pdf
     buf = generate_wifi_handout_pdf(
@@ -805,6 +861,8 @@ def test_wifi_handout_pdf_shows_numbered_labels():
         qr_base_url="http://10.0.0.2",
     )
     text = PdfReader(buf).pages[0].extract_text()
+    # "Step" word and both numbers must be extractable text.
+    assert text.lower().count("step") >= 2, text
     assert "1" in text
     assert "2" in text
 

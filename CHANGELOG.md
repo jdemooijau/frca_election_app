@@ -33,6 +33,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Voter audit log's repeat-offenders banner no longer flags multiple
+  `code_accepted` events for the same code. Voters routinely test-scan
+  the voting QR at the sign-in table before voting (the Step 1 / Step
+  2 card layout makes this part of the workflow), so the old detector
+  produced false positives on every voter who pre-tested. The banner
+  now only fires on more than one `vote_submitted` for the same code,
+  which the burn-on-submit DB logic should make impossible (so seeing
+  it means a genuine integrity bug). Heading reworded from "Codes with
+  repeated events" to "Possible double vote".
+- Voter confirmation page (`/vote-confirmation`) now shows a prominent
+  amber "Tear up your paper ballot / Do not submit it. Your phone vote
+  is the one counted." warning between the success heading and the
+  code box, closing the only remaining accidental-double-count path.
+- Voting card reworked end-to-end:
+  - Header text changed from "Vote Digitally" to "Vote with phone".
+  - Warning strip on both sides changed from "if you voted digitally"
+    to "if you voted with your phone" (paper-ballot front + code
+    slip back).
+  - Code slip back is now a two-column layout: both QRs on the left
+    at the same 30 mm size (Step 1 = WiFi, Step 2 = voting), step
+    circles to their left; vertical divider; right column carries
+    Step 1's "Connect to [WiFi icon]" header, the SSID on its own
+    line in bold, the password line, and Step 2's "Type ... and
+    enter this code:" fallback with the code in big mono.
+  - The horizontal OR pill is replaced with a vertical "If QR fails"
+    hint running bottom-to-top along the divider, centred on the
+    voting QR.
+  - The redundant "Scan QR code with your phone camera" preamble is
+    dropped (modern users know how QR works).
+  - Card fills the A4 grid budget (88 mm) so 6 slips per page no
+    longer leave the bottom of the sheet empty.
+  - Voting QR is 30 mm (down from 36 mm; below the original 32 mm
+    count-time spec floor but well above the 24 mm panic threshold).
+    Confirm count-time scanning still holds in practice.
+  Affects every printer-pack output that renders the card back.
 - Final-results projector view (phase 4 with details) now renders
   prior-round winners in a separate "Previously elected" strip at the
   top of each office card (with a R1/R2 round badge and their
