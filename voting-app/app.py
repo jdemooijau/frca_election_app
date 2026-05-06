@@ -2341,6 +2341,36 @@ def admin_paper_votes(election_id):
                     (election_id, current_round, office["id"], posted_spoilt[office["id"]]),
                 )
             db.commit()
+
+            # If the chairman skipped the attendance step (common in rounds
+            # > 1 when participants haven't changed), round_counts.paper_ballot_count
+            # stays at 0 and the projector's "ballots received" counter is
+            # wrong. Derive a paper count from the per-office tallies so
+            # total_ballots reflects what was actually counted. We only fill
+            # in when it's missing, so chairmen who entered an explicit
+            # attendance count keep their value (and the validation above).
+            existing_participants, existing_paper, _ = get_round_counts(
+                election_id, current_round
+            )
+            if existing_paper == 0:
+                derived_paper = 0
+                for office in offices:
+                    cands = per_office_candidates[office["id"]]
+                    marks = sum(posted_paper[c["id"]] for c in cands)
+                    spoilt = posted_spoilt[office["id"]]
+                    max_sel = office["max_selections"] or 1
+                    # ceil(marks / max_sel) is the minimum ballots needed to
+                    # produce these marks for this office. Add spoilt for
+                    # entirely-spoiled papers. Take max across offices since
+                    # all voters share one paper ballot.
+                    per_office = -(-marks // max_sel) + spoilt
+                    if per_office > derived_paper:
+                        derived_paper = per_office
+                if derived_paper > 0:
+                    set_round_counts(
+                        election_id, current_round, existing_participants, derived_paper
+                    )
+
             flash("Paper vote totals saved.", "success")
             return redirect(url_for("admin_step_count", election_id=election_id))
 

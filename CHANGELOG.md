@@ -84,6 +84,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   link (with hover state and a chevron) instead of static italic
   text.
 
+### Fixed
+
+- Projector display in rounds > 1 no longer shows "Voting will begin
+  shortly" overlaid on the closed-round results. Two compounding
+  issues were fixed:
+  - The count step now derives `round_counts.paper_ballot_count`
+    from the saved per-office tallies (`ceil(marks / max_selections)
+    + spoilt`, max across offices) when attendance was skipped, so
+    `total_ballots` reflects what was actually counted. Only fills
+    in when the count is missing, so an explicit attendance entry
+    (and its tally validation) is preserved.
+  - The pre-vote welcome panel in `projector.html` now also requires
+    `display_phase != 4`. Defence in depth so the banner cannot
+    appear on the Final-results screen even if `total_ballots` were
+    somehow zero.
+
 ## [1.3.1] - 2026-05-02
 
 ### Fixed

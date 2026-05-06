@@ -219,7 +219,11 @@
     <div class="ballot-anomaly" id="ballot-anomaly" style="display:none;"></div>
     {% endif %}
 
-    {% if not election.voting_open and total_ballots == 0 %}
+    {# Pre-vote welcome panel: only meaningful while the projector is in
+       the voting phase (3) before any ballots have been counted. In phase
+       4 (Final results) the projector is showing closed-round results, so
+       this banner would just be misleading. #}
+    {% if not election.voting_open and total_ballots == 0 and (election.display_phase or 1) != 4 %}
     <div style="text-align: center; padding: 40px 0;">
         <h2 style="font-size: 32px; color: var(--navy); margin-bottom: 16px;">Voting will begin shortly</h2>
         <p style="font-size: 20px; color: #666; margin-bottom: 24px;">
