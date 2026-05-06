@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Voter session is now round-aware: `voted_round` is recorded
+  alongside `used_code` / `election_id` when a code is accepted,
+  and the bare URL (`/`) only treats the session as "voted in the
+  active election" when `voted_round` matches the election's
+  `current_round`. Previously, after voting in round 1 and round 2
+  opening, hitting `/` on the same phone rendered the live phone
+  display as if the round-1 vote still counted, instead of the
+  code-entry form for the new round-2 code. Stale session keys
+  from a previous round are now cleared on the next visit so the
+  entry form renders.
+
 ### Added
 
 - Printer pack now includes a `7_wifi_handout.pdf` (10 identical A4

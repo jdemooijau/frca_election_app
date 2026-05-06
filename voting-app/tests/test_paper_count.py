@@ -143,6 +143,7 @@ def test_count_join_creates_session_and_helper(client):
     with client.session_transaction() as sess:
         sess["used_code"] = codes[0]
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
         sess.pop("admin", None)
     resp = client.post("/count/join", follow_redirects=False)
     assert resp.status_code == 302
@@ -172,6 +173,7 @@ def test_count_join_idempotent(client):
     with client.session_transaction() as sess:
         sess["used_code"] = codes[0]
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
     resp = client.post("/count/join")
     sid = int(resp.headers["Location"].rsplit("/", 1)[-1])
     cands = _candidate_ids(election_id)
@@ -191,6 +193,7 @@ def test_count_join_blocked_when_disabled(client):
     with client.session_transaction() as sess:
         sess["used_code"] = "DUMMYCODE"
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
     resp = client.post("/count/join")
     assert resp.status_code in (400, 403)
 
@@ -202,6 +205,7 @@ def test_count_helper_page_shows_candidates(client):
     with client.session_transaction() as sess:
         sess["used_code"] = codes[0]
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
     join_resp = client.post("/count/join")
     assert join_resp.status_code == 302
     helper_resp = client.get(join_resp.headers["Location"])
@@ -224,6 +228,7 @@ def _join_count(client, election_id, code):
     with client.session_transaction() as sess:
         sess["used_code"] = code
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
     resp = client.post("/count/join", follow_redirects=False)
     return int(resp.headers["Location"].rsplit("/", 1)[-1])
 
@@ -309,6 +314,7 @@ def test_confirmation_shows_assist_button_when_active(client):
     with client.session_transaction() as sess:
         sess["used_code"] = codes[0]
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
     resp = client.get("/confirmation")
     assert resp.status_code == 200
     assert b"Count Votes" in resp.data
@@ -333,6 +339,7 @@ def test_confirmation_hides_assist_when_disabled(client):
     with client.session_transaction() as sess:
         sess["used_code"] = codes[0]["plaintext"]
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
     resp = client.get("/confirmation")
     assert resp.status_code == 200
     assert b"Count Votes" not in resp.data
@@ -349,6 +356,7 @@ def test_confirmation_hides_assist_while_voting_open(client):
     with client.session_transaction() as sess:
         sess["used_code"] = codes[0]
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
     resp = client.get("/confirmation")
     assert resp.status_code == 200
     assert b"Count Votes" not in resp.data
@@ -376,6 +384,7 @@ def test_confirmation_shows_assist_when_all_votes_in_even_if_voting_open(client)
     with client.session_transaction() as sess:
         sess["used_code"] = codes[0]
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
     resp = client.get("/confirmation")
     assert resp.status_code == 200
     assert b"Count Votes" in resp.data
@@ -393,6 +402,7 @@ def test_displayphone_count_cta_appears_only_when_round_closed(client):
     with client.session_transaction() as sess:
         sess["used_code"] = codes[0]
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
     resp = client.get("/")
     assert resp.status_code == 200
     assert b"Count Votes" not in resp.data
@@ -427,6 +437,7 @@ def test_post_vote_count_cta_explains_helper_counter(client):
     with client.session_transaction() as sess:
         sess["used_code"] = codes[0]
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.data.decode("utf-8").lower()
@@ -831,6 +842,7 @@ def test_feature_is_invisible_when_disabled(client):
     with client.session_transaction() as sess:
         sess["used_code"] = plain_codes[0]
         sess["election_id"] = election_id
+        sess["voted_round"] = 1
         sess.pop("admin", None)
 
     # /confirmation has no assist button

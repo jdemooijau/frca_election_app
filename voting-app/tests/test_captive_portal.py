@@ -280,12 +280,13 @@ def _seed_election_with_candidates(voting_open, show_results, display_phase=3):
         return eid
 
 
-def _set_voted_session(client, eid, code="DEMOC1"):
+def _set_voted_session(client, eid, code="DEMOC1", round_number=1):
     """Mark the test client as a voter who has already voted in `eid`,
     which is what triggers / to render the live results view."""
     with client.session_transaction() as sess:
         sess["used_code"] = code
         sess["election_id"] = eid
+        sess["voted_round"] = round_number
 
 
 def test_phone_display_hides_candidates_while_voting_open(client):
@@ -418,6 +419,7 @@ def test_next_voter_clears_session_so_entry_form_renders(client):
         assert "used_code" not in sess
         assert "election_id" not in sess
         assert "code_hash" not in sess
+        assert "voted_round" not in sess
 
     # Now / renders the entry form (code input field present).
     resp = client.get("/")

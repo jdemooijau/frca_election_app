@@ -3110,6 +3110,7 @@ def voter_enter_code(prefill_code=None):
                 session["code_hash"] = code_h
                 session["election_id"] = election["id"]
                 session["used_code"] = code
+                session["voted_round"] = rnd
                 session["_clear_stale_flashes"] = True
                 log_voter_audit(eid, code, "code_accepted",
                                 "QR scan accepted", round_number=rnd)
@@ -3127,11 +3128,27 @@ def voter_enter_code(prefill_code=None):
     active_election, ctx = _build_display_data()
     used_code = session.get("used_code")
     sess_election_id = session.get("election_id")
+    sess_voted_round = session.get("voted_round")
     voted_in_active = bool(
         active_election
         and used_code
         and sess_election_id == active_election["id"]
+        and sess_voted_round == active_election["current_round"]
     )
+    # If the session shows a vote in this election but for an older
+    # round, the chairman has advanced the round and the voter needs
+    # to enter their new round-N code. Clear the stale voter-state
+    # keys so the entry form renders instead of the "you've voted"
+    # display view.
+    if (active_election
+            and used_code
+            and sess_election_id == active_election["id"]
+            and sess_voted_round != active_election["current_round"]):
+        session.pop("code_hash", None)
+        session.pop("election_id", None)
+        session.pop("used_code", None)
+        session.pop("voted_round", None)
+        used_code = None
 
     if active_election:
         phase = active_election["display_phase"] or 1
@@ -3214,6 +3231,7 @@ def voter_validate_code():
     session["code_hash"] = code_h
     session["election_id"] = election["id"]
     session["used_code"] = code
+    session["voted_round"] = rnd
     log_voter_audit(eid, code, "code_accepted", "Form submit accepted",
                     round_number=rnd)
     return redirect(url_for("voter_ballot"))
@@ -3457,6 +3475,7 @@ def next_voter():
     session.pop("code_hash", None)
     session.pop("election_id", None)
     session.pop("used_code", None)
+    session.pop("voted_round", None)
     return redirect(url_for("voter_enter_code"))
 
 
