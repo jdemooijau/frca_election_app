@@ -31,6 +31,10 @@ Thumbs.db
 # election-day artefacts.
 *.pdf
 !docs/*.pdf
+# Timestamped intermediate renders of how_to_vote_card (working
+# copies generated to dodge open-viewer file locks). The canonical
+# docs/how_to_vote_card.pdf IS committed; the dated variants are not.
+docs/how_to_vote_card_*.pdf
 
 # Environment
 .env

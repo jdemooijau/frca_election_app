@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- `7_wifi_handout.pdf` (the 10-copy WiFi-join sheet) is no longer
+  produced or included in the printer pack. Its role is taken over
+  by the per-voter duplex handout (front: how-to-vote, back: FAQ).
+  The supporting helpers `generate_wifi_handout_pdf`,
+  `_wifi_qr_payload`, and `_draw_wifi_icon` are deleted.
+- `docs/DOUBLE_VOTING_SAFEGUARDS.md` deleted in favour of the FAQ
+  on the back of `how_to_vote_card.html` (single source of truth
+  for voter-facing safeguard wording; print and email use the same
+  rendered PDF).
+
+### Changed
+
+- Step 1 numbered circle on the code slip moved 3 mm down so it no
+  longer crowds the "Vote with phone" header rule.
+- Voting card back simplified to a single QR after UAT (David, Matt)
+  showed the two-QR design (WiFi join + voting) confused voters who
+  would not read the step labels and just scanned whichever QR they
+  saw first. Step 1 is now a text-only line ("Connect to WiFi:
+  ChurchVote / No password needed") next to a numbered circle. Step
+  2 keeps the voting QR (back up to 36 mm) plus a vertical divider
+  with an "If QR fails" hint and the manual fallback text. The
+  numbered step circles are bigger (5 mm radius, 16 pt) and styled
+  black-on-white (white fill, black ring, black digit) so they read
+  as numbered steps rather than a generic icon. The standalone
+  `7_wifi_handout.pdf` continues to provide a WiFi-join QR at the
+  sign-in table for the convenience use case.
+
+### Added
+
+- Welcome display labels bumped from 26 px to 36 px and the Step 2
+  label changed from "Type" to "Scan the QR or type" so the line
+  reads as one instruction across the value: "scan the QR or type
+  church.vote (or http://10.0.0.2) into your browser".
+- `docs/how_to_vote_card.html` is now a duplex A4 voter handout.
+  Front: how to vote on paper or on the phone (refreshed wording,
+  including a clear "tear up the card" Step 4). Back: a
+  "How is this kept honest?" FAQ in five short paragraphs covering
+  single-use codes, paper-vs-phone reconciliation, anonymity, paper
+  fallback, and the audit trail. Designed to be emailed to members
+  ahead of the meeting AND printed (one duplex copy per voter) for
+  the sign-in table on the day. The rendered `how_to_vote_card.pdf`
+  is included in the printer pack as `7_voter_handout.pdf`.
+
 ### Fixed
 
 - Voter session is now round-aware: `voted_round` is recorded

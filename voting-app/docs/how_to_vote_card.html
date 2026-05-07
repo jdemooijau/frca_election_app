@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <title>How to Vote - FRCA Election App</title>
 <style>
-    /* A4 portrait, 210mm x 297mm. Designed to print on a single sheet. */
+    /* A4 portrait, 210mm x 297mm. Two pages: front = how-to-vote,
+       back = how-the-system-prevents-double-voting. Print duplex
+       (long-edge), one sheet per voter. Email-friendly too. */
     @page { size: A4 portrait; margin: 12mm; }
     html, body { margin: 0; padding: 0; }
     body {
@@ -18,6 +20,40 @@
         width: 186mm;
         margin: 0 auto;
         padding: 0;
+    }
+    .page.back {
+        page-break-before: always;
+    }
+    /* Back-page (FAQ) styles */
+    .faq-intro {
+        font-size: 12pt;
+        line-height: 1.5;
+        margin: 0 0 6mm;
+        color: #1A3353;
+    }
+    .faq-section {
+        margin: 0 0 5mm;
+        padding-left: 4mm;
+        border-left: 3pt solid #D4A843;
+    }
+    .faq-section h3 {
+        margin: 0 0 1.5mm;
+        font-size: 13pt;
+        color: #1A3353;
+    }
+    .faq-section p {
+        margin: 0;
+        font-size: 11pt;
+        line-height: 1.5;
+        color: #333;
+    }
+    .faq-footer {
+        margin-top: 6mm;
+        padding-top: 4mm;
+        border-top: 1pt solid #d4d4d4;
+        font-size: 10pt;
+        color: #444;
+        line-height: 1.5;
     }
     h1 {
         text-align: center;
@@ -71,15 +107,15 @@
     }
     .shot {
         text-align: center;
-        margin: 0 0 4mm;
-        height: 65mm;
+        margin: 0 0 3mm;
+        height: 42mm;
         display: flex;
         align-items: center;
         justify-content: center;
     }
     .shot img {
         max-width: 100%;
-        max-height: 65mm;
+        max-height: 42mm;
         border: 1pt solid #d4d4d4;
         border-radius: 1.5mm;
         background: #fff;
@@ -89,7 +125,7 @@
         gap: 3mm;
     }
     .shot.phone-row img {
-        max-height: 65mm;
+        max-height: 42mm;
         max-width: calc(50% - 1.5mm);
     }
     ol {
@@ -158,6 +194,17 @@
         font-size: 11pt;
         margin-bottom: 1mm;
     }
+    .reminder {
+        text-align: center;
+        font-size: 11pt;
+        font-style: italic;
+        color: #5a3000;
+        margin: 0 0 4mm;
+        padding: 3mm 5mm;
+        background: #FFF8E1;
+        border: 1pt solid #FFD980;
+        border-radius: 2mm;
+    }
 
     /* Stop browsers from clipping during print preview. */
     @media print {
@@ -170,6 +217,10 @@
 
     <h1>How to Vote</h1>
     <div class="subtitle">Office Bearer Election</div>
+
+    <div class="reminder">
+        Reminder: bring your phone, and switch it to silent before the worship service.
+    </div>
 
     <div class="preamble">
         <h3>Before you vote</h3>
@@ -206,7 +257,7 @@
             </ol>
         </div>
 
-        <!-- Digital ballot -->
+        <!-- Phone ballot -->
         <div class="col">
             <h2>Phone</h2>
 
@@ -216,13 +267,17 @@
             </div>
 
             <ol>
-                <li>Use the code slip - it tells you which WiFi to
-                    connect to, and has a QR code to scan with your
-                    phone's camera.</li>
-                <li>Tick candidates for each office, up to the allowed
-                    number. Tap <strong>Cast Your Vote</strong>.</li>
-                <li>The confirmation screen lets you know your vote has
-                    been registered.</li>
+                <li>Connect your phone to the <strong>ChurchVote</strong>
+                    WiFi (no password). The network name is on the code
+                    slip.</li>
+                <li>Scan the QR code on the code slip with your phone
+                    camera, or type the URL shown into your browser.</li>
+                <li>Tick your candidates and tap <strong>Cast Your
+                    Vote</strong>. The confirmation screen tells you
+                    your vote is registered.</li>
+                <li><strong>Tear up the card.</strong> Your phone vote
+                    is the one counted; do not also submit the paper
+                    ballot.</li>
             </ol>
         </div>
 
@@ -231,11 +286,81 @@
     <div class="footer">
         <div class="info">
             <strong>More information?</strong>
-            Speak to your office bearer or scan the QR.
+            Speak to your office bearers and/or scan the QR.
         </div>
         <div class="qr">
             <img src="github_qr.png" alt="More information">
         </div>
+    </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- BACK PAGE: How is this kept honest?                          -->
+<!-- ============================================================ -->
+<div class="page back">
+
+    <h1>Phone voting: frequently asked questions</h1>
+
+    <p class="faq-intro">
+        Phone voting is new. Below are the safeguards that make sure
+        no brother can vote twice, no vote is lost, and the count
+        always reconciles. Voting on paper continues to work exactly
+        as before; phone voting is opt-in.
+    </p>
+
+    <div class="faq-section">
+        <h3>Can a code be used more than once?</h3>
+        <p>Once you vote on your phone, that code is marked as used.
+        Trying to use it again shows "this code has already been
+        used." Guessing a valid code is also mathematically nearly
+        impossible: only the ~100 codes pre-generated for this
+        meeting are accepted, out of close to a billion possible
+        six-character codes.</p>
+    </div>
+
+    <div class="faq-section">
+        <h3>What if someone votes on both phone and paper?</h3>
+        <p>Every paper ballot has its own QR code. If the count does
+        not add up at the end of the round, the chairman can scan
+        each ballot; the system flags any whose code was already used
+        on a phone, and those papers are set aside.</p>
+    </div>
+
+    <div class="faq-section">
+        <h3>Is my vote anonymous?</h3>
+        <p>Only the code and the choice are recorded - never who the
+        code was given to. Codes are randomly printed and handed out,
+        so no vote can be traced back to a specific brother.</p>
+    </div>
+
+    <div class="faq-section">
+        <h3>What if the WiFi or the system fails?</h3>
+        <p>The WiFi for this election is a small local router set up
+        just for the meeting; it has nothing to do with the internet
+        or home broadband. It runs off a single power point and is
+        very unlikely to fail. Even if it does, paper voting is
+        always available and the chairman can switch to paper-only
+        at any time, so the meeting continues without disruption.</p>
+    </div>
+
+    <div class="faq-section">
+        <h3>What if my phone won't connect to the WiFi?</h3>
+        <p>Use the paper side of your card. Paper and phone votes
+        are counted together; either way works.</p>
+    </div>
+
+    <div class="faq-section">
+        <h3>What if we need a second round?</h3>
+        <p>If no candidate is elected, the council calls a second
+        round. You'll be given a new card with a new code; the
+        previous code no longer works. Vote the same way as before.</p>
+    </div>
+
+    <div class="faq-footer">
+        <strong>Still have a question?</strong>
+        Speak to your office bearers and/or scan the QR on the front
+        of this sheet.
     </div>
 
 </div>

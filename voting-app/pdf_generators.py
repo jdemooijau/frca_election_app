@@ -7,6 +7,7 @@ can generate PDFs without code duplication.
 
 import io
 import math
+import os
 import zipfile
 from datetime import datetime
 
@@ -33,29 +34,6 @@ GOLD = HexColor("#D4A843")
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _wifi_qr_payload(ssid, password):
-    """Build the standard WIFI: QR payload that iOS Camera and Android
-    recognise as a "Join Network" prompt.
-
-    Format: WIFI:T:<auth>;S:<ssid>;P:<password>;;
-    Empty/None password -> open network (T:nopass, no P field).
-    Reserved characters (\\ ; , : ") in ssid/password are backslash-escaped
-    per the de-facto standard documented at
-    https://github.com/zxing/zxing/wiki/Barcode-Contents.
-    """
-    def _escape(s):
-        out = []
-        for ch in s:
-            if ch in ('\\', ';', ',', ':', '"'):
-                out.append('\\')
-            out.append(ch)
-        return ''.join(out)
-
-    if not password:
-        return f"WIFI:T:nopass;S:{_escape(ssid)};;"
-    return f"WIFI:T:WPA;S:{_escape(ssid)};P:{_escape(password)};;"
 
 
 def _generate_qr_image(url, size=120):
@@ -107,16 +85,16 @@ def _calc_code_slip_height(wifi_password):
     rows = floor((297 - 16 + 6) / (cell_h + 6)) = floor(287 / 92.5) = 3.
     Total target: <= 89.67 mm.
 
-    Layout: header / two-column body (left = step circle + QR for
-    Step 1 above Step 2; right = text instructions for each step,
-    separated by a vertical divider down the middle of the card) /
-    warning strip. Sized to fill the A4 grid budget so 6 slips fit
-    per page without wasted bottom whitespace.
+    Layout: header / Step 1 (text-only WiFi info next to numbered
+    circle) / Step 2 (numbered circle + 36 mm voting QR + vertical
+    divider with "If QR fails" hint + manual fallback text) /
+    warning. Single-QR design after UAT showed two QRs confused
+    voters.
     """
     h = 0
-    h += 10 * mm  # header ("Vote Digitally" + rule + top padding)
-    h += 34 * mm  # step 1 row (30 mm WiFi QR + small padding)
-    h += 37 * mm  # step 2 row (30 mm voting QR + text incl. code)
+    h += 10 * mm  # header ("Vote with phone" + rule + top padding)
+    h += 18 * mm  # step 1 row (text-only WiFi line + password line)
+    h += 53 * mm  # step 2 row (36 mm voting QR + side fallback text)
     h += _WARNING_STRIP_H  # warning strip
     h += 1 * mm   # bottom padding
     return h
@@ -165,78 +143,60 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     c.setLineWidth(1)
     y -= 6 * mm
 
-    # --- Step number circle helper ---
-    def _step_circle(sx, sy, num, active=True):
-        r = 3.5 * mm
-        cy = sy + 1 * mm  # centre circle on text baseline
-        if active:
-            c.setFillColor(HexColor("#000000"))
-        else:
-            c.setFillColor(HexColor("#DDDDDD"))
-        c.circle(sx + r, cy, r, fill=1, stroke=0)
-        if active:
-            c.setFillColor(HexColor("#FFFFFF"))
-        else:
-            c.setFillColor(HexColor("#555555"))
-        c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(sx + r, cy - 1.2 * mm, str(num))
+    # --- Step number circle helper. Black ring on white fill with a
+    # bold black digit inside. UAT feedback: previous filled-black
+    # circle with white digit looked too much like a generic icon
+    # rather than a numbered step. ---
+    def _step_circle(sx, sy, num):
+        r = 5 * mm
+        cy = sy + 1.5 * mm  # centre circle on text baseline
+        c.setFillColor(HexColor("#FFFFFF"))
+        c.setStrokeColor(HexColor("#000000"))
+        c.setLineWidth(1.5)
+        c.circle(sx + r, cy, r, fill=1, stroke=1)
+        c.setFillColor(HexColor("#000000"))
+        c.setFont("Helvetica-Bold", 16)
+        c.drawCentredString(sx + r, cy - 1.9 * mm, str(num))
+        c.setLineWidth(1)
 
-    # --- Two-column body: QRs on the left (Step 1 above Step 2),
-    # vertical divider, all text instructions on the right. Both QRs
-    # at the same size so neither feels secondary. ---
+    # --- Body layout: Step 1 is text-only (Connect to WiFi name and
+    # password line) with the bigger numbered circle on the left;
+    # Step 2 is the same step circle + voting QR + vertical divider
+    # with an "If QR fails" hint + manual fallback text on the right.
+    # UAT (David, Matt) showed that a second QR for WiFi-join confused
+    # voters who would not read the instructions and just scanned
+    # whichever QR they saw first; the standalone wifi handout at the
+    # sign-in table covers the WiFi-QR convenience case separately. ---
     content_top_y = y
-    content_bottom_y = bottom_y + _WARNING_STRIP_H + 1 * mm
-    left_col_w = 47 * mm
-    divider_x = x + left_col_w
-    text_x = divider_x + 8 * mm  # generous gap before instructions
-    label_x = tx + 9 * mm  # left edge of QR area (after step circle)
+    label_x = tx + 12 * mm  # left edge of Step-2 QR (after bigger circle)
 
-    # Vertical divider line down the middle of the content area.
-    c.setStrokeColor(HexColor("#CCCCCC"))
-    c.setLineWidth(0.75)
-    c.line(divider_x, content_bottom_y, divider_x, content_top_y)
-
-    # === Step 1: Connect to WiFi ===
-    step1_top_y = content_top_y
+    # === Step 1: Connect to WiFi (text only) ===
+    # Drop step 1 a few mm below the header rule so the bigger numbered
+    # circle does not crowd the rule.
+    step1_top_y = content_top_y - 3 * mm
     _step_circle(tx, step1_top_y, 1)
-
-    wifi_qr_size = 30 * mm
-    wifi_qr_top = step1_top_y + 4 * mm
-    wifi_qr_bottom = wifi_qr_top - wifi_qr_size
-    wifi_qr_img = _generate_qr_image(
-        _wifi_qr_payload(wifi_ssid, wifi_password))
-    c.drawImage(wifi_qr_img, label_x, wifi_qr_bottom,
-                wifi_qr_size, wifi_qr_size)
-
-    # Right-column text for Step 1: "Connect to [WiFi icon]" then SSID
-    # in bold on its own line below.
-    text_y = step1_top_y
     c.setFont("Helvetica", 11)
     c.setFillColor(HexColor("#777777"))
-    c.drawString(text_x, text_y, "Connect to")
-    icon_x = text_x + c.stringWidth("Connect to ", "Helvetica", 11)
-    _draw_wifi_icon(c, icon_x + 2.5 * mm, text_y, 4.5 * mm)
-    text_y -= 8 * mm
-    c.setFont("Helvetica-Bold", 16)
+    c.drawString(label_x, step1_top_y, "Connect to WiFi")
+    ssid_x = label_x + c.stringWidth("Connect to WiFi ", "Helvetica", 11)
+    c.setFont("Helvetica-Bold", 13)
     c.setFillColor(HexColor("#000000"))
-    c.drawString(text_x, text_y, wifi_ssid)
-    text_y -= 6 * mm
+    c.drawString(ssid_x, step1_top_y, wifi_ssid)
     c.setFont("Helvetica", 9)
     c.setFillColor(HexColor("#888888"))
     if wifi_password:
-        c.drawString(text_x, text_y, f"Password: {wifi_password}")
+        c.drawString(label_x, step1_top_y - 5 * mm,
+                     f"Password: {wifi_password}")
     else:
-        c.drawString(text_x, text_y, "No password needed")
+        c.drawString(label_x, step1_top_y - 5 * mm, "No password needed")
 
     # === Step 2: Voting QR + manual fallback ===
-    step2_top_y = step1_top_y - 34 * mm
+    step2_top_y = step1_top_y - 18 * mm
     _step_circle(tx, step2_top_y, 2)
 
-    # Voting QR. 30 mm: slightly below the original 32 mm spec floor;
-    # acceptable because the slip is now handed out in good light at
-    # the sign-in table and scanned at close range (15-25 cm). Confirm
-    # count-time scanning still holds before shrinking further.
-    vote_qr_size = 30 * mm
+    # Voting QR. Back to 36 mm (above the 32 mm spec floor) now that it
+    # is the only QR on the slip and has the room.
+    vote_qr_size = 36 * mm
     vote_qr_top = step2_top_y + 4 * mm
     vote_qr_bottom = vote_qr_top - vote_qr_size
     vote_url = f"{qr_url_for_encode}/v/{code}"
@@ -244,8 +204,19 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     c.drawImage(vote_qr_img, label_x, vote_qr_bottom,
                 vote_qr_size, vote_qr_size)
 
-    # Vertical "If QR fails" hint along the divider, replacing the
-    # horizontal OR pill. Reads bottom-to-top, centred on the voting QR.
+    # Vertical divider runs only across the Step 2 row (not the full
+    # card height) so it visually frames the QR-vs-fallback pair.
+    divider_x = label_x + vote_qr_size + 2 * mm
+    text_x = divider_x + 5 * mm
+
+    # Vertical divider local to the Step 2 row, separating the QR
+    # from the manual fallback text.
+    c.setStrokeColor(HexColor("#CCCCCC"))
+    c.setLineWidth(0.75)
+    c.line(divider_x, vote_qr_bottom, divider_x, vote_qr_top)
+
+    # Vertical "If QR fails" hint along the divider, reads bottom-to-top
+    # centred on the voting QR.
     hint_text = "If QR fails"
     hint_font_size = 9
     c.setFont("Helvetica-Bold", hint_font_size)
@@ -310,8 +281,15 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     c.setFillColor(HexColor("#000000"))
     c.drawString(text_x, text_y, formatted_code)
 
-    # Drop y below the row so the warning strip can anchor.
-    y = vote_qr_bottom - 1 * mm
+    # === Step 3: Voted? Shred or tear up this card ===
+    # Lives in the empty space below the voting QR and above the
+    # warning strip. The bottom warning strip is the passive safety
+    # net; Step 3 is the active instruction.
+    step3_top_y = vote_qr_bottom - 7.5 * mm
+    _step_circle(tx, step3_top_y, 3)
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(HexColor("#000000"))
+    c.drawString(label_x, step3_top_y, "Voted? Shred or tear up this card")
 
     # --- Warning strip at bottom ---
     _draw_warning_strip(
@@ -1579,134 +1557,6 @@ def generate_av_instructions_pdf(election_name, wifi_ssid, wifi_password,
     return buf
 
 
-def _draw_wifi_icon(c, cx, cy, size):
-    """Draw a stylised WiFi icon (3 concentric arcs + a dot) centred
-    on (cx, cy). Works at both small inline sizes and large standalone
-    sizes; line width is adaptive so the inner arc stays visibly
-    separated from the dot rather than blobbing into it."""
-    c.setStrokeColor(NAVY)
-    c.setLineCap(1)  # round line caps so arc ends look clean
-    # Adaptive line width: thin for inline icons, bolder for standalone.
-    # Below ~6 mm the original 3 pt width covered most of the inner
-    # arc's radius, producing a black blob.
-    line_w = 1.3 if size < 6 * mm else 3.0
-    c.setLineWidth(line_w)
-    # Three concentric arcs over the dot, opening upward across a 90-
-    # degree fan (45 deg to 135 deg). Wider span + better-spaced radii
-    # make the icon read clearly even at 3-4 mm.
-    for r in (size * 0.42, size * 0.71, size):
-        c.arc(cx - r, cy - r, cx + r, cy + r, 45, 90)
-    # Dot at the source.
-    c.setFillColor(NAVY)
-    c.circle(cx, cy, max(0.5, size * 0.10), fill=1, stroke=0)
-    c.setLineWidth(1)
-
-
-def _draw_number_badge(c, cx, cy, num, radius=11 * mm, font_size=32):
-    """Draw a navy circle with a small white 'Step' label above a
-    larger white digit. Used as the step indicator next to the QRs
-    on the WiFi handout sheet."""
-    c.setFillColor(NAVY)
-    c.circle(cx, cy, radius, fill=1, stroke=0)
-    c.setFillColor(HexColor("#FFFFFF"))
-    # Small "Step" label in the upper half.
-    c.setFont("Helvetica-Bold", 10)
-    c.drawCentredString(cx, cy + 5 * mm, "Step")
-    # Big digit in the lower half.
-    c.setFont("Helvetica-Bold", font_size)
-    c.drawCentredString(cx, cy - 8 * mm, str(num))
-
-
-def generate_wifi_handout_pdf(wifi_ssid, wifi_password, qr_base_url,
-                              copies=1):
-    """Generate an A4 sheet with two stacked QR codes, repeated `copies`
-    times.
-
-    Designed to sit on the sign-in table beside the attendance register
-    so voters can verify their phone reaches the election WiFi while they
-    wait for ballots. Each page contains:
-
-      - WiFi icon (top, attention-grabber)
-      - Heading: "Prepare your wifi connection" / "(optional)" /
-        "scan both codes:"
-      - Numbered "1" badge, then WiFi QR (WIFI: payload), then SSID text
-      - Numbered "2" badge, then URL QR (qr_base_url), then URL text
-
-    Args:
-        wifi_ssid: SSID of the election WiFi network.
-        wifi_password: password for the election WiFi network. Empty/None
-            indicates an open network.
-        qr_base_url: bare URL the second QR opens, typically the literal
-            IP form (e.g. "http://10.0.0.2").
-        copies: number of identical pages to emit (default 1). The
-            printer pack uses 10 so a stack can be handed out in the pews.
-
-    Returns:
-        BytesIO buffer containing the PDF.
-    """
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    page_w, page_h = A4
-    cx = page_w / 2
-
-    # Render the QR rasters once; reuse across copies.
-    qr1_img = _generate_qr_image(_wifi_qr_payload(wifi_ssid, wifi_password))
-    qr2_img = _generate_qr_image(qr_base_url)
-
-    qr_size = 72 * mm
-    qr_x = (page_w - qr_size) / 2
-    badge_radius = 11 * mm
-    badge_gap = 8 * mm  # horizontal gap between badge and QR
-    badge_cx = qr_x - badge_gap - badge_radius
-    caption_gap = 6 * mm
-    section_gap = 14 * mm
-
-    def _render_page():
-        # WiFi icon (attention-grabber).
-        _draw_wifi_icon(c, cx, page_h - 22 * mm, 14 * mm)
-
-        # Heading.
-        title_y = page_h - 42 * mm
-        c.setFont("Helvetica-Bold", 22)
-        c.setFillColor(NAVY)
-        c.drawCentredString(cx, title_y, "Prepare your wifi connection")
-        # Prominent "(optional)" line under the title (deliberately
-        # bigger than the title so the eye lands on the disclaimer).
-        c.setFont("Helvetica-Bold", 28)
-        c.setFillColor(NAVY)
-        c.drawCentredString(cx, title_y - 13 * mm, "(optional)")
-        c.setFont("Helvetica", 14)
-        c.setFillColor(HexColor("#444444"))
-        c.drawCentredString(cx, title_y - 24 * mm, "scan both codes:")
-
-        # --- QR 1: WiFi join (badge to the left, vertically centred) ---
-        qr1_top = title_y - 32 * mm
-        qr1_y = qr1_top - qr_size
-        c.drawImage(qr1_img, qr_x, qr1_y, qr_size, qr_size)
-        _draw_number_badge(c, badge_cx, qr1_y + qr_size / 2, 1,
-                           radius=badge_radius, font_size=32)
-        c.setFont("Helvetica-Bold", 14)
-        c.setFillColor(HexColor("#000000"))
-        c.drawCentredString(cx, qr1_y - caption_gap, wifi_ssid)
-
-        # --- QR 2: URL test (badge to the left, vertically centred) ---
-        qr2_top = qr1_y - caption_gap - section_gap
-        qr2_y = qr2_top - qr_size
-        c.drawImage(qr2_img, qr_x, qr2_y, qr_size, qr_size)
-        _draw_number_badge(c, badge_cx, qr2_y + qr_size / 2, 2,
-                           radius=badge_radius, font_size=32)
-        c.setFont("Helvetica-Bold", 14)
-        c.setFillColor(HexColor("#000000"))
-        c.drawCentredString(cx, qr2_y - caption_gap, qr_base_url)
-
-    for _ in range(copies):
-        _render_page()
-        c.showPage()
-    c.save()
-    buf.seek(0)
-    return buf
-
-
 def generate_printer_pack_zip(election_name, short_name, round_number,
                               office_data, codes, wifi_ssid, wifi_password,
                               base_url, congregation_name, members,
@@ -1724,7 +1574,7 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
         4_dual_sided_ballots.pdf  — grid layout for home duplex printing
         5_counter_sheet.pdf       — tally sheet for counting paper ballots
         6_attendance_register.pdf — sign-in sheet for election day
-        7_wifi_handout.pdf        — A4 sheet with big WiFi QR for sign-in table
+        7_voter_handout.pdf       — A4 duplex (how-to-vote / safeguards FAQ); 1 per voter
         8_av_instructions.pdf     — handout for the AV team
 
     Returns:
@@ -1764,13 +1614,28 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
         members, congregation_name,
         election_name=election_name, election_date=election_date)
 
-    # 6. WiFi handout (sign-in table sheet: WiFi QR + URL QR for
-    #    confirming end-to-end reachability before ballots arrive).
-    #    10 copies so a stack can be passed down the pews.
-    wifi_buf = generate_wifi_handout_pdf(
-        wifi_ssid, wifi_password,
-        qr_base_url=qr_base_url or base_url,
-        copies=10)
+    # 6. Voter handout: static 2-page A4 (front = how-to-vote on
+    #    paper or phone, back = "How is this kept honest?" FAQ on the
+    #    safeguards against double voting). Rendered from
+    #    docs/how_to_vote_card.html into docs/how_to_vote_card_*.pdf.
+    #    The render is timestamped (e.g. ..._20260507_133200.pdf) so a
+    #    re-render does not need to overwrite an open viewer; the
+    #    printer pack picks up the newest matching file.
+    import glob as _glob
+    docs_dir = os.path.join(os.path.dirname(__file__), "docs")
+    handout_candidates = sorted(
+        _glob.glob(os.path.join(docs_dir, "how_to_vote_card*.pdf")),
+        key=os.path.getmtime,
+        reverse=True,
+    )
+    voter_handout_bytes = None
+    for handout_path in handout_candidates:
+        try:
+            with open(handout_path, "rb") as fp:
+                voter_handout_bytes = fp.read()
+            break
+        except (FileNotFoundError, PermissionError):
+            continue
 
     # 7. AV team instructions (handout for the liturgy screen operator)
     av_buf = generate_av_instructions_pdf(
@@ -1783,6 +1648,7 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
     # produces all the cards needed for the whole election.
     total_cards = len(codes)
     total_cards_x2 = total_cards * 2
+    member_count_for_print = str(member_count) if member_count else "N"
     instructions = f"""\
 PRINTER PACK — {election_name}
 {'=' * 60}
@@ -1865,14 +1731,15 @@ Three printing workflows are provided. Pick ONE based on your equipment:
    order. Print on A4.
 
 
-7. 7_wifi_handout.pdf  (10 pages)
+7. 7_voter_handout.pdf  (2 pages, duplex)
    ─────────────────────────────
-   A4 sheet with two QR codes: (1) joins the election WiFi,
-   (2) opens the voting site to confirm the connection works.
-   Designed to sit on the sign-in table next to the attendance
-   register, with copies passed down the pews so anyone can
-   prepare their connection before ballots arrive. The PDF
-   contains 10 identical copies; print all pages on A4.
+   A4 voter handout. Front: how to vote on paper or on the phone.
+   Back: "Phone voting: frequently asked questions" answering the
+   common voter questions about codes, anonymity, double voting,
+   WiFi failure, and second rounds. Designed to be emailed to
+   members ahead of the meeting AND/OR printed and handed out at
+   the sign-in table. Print one duplex copy per voter (long-edge
+   binding).
 
 
 8. 8_av_instructions.pdf  (1 page)
@@ -1893,13 +1760,13 @@ PRINTING SUMMARY
   4_dual_sided_ballots.pdf    A4          x1        {total_cards} cards (cut)    Duplex (A4 fallback)
   5_counter_sheet.pdf         A4          x2-3      tally sheet         Simplex
   6_attendance_register.pdf   A4          x1-2      sign-in sheet       Simplex
-  7_wifi_handout.pdf          A4          x10       WiFi QR for pews    Simplex
+  7_voter_handout.pdf         A4          x{member_count_for_print:<3}      voter handout       Duplex
   8_av_instructions.pdf       A4          x1-2      AV handout          Simplex
 
 For questions, contact the election administrator.
 """
 
-    # Assemble ZIP. Filenames are prefixed 1_..7_ so they sort in the
+    # Assemble ZIP. Filenames are prefixed 1_..8_ so they sort in the
     # order described in INSTRUCTIONS.txt when extracted.
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -1909,7 +1776,8 @@ For questions, contact the election administrator.
         zf.writestr("4_dual_sided_ballots.pdf", dual_buf.getvalue())
         zf.writestr("5_counter_sheet.pdf", counter_buf.getvalue())
         zf.writestr("6_attendance_register.pdf", attendance_buf.getvalue())
-        zf.writestr("7_wifi_handout.pdf", wifi_buf.getvalue())
+        if voter_handout_bytes is not None:
+            zf.writestr("7_voter_handout.pdf", voter_handout_bytes)
         zf.writestr("8_av_instructions.pdf", av_buf.getvalue())
         zf.writestr("0_INSTRUCTIONS.txt", instructions)
 

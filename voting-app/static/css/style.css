@@ -643,7 +643,7 @@ tr:nth-child(even) {
 .instructions-options {
     display: flex;
     align-items: stretch;
-    gap: 20px;
+    gap: 64px;
     width: 100%;
     margin-bottom: 20px;
 }
@@ -682,7 +682,7 @@ tr:nth-child(even) {
 }
 
 .instruction-card h2 {
-    font-size: 40px;
+    font-size: 56px;
     color: var(--navy);
     margin-bottom: 12px;
 }
@@ -753,7 +753,7 @@ tr:nth-child(even) {
 
 .or-divider span {
     display: inline-block;
-    background: var(--gold);
+    background: var(--navy);
     color: #fff;
     font-weight: 800;
     font-size: 22px;
