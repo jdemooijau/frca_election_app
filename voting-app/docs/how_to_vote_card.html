@@ -78,8 +78,18 @@
     }
     .columns {
         display: flex;
-        gap: 6mm;
+        gap: 4mm;
         align-items: stretch;
+    }
+    .or-divider {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 24pt;
+        font-weight: 700;
+        color: #000000;
     }
     .col {
         flex: 1 1 50%;
@@ -256,6 +266,8 @@
                 <li>Fold the card and hand it in for counting.</li>
             </ol>
         </div>
+
+        <div class="or-divider" aria-hidden="true">OR</div>
 
         <!-- Phone ballot -->
         <div class="col">
