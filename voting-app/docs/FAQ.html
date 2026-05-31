@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FRCA Election App - Overview and How to Vote</title>
+<style>
+    /* A4 portrait reference document. Merges the project README with the
+       how-to-vote card into one self-contained, clickable PDF: the page a
+       voter reaches by scanning the QR on the how-to-vote card. Render with
+       scripts/render_pdf.py (headless Chromium preserves the links). */
+    @page { size: A4 portrait; margin: 14mm; }
+    html, body { margin: 0; padding: 0; }
+    body {
+        font-family: Georgia, 'Times New Roman', serif;
+        color: #1A3353;
+        background: #fff;
+        line-height: 1.45;
+        font-size: 10.5pt;
+    }
+    a { color: #1A5276; text-decoration: none; border-bottom: 0.5pt solid #cdd9e5; }
+
+    /* --- Masthead --- */
+    .masthead {
+        text-align: center;
+        border-bottom: 2.5pt solid #D4A843;
+        padding-bottom: 4mm;
+        margin-bottom: 6mm;
+    }
+    .masthead h1 {
+        font-size: 26pt;
+        margin: 0;
+        letter-spacing: 0.5pt;
+        color: #1A3353;
+    }
+    .masthead .subtitle {
+        font-size: 12.5pt;
+        font-style: italic;
+        color: #6c757d;
+        margin: 1.5mm 0 0;
+    }
+    .masthead .repo {
+        font-size: 10pt;
+        margin: 2.5mm 0 0;
+        color: #444;
+    }
+
+    h2 {
+        font-size: 15pt;
+        color: #1A3353;
+        border-bottom: 1.5pt solid #D4A843;
+        padding-bottom: 1mm;
+        margin: 7mm 0 3mm;
+    }
+    h3 { font-size: 12pt; color: #1A3353; margin: 4mm 0 1mm; }
+    p { margin: 0 0 2.5mm; }
+    ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+    li { margin: 0 0 1.5mm; }
+    .lead {
+        font-size: 11.5pt;
+        line-height: 1.5;
+        color: #2c3e50;
+        margin: 0 0 4mm;
+    }
+
+    /* Keep section headings with their following content. */
+    h2, h3 { break-after: avoid; }
+    section { break-inside: avoid-page; }
+
+    /* --- Callout: no warranty / read before using --- */
+    .callout {
+        background: #FFF8E1;
+        border: 1.5pt solid #FFD980;
+        border-radius: 3mm;
+        padding: 4mm 5mm;
+        margin: 4mm 0 5mm;
+    }
+    .callout h2 {
+        border: 0;
+        margin: 0 0 2mm;
+        font-size: 13pt;
+        color: #5a3000;
+    }
+    .callout p { color: #5a3000; }
+    .callout strong { color: #7a4000; }
+
+    /* --- How it works steps --- */
+    ol.steps li { margin-bottom: 2mm; }
+
+    /* --- How to vote two-column --- */
+    .pick-one {
+        text-align: center;
+        font-size: 11.5pt;
+        font-style: italic;
+        margin: 0 0 4mm;
+    }
+    .reminder {
+        text-align: center;
+        font-size: 10.5pt;
+        font-style: italic;
+        color: #5a3000;
+        margin: 0 0 4mm;
+        padding: 2.5mm 5mm;
+        background: #FFF8E1;
+        border: 1pt solid #FFD980;
+        border-radius: 2mm;
+    }
+    .columns {
+        display: flex;
+        gap: 4mm;
+        align-items: stretch;
+    }
+    .or-divider {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        font-size: 22pt;
+        font-weight: 700;
+        color: #000;
+    }
+    .col {
+        flex: 1 1 50%;
+        border: 1.5pt solid #1A3353;
+        border-radius: 3mm;
+        padding: 3mm 4mm 4mm;
+        background: #F7F9FB;
+        display: flex;
+        flex-direction: column;
+    }
+    .col h3 {
+        font-size: 14pt;
+        margin: 0 0 1mm;
+        text-align: center;
+        border-bottom: 2pt solid #D4A843;
+        padding-bottom: 1mm;
+    }
+    .shot {
+        text-align: center;
+        margin: 0 0 2.5mm;
+        height: 38mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 3mm;
+    }
+    .shot img {
+        max-width: 100%;
+        max-height: 38mm;
+        border: 1pt solid #d4d4d4;
+        border-radius: 1.5mm;
+        background: #fff;
+        object-fit: contain;
+    }
+    .shot.phone-row img { max-width: calc(50% - 1.5mm); }
+
+    /* --- FAQ safeguards --- */
+    .faq-section {
+        margin: 0 0 3.5mm;
+        padding-left: 4mm;
+        border-left: 3pt solid #D4A843;
+        break-inside: avoid;
+    }
+    .faq-section h3 { margin: 0 0 1mm; font-size: 11.5pt; }
+    .faq-section p { margin: 0; color: #333; }
+
+    /* --- Code blocks --- */
+    pre {
+        background: #F4F6F8;
+        border: 1pt solid #dde3e8;
+        border-radius: 2mm;
+        padding: 2.5mm 3mm;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 9pt;
+        color: #1A3353;
+        overflow-x: auto;
+        margin: 0 0 3mm;
+    }
+    code {
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 9pt;
+        background: #F0F3F5;
+        padding: 0.3mm 1mm;
+        border-radius: 1mm;
+    }
+
+    /* --- Documentation table --- */
+    table { width: 100%; border-collapse: collapse; margin: 0 0 3mm; font-size: 9.5pt; }
+    th, td { text-align: left; padding: 1.6mm 2.5mm; border-bottom: 0.75pt solid #e0e6ec; vertical-align: top; }
+    th { background: #1A3353; color: #fff; }
+    tr:nth-child(even) td { background: #F7F9FB; }
+
+    .footer {
+        margin-top: 7mm;
+        border-top: 1pt solid #d4d4d4;
+        padding-top: 3mm;
+        font-size: 9pt;
+        color: #666;
+        text-align: center;
+    }
+
+    @media print {
+        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+    .page-break { break-before: page; }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+    <h1>FRCA Election App</h1>
+    <div class="subtitle">Office bearer elections, run on one laptop in the church hall</div>
+    <div class="repo">Source and documentation:
+        <a href="https://github.com/jdemooijau/frca_election_app">github.com/jdemooijau/frca_election_app</a>
+    </div>
+</div>
+
+<p class="lead">
+    A self-contained offline voting app for office bearer elections in the
+    Free Reformed Churches of Australia. It runs on a single laptop in the
+    church hall over a local WiFi router, with no internet required. Brothers
+    cast ballots on their phones; paper ballots remain available as a fallback
+    at all times. This page combines the project overview with the how-to-vote
+    instructions, so whether you are a voter, an office bearer, or a
+    congregation considering adoption, you can start here.
+</p>
+
+<section>
+    <h2>What is this?</h2>
+    <p>
+        This app lets brothers cast ballots on their phones over a local WiFi
+        network during congregational elections for elders and deacons. It runs
+        on a single laptop, no internet connection required. Paper ballots remain
+        available as a fallback at all times. Any FRCA congregation can clone the
+        <a href="https://github.com/jdemooijau/frca_election_app">repository</a>,
+        run the setup wizard, and be ready for an election.
+    </p>
+</section>
+
+<section class="callout">
+    <h2>Important: read before using</h2>
+    <p><strong>No warranty. No responsibility. No support.</strong> This software
+    is provided as-is, with absolutely no warranty of any kind. It was built for
+    one congregation's needs and is shared in the hope that it may be useful to
+    others.</p>
+    <p>The authors accept no responsibility for any consequences of its use
+    (incorrect counts, failed or disputed elections, data loss, hardware damage,
+    or anything else), and provide no support of any kind. You are fully
+    responsible for verifying that it meets your congregation's needs, correctly
+    implements your election rules, and operates correctly in your environment.
+    A real election is a serious matter; the responsibility for running it
+    correctly belongs entirely with the church council that uses this tool.</p>
+    <p>If you are not comfortable installing Python, running a Flask web
+    application, configuring a local WiFi router, reading the source code, and
+    taking full responsibility for the outcome, then this software is not for
+    you. Use a commercial platform such as
+    <a href="https://electionbuddy.com">ElectionBuddy</a> instead, or continue
+    with traditional paper ballots.</p>
+</section>
+
+<section>
+    <h2>Who this is for</h2>
+    <p>This software suits congregations that have at least one member with:</p>
+    <ul>
+        <li><strong>Technical skill.</strong> Comfortable with Python, Flask,
+            SQLite, the command line, and basic networking, and able to read the
+            source code.</li>
+        <li><strong>Willingness to take responsibility.</strong> Prepared to
+            install, configure, test, run, and troubleshoot on election day.</li>
+        <li><strong>Time to test thoroughly.</strong> Willing to run multiple
+            dry runs, including a full dress rehearsal with the church council.</li>
+        <li><strong>Hardware access.</strong> A laptop, a local WiFi router, and
+            the ability to set both up in the church hall.</li>
+    </ul>
+    <p>If your congregation does not have someone like this, please do not use
+    this software. Use ElectionBuddy or stay with paper ballots.</p>
+</section>
+
+<section>
+    <h2>How it works</h2>
+    <ol class="steps">
+        <li>An administrator creates an election, enters candidate names for
+            elder and deacon, and generates one-time voting codes for all rounds.</li>
+        <li>Codes are printed on slips and handed out at the door alongside paper
+            ballots. Brothers sign the attendance register.</li>
+        <li>Brothers enter their code on their phone, select candidates, and submit.</li>
+        <li>Each code can only be used once. Votes are recorded anonymously:
+            there is no link between a code and the vote it cast.</li>
+        <li>Paper ballot totals are entered manually at count time and added to
+            the digital totals.</li>
+        <li>Results are displayed on a projector. If a second round is needed,
+            selected candidates carry forward with the pre-printed Round 2 codes.</li>
+    </ol>
+</section>
+
+<div class="page-break"></div>
+
+<section>
+    <h2>How to vote</h2>
+    <div class="reminder">
+        Reminder: bring your phone, and switch it to silent before the worship service.
+    </div>
+    <p class="pick-one">
+        You vote one way only, paper or phone, whichever you prefer. If anything
+        goes wrong with your phone, just use the paper ballot instead.
+    </p>
+
+    <div class="columns">
+        <div class="col">
+            <h3>Paper ballot</h3>
+            <div class="shot">
+                <img src="../../screenshots/24_paper_ballot_single.png" alt="Paper ballot card">
+            </div>
+            <ol>
+                <li>Tick the box next to the candidates you choose, up to the
+                    number the office allows ("select 2" means tick up to two).</li>
+                <li>Fold the card and hand it in for counting.</li>
+            </ol>
+        </div>
+
+        <div class="or-divider" aria-hidden="true">OR</div>
+
+        <div class="col">
+            <h3>Phone</h3>
+            <div class="shot phone-row">
+                <img src="../../screenshots/23_code_slips_single.png" alt="Voting code slip">
+                <img src="../../screenshots/16_voter_ballot_selected.png" alt="Phone ballot with ticks">
+            </div>
+            <ol>
+                <li>Connect your phone to the <strong>ChurchVote</strong> WiFi
+                    (no password). The network name is on the code slip.</li>
+                <li>Scan the QR code on the code slip with your phone camera, or
+                    type the URL shown into your browser.</li>
+                <li>Tick your candidates and tap <strong>Cast Your Vote</strong>.
+                    The confirmation screen tells you your vote is registered.</li>
+                <li><strong>Tear up the card.</strong> Your phone vote is the one
+                    counted; do not also submit the paper ballot.</li>
+            </ol>
+        </div>
+    </div>
+</section>
+
+<section>
+    <h2>Phone voting: frequently asked questions</h2>
+    <p>Phone voting is newer than paper. These are the safeguards that make sure
+    no brother can vote twice, no vote is lost, and the count always reconciles.
+    Voting on paper continues to work exactly as before; phone voting is opt-in.</p>
+
+    <div class="faq-section">
+        <h3>Can a code be used more than once?</h3>
+        <p>Once you vote on your phone, that code is marked as used. Trying to use
+        it again shows "this code has already been used." Guessing a valid code is
+        also mathematically nearly impossible: only the codes pre-generated for
+        this meeting are accepted, out of close to a billion possible
+        six-character codes.</p>
+    </div>
+    <div class="faq-section">
+        <h3>What if someone votes on both phone and paper?</h3>
+        <p>Every paper ballot has its own QR code. If the count does not add up at
+        the end of the round, the chairman can scan each ballot; the system flags
+        any whose code was already used on a phone, and those papers are set aside.</p>
+    </div>
+    <div class="faq-section">
+        <h3>Is my vote anonymous?</h3>
+        <p>Only the code and the choice are recorded, never who the code was given
+        to. Codes are randomly printed and handed out, so no vote can be traced
+        back to a specific brother.</p>
+    </div>
+    <div class="faq-section">
+        <h3>What if the WiFi or the system fails?</h3>
+        <p>The WiFi for this election is a small local router set up just for the
+        meeting; it has nothing to do with the internet or home broadband. It runs
+        off a single power point and is very unlikely to fail. Even if it does,
+        paper voting is always available and the chairman can switch to paper-only
+        at any time, so the meeting continues without disruption.</p>
+    </div>
+    <div class="faq-section">
+        <h3>What if my phone won't connect to the WiFi?</h3>
+        <p>Use the paper side of your card. Paper and phone votes are counted
+        together; either way works.</p>
+    </div>
+    <div class="faq-section">
+        <h3>What if we need a second round?</h3>
+        <p>If no candidate is elected, the council calls a second round. You'll be
+        given a new card with a new code; the previous code no longer works. Vote
+        the same way as before.</p>
+    </div>
+    <p>For deeper answers by audience (voters, council, prospective churches,
+    continuity, security), see the full
+    <a href="https://github.com/jdemooijau/frca_election_app/blob/main/voting-app/docs/FAQ.md">FAQ.md</a>.</p>
+</section>
+
+<div class="page-break"></div>
+
+<section>
+    <h2>Quick start (for the administrator)</h2>
+    <p>Prerequisites: Python 3.11 or later. First, install dependencies:</p>
+    <pre>cd frca_election_app/voting-app
+pip install -r requirements.txt</pre>
+    <p>Then start the app using the launcher for your platform:</p>
+    <pre>Windows (Command Prompt):   start.bat
+Windows (PowerShell):       .\start.bat
+Linux / macOS:              ./run.sh</pre>
+    <p>The launcher starts the waitress production server on port 5000 and opens
+    the admin page in your browser. Do not run <code>python app.py</code>
+    directly; it will print a reminder and exit. Replace
+    <code>frca_election_app</code> with whatever you named the folder when you
+    cloned the repository. The app runs on <code>http://localhost:5000</code>:</p>
+    <ul>
+        <li>Admin panel: <code>http://localhost:5000/admin</code></li>
+        <li>Voter page: <code>http://localhost:5000/</code></li>
+        <li>Projector display: <code>http://localhost:5000/display</code></li>
+    </ul>
+    <p>On first login, the setup wizard collects your congregation name, WiFi
+    SSID, and a new admin password. The default password is <code>admin</code>.</p>
+</section>
+
+<section>
+    <h2>Documentation</h2>
+    <p>Full documentation lives in the repository. The links below open on GitHub.</p>
+    <table>
+        <thead>
+            <tr><th>Document</th><th>Audience</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><a href="https://github.com/jdemooijau/frca_election_app/blob/main/voting-app/docs/FAQ.md">FAQ.md</a></td><td>Anyone</td><td>Plain-language answers by audience</td></tr>
+            <tr><td><a href="https://github.com/jdemooijau/frca_election_app/blob/main/voting-app/docs/CONFIGURATION.md">CONFIGURATION.md</a></td><td>Administrator</td><td>First-time setup for your congregation</td></tr>
+            <tr><td><a href="https://github.com/jdemooijau/frca_election_app/blob/main/voting-app/docs/SETUP.md">SETUP.md</a></td><td>Task team</td><td>Hardware and network setup at church</td></tr>
+            <tr><td><a href="https://github.com/jdemooijau/frca_election_app/blob/main/voting-app/docs/ADMIN_GUIDE.md">ADMIN_GUIDE.md</a></td><td>Task team</td><td>How to run an election end to end</td></tr>
+            <tr><td><a href="https://github.com/jdemooijau/frca_election_app/blob/main/voting-app/docs/UAT_SCRIPT.md">UAT_SCRIPT.md</a></td><td>Consistory with deacons</td><td>Step-by-step dry-run script</td></tr>
+            <tr><td><a href="https://github.com/jdemooijau/frca_election_app/blob/main/voting-app/docs/SECURITY.md">SECURITY.md</a></td><td>Consistory with deacons</td><td>Security model and anonymity guarantees</td></tr>
+            <tr><td><a href="https://github.com/jdemooijau/frca_election_app/blob/main/voting-app/docs/FAILSAFE.md">FAILSAFE.md</a></td><td>Task team</td><td>What to do when things go wrong</td></tr>
+            <tr><td><a href="https://github.com/jdemooijau/frca_election_app/blob/main/voting-app/docs/COMPATIBILITY_TEST.md">COMPATIBILITY_TEST.md</a></td><td>Task team</td><td>Device testing checklist</td></tr>
+            <tr><td><a href="https://github.com/jdemooijau/frca_election_app/blob/main/voting-app/docs/CHURCH_ORDER_NOTES.md">CHURCH_ORDER_NOTES.md</a></td><td>Consistory with deacons</td><td>Alignment with Church Order Article 3</td></tr>
+        </tbody>
+    </table>
+</section>
+
+<section>
+    <h2>License</h2>
+    <p>Built for office bearer elections in the Free Reformed Churches of
+    Australia. Released under the
+    <a href="https://github.com/jdemooijau/frca_election_app/blob/main/LICENSE">MIT License</a>
+    in the hope that it may serve any FRCA congregation, and any other
+    organisation with similar needs. You can fork, modify, redistribute, and run
+    it for any purpose, as long as the licence text and copyright notice come
+    along. There is no warranty.</p>
+</section>
+
+<div class="footer">
+    FRCA Election App &middot;
+    <a href="https://github.com/jdemooijau/frca_election_app">github.com/jdemooijau/frca_election_app</a>
+    &middot; More information? Speak to your office bearers.
+</div>
+
+</body>
+</html>

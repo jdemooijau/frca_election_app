@@ -38,6 +38,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `docs/FAQ.pdf` rewritten as a self-contained reference document that
+  merges the project README with the how-to-vote card, intended as the
+  page a voter reaches by scanning the card's QR. Project-first ordering
+  (overview, no-warranty notice, who it's for, how it works) followed by
+  how-to-vote (paper vs phone) and the phone-voting safeguards FAQ. All
+  URLs are clickable, with relative doc links rewritten to absolute
+  GitHub URLs so they resolve outside the repo. Driven by a new committed
+  source `docs/FAQ.html`; `FAQ.md` is unchanged and remains the
+  audience-segmented GitHub FAQ.
+- `scripts/render_pdf.py`: reproducible HTML-to-PDF renderer (headless
+  Chromium via Playwright) that preserves clickable links and honours the
+  `@page` CSS. Used to produce `FAQ.pdf` from `FAQ.html`.
 - Welcome display labels bumped from 26 px to 36 px and the Step 2
   label changed from "Type" to "Scan the QR or type" so the line
   reads as one instruction across the value: "scan the QR or type
