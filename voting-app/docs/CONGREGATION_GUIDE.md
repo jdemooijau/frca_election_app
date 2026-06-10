@@ -51,9 +51,11 @@ The ballot shows the candidates for the office of deacon. Tick the candidate you
 
 You may leave it blank if you wish — a partial or blank ballot remains valid to the extent it clearly indicates a valid choice (Article 7).
 
-### Step 4: Submit
+### Step 4: Check and confirm
 
-Tap **Cast Your Vote**. You will see a confirmation screen:
+Tap **Cast Your Vote**. A check screen shows the selection you made. Tap **Confirm — Cast My Vote** if it is right, or **Change My Selection** to go back.
+
+Once cast, you will see a confirmation screen:
 
 ![Confirmation](../../screenshots/17_voter_confirmation.png)
 

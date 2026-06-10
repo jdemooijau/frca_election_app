@@ -168,17 +168,24 @@ printed on the slip (or scans the QR code).
 
 ![Ballot](../../screenshots/15_voter_ballot.png)
 
-**Step 3:** Tap **Cast Your Vote**. The code is burned immediately and
-cannot be reused. The vote is recorded anonymously — no link from code
-to vote exists in the database.
+**Step 3:** Tap **Cast Your Vote**. A "Check your selection" screen
+lists the chosen candidates with **Confirm** and **Change My
+Selection** buttons. If the brother does nothing, the vote is cast
+automatically after a short countdown (default 8 seconds, adjustable
+in Settings) — so a phone left on the check screen still counts.
+
+**Step 4:** On confirmation (manual or automatic) the code is burned
+and cannot be reused. The vote is recorded anonymously — no link from
+code to vote exists in the database.
 
 ![Confirmation](../../screenshots/17_voter_confirmation.png)
 
 The confirmation page displays the burned code and a clear "Next
 voter" button so a phone can be passed along without confusion.
 
-> **Partial ballots:** under-voting is allowed but the app warns first.
-> The brother must confirm before the partial ballot is cast.
+> **Partial ballots:** under-voting is allowed; the check screen shows
+> an extra warning ("you have not used all your votes") before the
+> ballot is cast.
 
 ### 12. Monitor progress
 

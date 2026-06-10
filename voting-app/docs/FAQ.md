@@ -50,9 +50,10 @@ hand in. The system counts paper and digital together.
 
 ### What if I make a mistake on the ballot before submitting?
 
-Just untick and re-tick. Nothing is recorded until you press Cast Your
-Vote. After submission your code is burned and the choice is final
-(Article 12).
+Just untick and re-tick. After you press Cast Your Vote, a check
+screen shows your selection one more time — tap "Change My Selection"
+to go back, or "Confirm" to cast. Once cast, your code is burned and
+the choice is final (Article 12).
 
 ### Can I see the result on my own phone?
 
