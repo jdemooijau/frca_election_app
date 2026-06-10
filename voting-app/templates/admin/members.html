@@ -51,6 +51,14 @@
                 <button type="submit" class="btn btn-danger btn-small">Clear All</button>
             </form>
         </div>
+        {% if attendance_sheets and attendance_sheets > 1 %}
+        <p style="font-size: 13px; color: #666; margin-top: 8px;">
+            Prints as {{ attendance_sheets }} single-page alphabetical sheets with
+            big signature rows and a surname range on each. Lay them out as
+            parallel signing stations — one pen per sheet; a steward can mind
+            two adjacent sheets.
+        </p>
+        {% endif %}
     </div>
 
     <!-- Member table -->

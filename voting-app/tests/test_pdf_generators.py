@@ -440,20 +440,14 @@ SAMPLE_MEMBERS = [
 
 def test_attendance_register_pdf_generates():
     """Attendance register PDF should generate without error."""
-    buf = generate_attendance_register_pdf(
-        members=SAMPLE_MEMBERS,
-        congregation_name="Free Reformed Church of Darling Downs",
-    )
+    buf = generate_attendance_register_pdf(members=SAMPLE_MEMBERS)
     assert buf is not None
     assert buf.getbuffer().nbytes > 0
 
 
 def test_attendance_register_pdf_contains_names():
     """Attendance register should contain member names."""
-    buf = generate_attendance_register_pdf(
-        members=SAMPLE_MEMBERS,
-        congregation_name="Free Reformed Church of Darling Downs",
-    )
+    buf = generate_attendance_register_pdf(members=SAMPLE_MEMBERS)
     text = _extract_text(buf, 0)
     for m in SAMPLE_MEMBERS:
         assert m["last_name"] in text, f"Missing: {m['last_name']}"

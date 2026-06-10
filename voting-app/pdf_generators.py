@@ -16,8 +16,10 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm, cm
 from reportlab.lib.colors import HexColor
 from reportlab.pdfgen import canvas
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import (
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak,
+)
 from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
@@ -86,15 +88,18 @@ def _calc_code_slip_height(wifi_password):
     Total target: <= 89.67 mm.
 
     Layout: header / Step 1 (text-only WiFi info next to numbered
-    circle) / Step 2 (numbered circle + 36 mm voting QR + vertical
-    divider with "If QR fails" hint + manual fallback text) /
+    circle) / Step 2 (numbered circle + 32 mm voting QR + connecting
+    arrow + vertical divider framing the fallback-text column with
+    "If QR fails" label sitting directly over the fallback text) /
     warning. Single-QR design after UAT showed two QRs confused
-    voters.
+    voters; the rotated divider hint was unreadable so it became a
+    horizontal arrow + over-text label, with arrow shaft tightened
+    so the QR can stay at the 32 mm count-time-scan spec floor.
     """
     h = 0
     h += 10 * mm  # header ("Vote with phone" + rule + top padding)
     h += 18 * mm  # step 1 row (text-only WiFi line + password line)
-    h += 53 * mm  # step 2 row (36 mm voting QR + side fallback text)
+    h += 53 * mm  # step 2 row (32 mm voting QR + arrow + fallback text)
     h += _WARNING_STRIP_H  # warning strip
     h += 1 * mm   # bottom padding
     return h
@@ -161,12 +166,16 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
 
     # --- Body layout: Step 1 is text-only (Connect to WiFi name and
     # password line) with the bigger numbered circle on the left;
-    # Step 2 is the same step circle + voting QR + vertical divider
-    # with an "If QR fails" hint + manual fallback text on the right.
-    # UAT (David, Matt) showed that a second QR for WiFi-join confused
-    # voters who would not read the instructions and just scanned
-    # whichever QR they saw first; the standalone wifi handout at the
-    # sign-in table covers the WiFi-QR convenience case separately. ---
+    # Step 2 is the same step circle + voting QR + a prominent
+    # horizontal arrow with an "If QR fails" label + manual fallback
+    # text on the right. UAT (David, Matt) showed that a second QR
+    # for WiFi-join confused voters who would not read the
+    # instructions and just scanned whichever QR they saw first; the
+    # standalone wifi handout at the sign-in table covers the
+    # WiFi-QR convenience case separately. Later UAT showed the
+    # rotated "If QR fails" hint on the divider was unreadable, so
+    # the divider was replaced with a horizontal arrow that visibly
+    # connects QR to fallback. ---
     content_top_y = y
     label_x = tx + 12 * mm  # left edge of Step-2 QR (after bigger circle)
 
@@ -194,9 +203,10 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     step2_top_y = step1_top_y - 18 * mm
     _step_circle(tx, step2_top_y, 2)
 
-    # Voting QR. Back to 36 mm (above the 32 mm spec floor) now that it
-    # is the only QR on the slip and has the room.
-    vote_qr_size = 36 * mm
+    # Voting QR at the 32 mm spec floor for count-time scan
+    # throughput (see specs/2026-05-02-paper-scan-and-phone-receipt-
+    # design.md). ERROR_CORRECT_H is retained.
+    vote_qr_size = 32 * mm
     vote_qr_top = step2_top_y + 4 * mm
     vote_qr_bottom = vote_qr_top - vote_qr_size
     vote_url = f"{qr_url_for_encode}/v/{code}"
@@ -204,39 +214,52 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     c.drawImage(vote_qr_img, label_x, vote_qr_bottom,
                 vote_qr_size, vote_qr_size)
 
-    # Vertical divider runs only across the Step 2 row (not the full
-    # card height) so it visually frames the QR-vs-fallback pair.
-    divider_x = label_x + vote_qr_size + 2 * mm
-    text_x = divider_x + 5 * mm
+    # Layout from QR right edge to text column, left to right:
+    #   QR | gap | arrow | gap | divider line | gap | text
+    # Arrow shaft is tight (4 mm) so the layout fits beside a 32 mm
+    # QR; the divider line frames the fallback-text column and the
+    # arrow stops just short of the line.
+    divider_x = label_x + 41 * mm
+    text_x = divider_x + 1 * mm
 
-    # Vertical divider local to the Step 2 row, separating the QR
-    # from the manual fallback text.
+    # --- Connecting arrow between QR and the fallback-text column.
+    # The shaft is vertically centred on the QR so it visibly
+    # emerges from the QR and points at the fallback. Header labels
+    # ("Scan QR with camera" over QR, "If QR fails" over text) sit
+    # in the empty band above the QR top, parallel-construction so
+    # the QR-vs-fallback alternative reads at a glance. ---
+    arrow_y = (vote_qr_top + vote_qr_bottom) / 2
+    arrow_x_start = label_x + vote_qr_size + 1 * mm
+    arrow_x_tip = divider_x - 1 * mm
+    arrow_head_w = 3 * mm
+    arrow_head_h = 2.5 * mm
+    shaft_x_end = arrow_x_tip - arrow_head_w
+    c.setStrokeColor(HexColor("#000000"))
+    c.setFillColor(HexColor("#000000"))
+    c.setLineWidth(1.8)
+    c.line(arrow_x_start, arrow_y, shaft_x_end, arrow_y)
+    arrow_path = c.beginPath()
+    arrow_path.moveTo(shaft_x_end, arrow_y + arrow_head_h / 2)
+    arrow_path.lineTo(arrow_x_tip, arrow_y)
+    arrow_path.lineTo(shaft_x_end, arrow_y - arrow_head_h / 2)
+    arrow_path.close()
+    c.drawPath(arrow_path, stroke=0, fill=1)
+    c.setLineWidth(1)
+
+    # Vertical divider framing the fallback-text column on its left.
+    # Spans the QR vertical extent for visual symmetry with the QR.
     c.setStrokeColor(HexColor("#CCCCCC"))
     c.setLineWidth(0.75)
     c.line(divider_x, vote_qr_bottom, divider_x, vote_qr_top)
+    c.setLineWidth(1)
 
-    # Vertical "If QR fails" hint along the divider, reads bottom-to-top
-    # centred on the voting QR.
-    hint_text = "If QR fails"
-    hint_font_size = 9
-    c.setFont("Helvetica-Bold", hint_font_size)
-    hint_text_w = c.stringWidth(hint_text, "Helvetica-Bold",
-                                hint_font_size)
-    hint_cy = (vote_qr_top + vote_qr_bottom) / 2
-    # White mask so the divider line does not show through the text.
-    mask_w = 5 * mm
-    mask_h = hint_text_w + 4
-    c.setFillColor(HexColor("#FFFFFF"))
-    c.rect(divider_x - mask_w / 2, hint_cy - mask_h / 2,
-           mask_w, mask_h, fill=1, stroke=0)
-    # Rotated text. After translate + rotate(90), drawString writes
-    # bottom-to-top with the baseline running along the screen +y axis.
-    c.saveState()
-    c.translate(divider_x + 1.2 * mm, hint_cy - hint_text_w / 2)
-    c.rotate(90)
-    c.setFillColor(HexColor("#333333"))
-    c.drawString(0, 0, hint_text)
-    c.restoreState()
+    # Header labels in the empty band above the QR top.
+    label_y = vote_qr_top + 1.5 * mm
+    c.setFont("Helvetica-Bold", 9)
+    c.setFillColor(HexColor("#000000"))
+    qr_mid_x = label_x + vote_qr_size / 2
+    c.drawCentredString(qr_mid_x, label_y, "Scan QR with camera")
+    c.drawString(text_x, label_y, "If QR fails")
 
     # Right-column text for Step 2 (no "Scan QR" preamble; modern
     # users know how QR works).
@@ -284,12 +307,13 @@ def draw_code_slip(c, x, top_y, w, cell_h, code, wifi_ssid, wifi_password,
     # === Step 3: Voted? Shred or tear up this card ===
     # Lives in the empty space below the voting QR and above the
     # warning strip. The bottom warning strip is the passive safety
-    # net; Step 3 is the active instruction.
-    step3_top_y = vote_qr_bottom - 7.5 * mm
+    # net; Step 3 is the active instruction. Anchored well below the
+    # QR so the bottom of the slip does not look top-heavy.
+    step3_top_y = vote_qr_bottom - 13 * mm
     _step_circle(tx, step3_top_y, 3)
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(HexColor("#000000"))
-    c.drawString(label_x, step3_top_y, "Voted? Shred or tear up this card")
+    c.drawString(label_x, step3_top_y, "After casting your vote, tear up this card")
 
     # --- Warning strip at bottom ---
     _draw_warning_strip(
@@ -1374,15 +1398,30 @@ def generate_cards_duplex_pdf(election_name, office_data, codes, wifi_ssid,
     return buf
 
 
-def generate_attendance_register_pdf(members, congregation_name,
-                                     election_name=None, election_date=None):
+# Attendance register layout. Each sheet must fit on a single A4 page so
+# every signing station gets exactly one physical sheet (a steward can mind
+# two adjacent sheets). Rows are sized to leave comfortable room to sign;
+# rows-per-sheet is what fits one page alongside the title, surname banner,
+# table header and tally footer.
+ATTENDANCE_ROW_HEIGHT = 13 * mm
+ATTENDANCE_ROWS_PER_SHEET = 16
+
+
+def attendance_register_sheet_count(member_count):
+    """Number of one-page sheets the attendance register prints on."""
+    return max(1, math.ceil(member_count / ATTENDANCE_ROWS_PER_SHEET))
+
+
+def generate_attendance_register_pdf(members):
     """Generate a printable attendance register PDF from a member list.
 
+    The list is split into near-equal alphabetical chunks of at most
+    ATTENDANCE_ROWS_PER_SHEET names, one single-page sheet per chunk, each
+    headed by a surname-range banner so it doubles as station signage.
+
     Args:
-        members: list of dicts with 'first_name' and 'last_name'.
-        congregation_name: e.g. "Free Reformed Church of Darling Downs".
-        election_name: optional election name for the header.
-        election_date: optional election date string.
+        members: list of dicts with 'first_name' and 'last_name', sorted
+            alphabetically by surname.
 
     Returns:
         BytesIO buffer containing the PDF.
@@ -1397,42 +1436,70 @@ def generate_attendance_register_pdf(members, congregation_name,
     title_style = styles["Title"]
     title_style.textColor = NAVY
     title_style.fontSize = 16
-    elements.append(Paragraph("Attendance Register", title_style))
-    elements.append(Paragraph(congregation_name, styles["Heading2"]))
 
-    if election_name:
-        details = election_name
-        if election_date:
-            details += f" \u2014 {election_date}"
-        elements.append(Paragraph(details, styles["Normal"]))
+    range_style = ParagraphStyle(
+        "SurnameRange", parent=styles["Heading1"], textColor=NAVY,
+        fontSize=22, leading=26, alignment=1, borderColor=GOLD,
+        borderWidth=2, borderPadding=8, spaceBefore=4, spaceAfter=8,
+    )
 
-    elements.append(Paragraph(
-        "Article 4: All male communicant members present must sign this "
-        "register.", styles["Normal"]))
-    elements.append(Spacer(1, 5 * mm))
+    sections = attendance_register_sheet_count(len(members))
+    # Near-equal contiguous chunks; the list arrives surname-sorted.
+    base, rem = divmod(len(members), sections)
+    chunks = []
+    start = 0
+    for i in range(sections):
+        size = base + (1 if i < rem else 0)
+        if size:
+            chunks.append(members[start:start + size])
+        start += size
 
-    table_data = [["#", "Name", "Signature"]]
-    for i, member in enumerate(members, 1):
-        name = f"{member['last_name']}, {member['first_name']}"
-        table_data.append([str(i), name, ""])
+    counter = 0
+    for sheet_no, chunk in enumerate(chunks, 1):
+        if sheet_no > 1:
+            elements.append(PageBreak())
 
-    col_widths = [30, 200, 260]
-    table = Table(table_data, colWidths=col_widths, repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
-        ("TOPPADDING", (0, 0), (-1, 0), 8),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
-         [colors.white, HexColor("#F5F5F5")]),
-        ("ALIGN", (0, 0), (0, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ROWHEIGHT", (0, 1), (-1, -1), 36),
-    ]))
-    elements.append(table)
+        title = "Attendance Register"
+        if len(chunks) > 1:
+            title += f" \u2014 Sheet {sheet_no} of {len(chunks)}"
+        elements.append(Paragraph(title, title_style))
+
+        if len(chunks) > 1:
+            first = chunk[0]["last_name"].strip()
+            last = chunk[-1]["last_name"].strip()
+            elements.append(Paragraph(
+                f"Surnames: {first} \u2013 {last}", range_style))
+
+        elements.append(Spacer(1, 3 * mm))
+
+        table_data = [["#", "Name", "Signature"]]
+        for member in chunk:
+            counter += 1
+            name = f"{member['last_name']}, {member['first_name']}"
+            table_data.append([str(counter), name, ""])
+
+        col_widths = [30, 200, 280]
+        row_heights = [11 * mm] + [ATTENDANCE_ROW_HEIGHT] * len(chunk)
+        table = Table(table_data, colWidths=col_widths,
+                      rowHeights=row_heights, repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 12),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+             [colors.white, HexColor("#F5F5F5")]),
+            ("ALIGN", (0, 0), (0, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        elements.append(table)
+
+        elements.append(Spacer(1, 5 * mm))
+        elements.append(Paragraph(
+            "Signatures on this sheet: ____________ "
+            "(count after the doors close, then add up all sheets)",
+            styles["Normal"]))
 
     doc.build(elements)
     buf.seek(0)
@@ -1610,9 +1677,7 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
         member_count=member_count, is_demo=is_demo)
 
     # 5. Attendance register
-    attendance_buf = generate_attendance_register_pdf(
-        members, congregation_name,
-        election_name=election_name, election_date=election_date)
+    attendance_buf = generate_attendance_register_pdf(members)
 
     # 6. Voter handout: static 2-page A4 (front = how-to-vote on
     #    paper or phone, back = "How is this kept honest?" FAQ on the
@@ -1649,6 +1714,16 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
     total_cards = len(codes)
     total_cards_x2 = total_cards * 2
     member_count_for_print = str(member_count) if member_count else "N"
+    attendance_sheets = attendance_register_sheet_count(len(members))
+    if attendance_sheets > 1:
+        attendance_split_note = (
+            f"\n   Split into {attendance_sheets} single-page alphabetical"
+            "\n   sheets (surname ranges printed on each) so sign-in can run"
+            "\n   at parallel stations — one pen per sheet, and one steward"
+            "\n   can mind two adjacent sheets."
+        )
+    else:
+        attendance_split_note = ""
     instructions = f"""\
 PRINTER PACK — {election_name}
 {'=' * 60}
@@ -1728,7 +1803,7 @@ Three printing workflows are provided. Pick ONE based on your equipment:
    ─────────────────────────────
    Sign-in sheet listing all members. Each attendee signs next to
    their name upon arrival. Required per Article 4 of the church
-   order. Print on A4.
+   order. Print on A4.{attendance_split_note}
 
 
 7. 7_voter_handout.pdf  (2 pages, duplex)

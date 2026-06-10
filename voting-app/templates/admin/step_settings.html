@@ -20,6 +20,22 @@
         </label>
     </div>
 
+    <div class="form-group">
+        <label style="display: flex; align-items: flex-start; gap: 10px;">
+            <input type="checkbox" name="steward_checkin_enabled" value="1"
+                   {% if election.steward_checkin_enabled %}checked{% endif %}
+                   style="margin-top: 4px;">
+            <span>
+                <strong>Enable steward check-in</strong>
+                <span style="display: block; font-size: 13px; color: #666; margin-top: 2px;">
+                    Stewards at the door tap brothers present on their phones; the
+                    attendance count fills itself in. Turn off to just count
+                    signatures on the paper register sheets as before.
+                </span>
+            </span>
+        </label>
+    </div>
+
     <button type="submit" class="btn btn-primary">Save settings</button>
     <a href="{{ url_for('admin_step_codes', election_id=sidebar_state.election.id) }}"
        class="btn btn-outline" style="margin-left: 8px;">Next: Codes &amp; printing &rarr;</a>

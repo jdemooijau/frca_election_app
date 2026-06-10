@@ -80,6 +80,30 @@
         </div>
 
         <div class="form-group">
+            <label for="display_rotate_seconds">Projector Office Rotation (seconds)</label>
+            <input type="number" id="display_rotate_seconds" name="display_rotate_seconds"
+                   value="{{ display_rotate_seconds }}" min="2" max="60"
+                   autocomplete="off">
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                When results for more than one office are on the projector, each
+                office is shown full-screen for this many seconds before rotating
+                to the next. Bigger text, readable from the back.
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label for="vote_confirm_seconds">Vote Auto-Confirm (seconds)</label>
+            <input type="number" id="vote_confirm_seconds" name="vote_confirm_seconds"
+                   value="{{ vote_confirm_seconds }}" min="3" max="60"
+                   autocomplete="off">
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                After choosing candidates, voters see a "check your selection"
+                screen. If they do nothing, the vote is cast automatically after
+                this many seconds — so a forgotten phone still counts.
+            </p>
+        </div>
+
+        <div class="form-group">
             <label for="new_password">{{ 'Change Admin Password' if setup_complete else 'New Admin Password' }}</label>
             <input type="password" id="new_password" name="new_password"
                    {% if not setup_complete %}required{% endif %}

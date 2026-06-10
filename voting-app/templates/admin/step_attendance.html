@@ -23,13 +23,50 @@
             <div class="form-group" style="flex: 1; min-width: 200px; margin: 0;">
                 <label for="participants" style="font-weight: 700;">Brothers Present (from attendance register)</label>
                 <input type="number" id="participants" name="participants"
-                       value="{{ in_person_participants }}" min="0"
+                       value="{{ in_person_participants if in_person_participants > 0 else (checkin_count or 0) }}" min="0"
                        style="text-align: center; font-size: 22px; font-weight: 700;">
+                {% if in_person_participants <= 0 and (checkin_count or 0) > 0 %}
+                <p style="font-size: 13px; color: #666; margin: 4px 0 0;">
+                    Pre-filled from the steward check-in below — adjust if the paper register says otherwise.
+                </p>
+                {% endif %}
             </div>
             <button type="submit" class="btn btn-primary">Save attendance</button>
         </div>
     </form>
 </div>
+
+{% if steward_url %}
+<div style="margin-bottom: 18px; padding: 12px 14px;
+            background: #F4F7FB; border-left: 4px solid var(--navy);
+            border-radius: 6px;">
+    <h3 style="margin: 0 0 4px; font-size: 14px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px;">
+        Steward check-in (live digital register)
+    </h3>
+    <p style="font-size: 14px; color: #444; margin: 0 0 10px;">
+        Stewards at the door open this page on their phones and tap each brother
+        as he arrives — no manual counting. Several stewards can work at once.
+        Brothers still sign the paper register (Article 4); the live count below
+        saves you tallying signatures.
+    </p>
+    <div style="display: flex; gap: 18px; flex-wrap: wrap; align-items: center;">
+        <img src="{{ steward_qr }}" alt="Steward check-in QR code"
+             style="width: 130px; height: 130px; border: 1px solid var(--grey); border-radius: 6px; background: #fff;">
+        <div style="flex: 1; min-width: 220px;">
+            <p style="font-size: 13px; color: #666; margin: 0 0 2px;">Stewards scan the QR or type:</p>
+            <p style="font-size: 15px; font-weight: 700; color: var(--navy); margin: 0 0 12px; word-break: break-all;">
+                <a href="{{ url_for('steward_checkin', token=steward_token) }}" target="_blank">{{ steward_url }}</a>
+            </p>
+            <p style="font-size: 15px; color: var(--navy); margin: 0 0 10px;">
+                Checked in so far: <strong style="font-size: 22px;" id="live-checkin-count">{{ checkin_count }}</strong>
+            </p>
+            <button type="button" class="btn btn-outline btn-small" id="use-checkin-count">
+                Use this count as attendance
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div style="margin-bottom: 18px; padding: 12px 14px;
             background: #FFFAF0; border-left: 4px solid var(--gold);
@@ -61,4 +98,33 @@
     </a>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if steward_url %}
+<script>
+(function() {
+    var countEl = document.getElementById('live-checkin-count');
+    var input = document.getElementById('participants');
+
+    function poll() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/checkin/{{ steward_token }}/data', true);
+        xhr.onload = function() {
+            if (xhr.status !== 200) return;
+            try {
+                countEl.textContent = JSON.parse(xhr.responseText).count;
+            } catch (e) {}
+        };
+        xhr.send();
+    }
+    setInterval(poll, 3000);
+
+    document.getElementById('use-checkin-count').addEventListener('click', function() {
+        input.value = countEl.textContent;
+        input.focus();
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

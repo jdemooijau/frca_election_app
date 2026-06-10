@@ -116,6 +116,8 @@ class MassTestRunner:
         for office_id, cand_ids in office_selections.items():
             for cid in cand_ids:
                 data.setdefault(f"office_{office_id}", []).append(str(cid))
+        # Skip the review screen: "confirmed" is what its Confirm button sends.
+        data["confirmed"] = "1"
         if confirm_partial:
             data["confirm_partial"] = "1"
         return self.client.post("/submit", data=data)

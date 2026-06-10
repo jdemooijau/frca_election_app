@@ -27,9 +27,6 @@
 
     <form method="POST" action="{{ url_for('voter_submit') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        {% if partial_warning|default(false) %}
-        <input type="hidden" name="confirm_partial" value="1">
-        {% endif %}
 
         {% for item in office_candidates %}
         {% if item.candidates %}
@@ -50,17 +47,10 @@
         {% endif %}
         {% endfor %}
 
-        {% if partial_warning|default(false) %}
-        <button type="submit" class="btn btn-gold">Confirm and Cast Vote</button>
-        <p style="text-align: center; margin-top: 8px; font-size: 16px; color: #666;">
-            You have not selected the maximum number of candidates.
-            Press the button above to confirm this is intentional.
-        </p>
-        {% else %}
         <button type="submit" class="btn btn-primary">Cast Your Vote</button>
-        {% endif %}
         <p style="text-align: center; margin-top: 12px; font-size: 16px; color: #666;">
-            Your vote is anonymous and cannot be changed after submission.
+            You will see your selection once more before it is final.
+            Your vote is anonymous and cannot be changed after it is cast.
         </p>
     </form>
 </div>

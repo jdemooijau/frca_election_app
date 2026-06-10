@@ -19,58 +19,44 @@
     .display-pbar { height: 48px; border-radius: 24px; }
     .display-pbar-label { font-size: 36px; }
 
-    /* Bottom stats bar: bump bar height, legend text, and dot size.
-       Inline styles on the inner divs are overridden via !important so
-       both the Jinja-rendered and JS-rerendered versions pick this up. */
-    #stats-bar { padding: 20px 40px 8px !important; }
-    #stats-bar > div:first-child {
-        height: 44px !important;
-        border-radius: 22px !important;
-        margin-bottom: 18px !important;
-    }
-    #stats-bar > div:last-child {
-        font-size: 38px !important;
-        gap: 72px !important;
-    }
-    #stats-bar > div:last-child > span > span {
-        width: 28px !important;
-        height: 28px !important;
-        margin-right: 14px !important;
-        border-radius: 6px !important;
-    }
     .display-office h2 {
         font-size: calc(30px * var(--proj-scale)) !important;
         margin-bottom: calc(10px * var(--proj-scale)) !important;
         padding-bottom: calc(8px * var(--proj-scale)) !important;
     }
-    .office-thresholds {
-        background: #F5F5F5;
-        border-left: 4px solid var(--navy);
-        border-radius: 6px;
-        padding: calc(8px * var(--proj-scale)) calc(12px * var(--proj-scale));
-        margin: calc(4px * var(--proj-scale)) 0 calc(10px * var(--proj-scale));
-        font-size: calc(18px * var(--proj-scale));
-        color: #333;
-        line-height: 1.35;
-        overflow-wrap: anywhere;
+    /* Office rotation: one office at a time, full width, much larger text.
+       display:none grid items create no tracks, so the active office gets
+       the whole grid width. */
+    .display-offices.rotating .display-office { display: none; }
+    .display-offices.rotating .display-office.active { display: block; }
+    #office-dots {
+        display: none;
+        text-align: center;
+        padding: 8px 0 2px;
+        font-size: 26px;
+        color: var(--grey-dark);
+        font-weight: 600;
     }
-    .office-thresholds p {
-        margin: 0 0 calc(4px * var(--proj-scale)) 0;
-    }
-    .office-thresholds p:last-child {
-        margin-bottom: 0;
-    }
-    .office-thresholds strong {
-        color: var(--navy);
-    }
-    .rule-check {
+    #office-dots .dot {
         display: inline-block;
-        font-weight: 700;
-        font-size: 1.1em;
-        margin-left: 6px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #C9CFD8;
+        margin: 0 7px;
+        vertical-align: middle;
     }
-    .rule-check.pass { color: var(--green); }
-    .rule-check.fail { color: var(--red); opacity: 0.65; }
+    #office-dots .dot.active { background: var(--navy); }
+    /* When an office has the whole screen width (rotation, or a single
+       office), a long candidate list flows into two columns — halving the
+       height lets the auto-scaler roughly double the text size. */
+    .office-candidates { min-width: 0; }
+    .display-offices.rotating .office-candidates.two-col,
+    .display-office:only-child .office-candidates.two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: calc(64px * var(--proj-scale));
+    }
     .display-candidate {
         font-size: calc(26px * var(--proj-scale)) !important;
         gap: calc(12px * var(--proj-scale));
@@ -389,25 +375,7 @@
                     {% endfor %}
                 </div>
                 {% endif %}
-                {% if election.show_results and office.valid_votes_cast > 0 and office.vacancies > 0 %}
-                <div class="office-thresholds">
-                    {% set pass6a = office.count_pass_6a >= office.vacancies %}
-                    {% set pass6b = office.count_pass_6b >= office.vacancies %}
-                    <p>
-                        <strong>Article 6a</strong>
-                        <span class="rule-check {{ 'pass' if pass6a else 'fail' }}">{{ '✓' if pass6a else '✗' }}</span>:
-                        {{ office.valid_votes_cast }} / {{ office.vacancies }} / 2 = {{ "%.2f"|format(office.threshold_6a) }}
-                        — need <strong>more than {{ "%.2f"|format(office.threshold_6a) }}</strong> votes
-                    </p>
-                    <p>
-                        <strong>Article 6b</strong>
-                        <span class="rule-check {{ 'pass' if pass6b else 'fail' }}">{{ '✓' if pass6b else '✗' }}</span>:
-                        {{ participants }} &times; 2/5 = {{ "%.1f"|format(participants * 2 / 5) }}
-                        &rarr; rounded up to <strong>{{ office.threshold_6b }}</strong>
-                        — need <strong>at least {{ office.threshold_6b }}</strong> votes
-                    </p>
-                </div>
-                {% endif %}
+                <div class="office-candidates{% if office.candidates|length >= 6 %} two-col{% endif %}">
                 {% for cand in office.candidates %}
                 <div class="display-candidate">
                     <span class="name">
@@ -421,6 +389,7 @@
                     {% endif %}
                 </div>
                 {% endfor %}
+                </div>
                 {% if election.show_results %}
                 {% set possible = total_ballots * office.max_selections %}
                 {% set spoilt_slots = (office.spoilt_count or 0) * office.max_selections %}
@@ -464,31 +433,14 @@
             {% if office.candidates %}
             <div class="display-office">
                 <h2>For {{ office.office_name }}</h2>
-                {% if office.valid_votes_cast > 0 and office.vacancies > 0 %}
-                <div class="office-thresholds">
-                    {% set pass6a = office.count_pass_6a >= office.vacancies %}
-                    {% set pass6b = office.count_pass_6b >= office.vacancies %}
-                    <p>
-                        <strong>Article 6a</strong>
-                        <span class="rule-check {{ 'pass' if pass6a else 'fail' }}">{{ '✓' if pass6a else '✗' }}</span>:
-                        {{ office.valid_votes_cast }} / {{ office.vacancies }} / 2 = {{ "%.2f"|format(office.threshold_6a) }}
-                        — need <strong>more than {{ "%.2f"|format(office.threshold_6a) }}</strong> votes
-                    </p>
-                    <p>
-                        <strong>Article 6b</strong>
-                        <span class="rule-check {{ 'pass' if pass6b else 'fail' }}">{{ '✓' if pass6b else '✗' }}</span>:
-                        {{ participants }} &times; 2/5 = {{ "%.1f"|format(participants * 2 / 5) }}
-                        &rarr; rounded up to <strong>{{ office.threshold_6b }}</strong>
-                        — need <strong>at least {{ office.threshold_6b }}</strong> votes
-                    </p>
-                </div>
-                {% endif %}
+                <div class="office-candidates{% if office.candidates|length >= 6 %} two-col{% endif %}">
                 {% for cand in office.candidates %}
                 <div class="display-candidate">
                     <span class="name">Br. {{ cand.name }}</span>
                     <span class="votes">{{ cand.total }}</span>
                 </div>
                 {% endfor %}
+                </div>
                 {% set possible = total_ballots * office.max_selections %}
                 {% set spoilt_slots = (office.spoilt_count or 0) * office.max_selections %}
                 {% set blank = possible - office.votes_cast - spoilt_slots %}
@@ -526,31 +478,10 @@
         {% endif %}
     </div>
 
-    {# Stats bar wrapper is always in the DOM so the JS can populate it
-       when voting closes (server-side `closed OR show_results` condition
-       transitions). Visibility and content are managed by the JS below. #}
-    {% set stats_visible = total_ballots > 0 and (not election.voting_open or election.show_results or all_votes_in) %}
-    {% set dPct = (used_codes / total_ballots * 100)|round|int if total_ballots > 0 else 0 %}
-    {% set pPct = (paper_ballot_count / total_ballots * 100)|round|int if total_ballots > 0 else 0 %}
-    {% set poPct = (postal_voter_count / total_ballots * 100)|round|int if total_ballots > 0 and postal_voter_count > 0 else 0 %}
-    <div id="stats-bar" style="border-top: 2px solid var(--grey); margin-top: 14px; padding: 14px 40px 0;{% if not stats_visible %}display:none;{% endif %}">
-        {% if stats_visible %}
-        <div style="display: flex; height: 32px; border-radius: 16px; overflow: hidden; margin-bottom: 12px;">
-            <div style="width: {{ dPct }}%; background: var(--navy);"></div>
-            <div style="width: {{ pPct }}%; background: var(--gold);"></div>
-            {% if poPct > 0 %}
-            <div style="width: {{ poPct }}%; background: var(--grey-dark);"></div>
-            {% endif %}
-        </div>
-        <div style="display: flex; justify-content: center; gap: 56px; font-size: 28px; font-weight: 700;">
-            <span><span style="display: inline-block; width: 22px; height: 22px; background: var(--navy); border-radius: 5px; vertical-align: middle; margin-right: 12px;"></span>{{ used_codes }} digital ({{ dPct }}%)</span>
-            <span><span style="display: inline-block; width: 22px; height: 22px; background: var(--gold); border-radius: 5px; vertical-align: middle; margin-right: 12px;"></span>{{ paper_ballot_count }} paper ({{ pPct }}%)</span>
-            {% if postal_voter_count > 0 %}
-            <span><span style="display: inline-block; width: 22px; height: 22px; background: var(--grey-dark); border-radius: 5px; vertical-align: middle; margin-right: 12px;"></span>{{ postal_voter_count }} postal ({{ poPct }}%)</span>
-            {% endif %}
-        </div>
-        {% endif %}
-    </div>
+    {# Rotation indicator: lives outside #results-container so the 1s
+       innerHTML re-render doesn't wipe it. Managed by applyRotation(). #}
+    <div id="office-dots"></div>
+
 </div>
 {% endblock %}
 
@@ -679,11 +610,6 @@
             if (allVotesPanel) {
                 allVotesPanel.style.display = allVotesIn ? '' : 'none';
             }
-            // Hide bottom stats bar when showing instructions (top summary stays visible)
-            var sb = document.getElementById('stats-bar');
-            if (sb) {
-                sb.style.display = showingInstructions ? 'none' : '';
-            }
 
             if (showingResults) {
                 var html = '';
@@ -714,26 +640,8 @@
                         });
                         html += '</div>';
                     }
-                    var ovvc = office.valid_votes_cast || 0;
-                    if (showCounts && ovvc > 0 && office.vacancies > 0) {
-                        var t6a = office.threshold_6a || 0;
-                        var t6b = office.threshold_6b || 0;
-                        var pass6a = (office.count_pass_6a || 0) >= office.vacancies;
-                        var pass6b = (office.count_pass_6b || 0) >= office.vacancies;
-                        var tick6a = '<span class="rule-check ' + (pass6a ? 'pass' : 'fail') + '">' +
-                                     (pass6a ? '\u2713' : '\u2717') + '</span>';
-                        var tick6b = '<span class="rule-check ' + (pass6b ? 'pass' : 'fail') + '">' +
-                                     (pass6b ? '\u2713' : '\u2717') + '</span>';
-                        html += '<div class="office-thresholds">';
-                        html += '<p><strong>Article 6a</strong> ' + tick6a + ': ' +
-                                ovvc + ' / ' + office.vacancies + ' / 2 = ' + t6a.toFixed(2) +
-                                ' — need <strong>more than ' + t6a.toFixed(2) + '</strong> votes</p>';
-                        html += '<p><strong>Article 6b</strong> ' + tick6b + ': ' +
-                                parts + ' &times; 2/5 = ' + (parts * 2 / 5).toFixed(1) +
-                                ' &rarr; rounded up to <strong>' + t6b + '</strong>' +
-                                ' — need <strong>at least ' + t6b + '</strong> votes</p>';
-                        html += '</div>';
-                    }
+                    html += '<div class="office-candidates' +
+                            (office.candidates.length >= 6 ? ' two-col' : '') + '">';
                     office.candidates.forEach(function(cand) {
                         html += '<div class="display-candidate">';
                         html += '<span class="name">Br. ' + esc(cand.name);
@@ -746,6 +654,7 @@
                         }
                         html += '</div>';
                     });
+                    html += '</div>';
                     if (showCounts) {
                         var possible = tb * (office.max_selections || 1);
                         var vc = office.votes_cast || 0;
@@ -786,35 +695,6 @@
                 });
                 html += '</div>';
                 container.innerHTML = html;
-
-                // Update stats bar. Server-side condition is "tb > 0 AND
-                // (closed OR show_results)" — match it here so the bar
-                // appears as soon as voting closes, even if the chairman
-                // hasn't toggled "Show Results on Projector".
-                var sb = document.getElementById('stats-bar');
-                if (sb) {
-                    if (tb > 0 && (showCounts || closed || allVotesIn)) {
-                        var dPct = Math.round(data.used_codes / tb * 100);
-                        var pPct = Math.round((data.paper_ballot_count || 0) / tb * 100);
-                        var poPct = data.postal_voter_count > 0 ? Math.round(data.postal_voter_count / tb * 100) : 0;
-                        var bar = '<div style="display:flex;height:32px;border-radius:16px;overflow:hidden;margin-bottom:12px">';
-                        bar += '<div style="width:' + dPct + '%;background:#1A3353"></div>';
-                        bar += '<div style="width:' + pPct + '%;background:#D4A843"></div>';
-                        if (poPct > 0) bar += '<div style="width:' + poPct + '%;background:#666"></div>';
-                        bar += '</div>';
-                        var dot = function(c) { return '<span style="display:inline-block;width:22px;height:22px;background:'+c+';border-radius:5px;vertical-align:middle;margin-right:12px"></span>'; };
-                        var legend = '<div style="display:flex;justify-content:center;gap:56px;font-size:28px;font-weight:700">';
-                        legend += '<span>' + dot('#1A3353') + data.used_codes + ' digital (' + dPct + '%)</span>';
-                        legend += '<span>' + dot('#D4A843') + (data.paper_ballot_count||0) + ' paper (' + pPct + '%)</span>';
-                        if (data.postal_voter_count > 0) legend += '<span>' + dot('#666') + data.postal_voter_count + ' postal (' + poPct + '%)</span>';
-                        legend += '</div>';
-                        sb.innerHTML = bar + legend;
-                        sb.style.display = '';
-                    } else {
-                        sb.innerHTML = '';
-                        sb.style.display = 'none';
-                    }
-                }
             } else {
                 container.innerHTML = '';
             }
@@ -827,6 +707,46 @@
         d.appendChild(document.createTextNode(t));
         return d.innerHTML;
     }
+
+    // --- Office rotation ---------------------------------------------------
+    // With several offices side by side the auto-scaler can't make the text
+    // big enough to read from the back of the church. Show one office at a
+    // time, full width, cycling every ROTATE_MS. Hidden grid items create no
+    // tracks, so the active office gets the whole width.
+    var ROTATE_MS = {{ rotate_seconds }} * 1000;
+    var rotateIndex = 0;
+
+    function applyRotation() {
+        var container = document.getElementById('results-container');
+        var dots = document.getElementById('office-dots');
+        var grid = container ? container.querySelector('.display-offices') : null;
+        var offices = grid ? grid.querySelectorAll('.display-office') : [];
+        if (!grid || offices.length <= 1) {
+            if (grid) grid.classList.remove('rotating');
+            if (dots) dots.style.display = 'none';
+            return;
+        }
+        grid.classList.add('rotating');
+        rotateIndex = rotateIndex % offices.length;
+        for (var i = 0; i < offices.length; i++) {
+            offices[i].classList.toggle('active', i === rotateIndex);
+        }
+        if (dots) {
+            var h2 = offices[rotateIndex].querySelector('h2');
+            var d = '';
+            for (var j = 0; j < offices.length; j++) {
+                d += '<span class="dot' + (j === rotateIndex ? ' active' : '') + '"></span>';
+            }
+            dots.innerHTML = (h2 ? esc(h2.textContent) + ' &nbsp; ' : '') + d;
+            dots.style.display = '';
+        }
+    }
+
+    setInterval(function() {
+        rotateIndex++;
+        applyRotation();
+        autoSizeOffices();
+    }, ROTATE_MS);
 
     function officeContentHeight(office) {
         // Sum block-children heights (incl. margins). Avoids scrollHeight,
@@ -863,15 +783,34 @@
         // Reset to 1 so we measure natural (unscaled) content height
         root.style.setProperty('--proj-scale', '1');
         requestAnimationFrame(function() {
+            // The runoff banner renders inside the results container above
+            // the offices grid; subtract it (and anything else that isn't
+            // the grid) or the bottom rows get clipped off-screen.
             var available = resultsContainer.clientHeight;
+            var rcChildren = resultsContainer.children;
+            for (var k = 0; k < rcChildren.length; k++) {
+                if (!rcChildren[k].classList.contains('display-offices')) {
+                    var ccs = window.getComputedStyle(rcChildren[k]);
+                    available -= rcChildren[k].offsetHeight +
+                                 parseFloat(ccs.marginTop || 0) +
+                                 parseFloat(ccs.marginBottom || 0);
+                }
+            }
             var natural = 0;
             for (var i = 0; i < officeNodes.length; i++) {
                 var h = officeContentHeight(officeNodes[i]);
                 if (h > natural) natural = h;
             }
             if (natural < 1 || available < 1) return;
+            // Hidden (rotated-out) offices measure 0, so `natural` is the
+            // visible office's height. One office on screen can scale far
+            // beyond the side-by-side cap.
+            var grid = resultsContainer.querySelector('.display-offices');
+            var cap = (grid && grid.classList.contains('rotating')) ? 3.4 : 2.2;
             var scale = (available * 0.95) / natural;
-            scale = Math.max(1, Math.min(2.2, scale));
+            // Floor below 1 so a long candidate list shrinks to fit rather
+            // than clipping the bottom names off-screen.
+            scale = Math.max(0.6, Math.min(cap, scale));
             root.style.setProperty('--proj-scale', scale.toFixed(3));
         });
     }
@@ -883,15 +822,24 @@
         var debounce;
         var observer = new MutationObserver(function() {
             clearTimeout(debounce);
-            debounce = setTimeout(autoSizeOffices, 50);
+            // The 1s poll rewrites the offices grid; reapply the rotation
+            // classes (without advancing the index) before re-measuring.
+            debounce = setTimeout(function() {
+                applyRotation();
+                autoSizeOffices();
+            }, 50);
         });
         observer.observe(resultsContainer, { childList: true, subtree: true });
     })();
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', autoSizeOffices);
-    } else {
+    function initDisplay() {
+        applyRotation();
         autoSizeOffices();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initDisplay);
+    } else {
+        initDisplay();
     }
     window.addEventListener('resize', autoSizeOffices);
 

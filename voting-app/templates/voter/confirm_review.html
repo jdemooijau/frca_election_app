@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Check Your Vote — Office Bearer Election{% endblock %}
+
+{% block flash_messages %}{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div class="subtitle">{{ election.name }}{% if election.current_round > 1 %} — Round {{ election.current_round }}{% endif %}</div>
+</div>
+
+<div class="container">
+    <h1 style="font-size: 24px; color: var(--navy); margin-bottom: 4px;">Check your selection</h1>
+    <p style="font-size: 16px; color: #666; margin-bottom: 14px;">
+        Your vote has <strong>not been cast yet</strong>. Please check it below.
+    </p>
+
+    {% if warning_message %}
+    <div style="background: #FFF4E5; border: 2px solid #E67E22; border-radius: 8px;
+                padding: 12px 14px; margin-bottom: 14px; font-size: 16px; color: #8A4A00;">
+        {{ warning_message }} You may confirm anyway, or change your selection.
+    </div>
+    {% endif %}
+
+    {% for item in review %}
+    <div class="ballot-office">
+        <h2 class="ballot-office-title">For {{ item.office.name }}</h2>
+        {% if item.names %}
+        {% for n in item.names %}
+        <p style="font-size: 19px; font-weight: 600; color: var(--navy); margin: 8px 0;">
+            <span style="color: var(--green); font-weight: 800;">&#10003;</span> {{ n }}
+        </p>
+        {% endfor %}
+        {% else %}
+        <p style="font-size: 17px; font-style: italic; color: #888; margin: 8px 0;">
+            No selection (blank)
+        </p>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <form method="POST" action="{{ url_for('voter_submit') }}" id="confirm-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="confirmed" value="1">
+        {% for item in review %}{% for cid in item.ids %}
+        <input type="hidden" name="office_{{ item.office.id }}" value="{{ cid }}">
+        {% endfor %}{% endfor %}
+        <button type="submit" class="btn btn-primary" id="confirm-btn">Confirm — Cast My Vote</button>
+    </form>
+
+    <form method="POST" action="{{ url_for('voter_submit') }}" style="margin-top: 10px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="change" value="1">
+        {% for item in review %}{% for cid in item.ids %}
+        <input type="hidden" name="office_{{ item.office.id }}" value="{{ cid }}">
+        {% endfor %}{% endfor %}
+        <button type="submit" class="btn btn-outline" id="change-btn"
+                style="width: 100%;">Change My Selection</button>
+    </form>
+
+    <p aria-live="polite" style="text-align: center; margin-top: 16px; font-size: 16px; color: #666;">
+        If you do nothing, your vote is cast automatically in
+        <strong id="countdown" style="font-size: 20px; color: var(--navy);">{{ confirm_seconds }}</strong>
+        seconds.
+    </p>
+</div>
+
+<script>
+(function() {
+    var secs = {{ confirm_seconds }};
+    var el = document.getElementById('countdown');
+    var form = document.getElementById('confirm-form');
+    var confirmBtn = document.getElementById('confirm-btn');
+    var done = false;
+
+    var timer = setInterval(function() {
+        secs -= 1;
+        if (secs <= 0) {
+            clearInterval(timer);
+            if (!done) {
+                done = true;
+                confirmBtn.disabled = true;
+                form.submit();
+            }
+        } else {
+            el.textContent = secs;
+        }
+    }, 1000);
+
+    // Any manual action cancels the countdown so it can't double-submit.
+    form.addEventListener('submit', function() {
+        done = true;
+        clearInterval(timer);
+        confirmBtn.disabled = true;
+    });
+    document.getElementById('change-btn').addEventListener('click', function() {
+        done = true;
+        clearInterval(timer);
+    });
+})();
+</script>
+{% endblock %}

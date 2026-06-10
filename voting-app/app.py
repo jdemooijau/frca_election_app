@@ -6,6 +6,7 @@ in Free Reformed Churches of Australia.
 Run with: python app.py
 """
 
+import base64
 import csv
 import io
 import json
@@ -39,6 +40,7 @@ from pdf_generators import (
     generate_counter_sheet_pdf, generate_results_pdf,
     generate_dual_sided_ballots_pdf,
     generate_attendance_register_pdf, generate_printer_pack_zip,
+    attendance_register_sheet_count,
     generate_minutes_docx,
     NAVY, GOLD, _generate_qr_image,
 )
@@ -157,6 +159,7 @@ def _init_db_on(db):
             postal_voter_count INTEGER NOT NULL DEFAULT 0,
             display_phase INTEGER NOT NULL DEFAULT 1,
             paper_count_enabled INTEGER NOT NULL DEFAULT 0,
+            steward_checkin_enabled INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
         );
 
@@ -257,6 +260,16 @@ def _init_db_on(db):
             mobile_phone TEXT,
             membership_status TEXT,
             imported_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS attendance_checkins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            election_id INTEGER NOT NULL,
+            member_id INTEGER NOT NULL,
+            checked_in_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(election_id, member_id),
+            FOREIGN KEY (election_id) REFERENCES elections(id),
+            FOREIGN KEY (member_id) REFERENCES members(id)
         );
 
         CREATE TABLE IF NOT EXISTS settings (
@@ -634,6 +647,22 @@ def set_setting(key, value):
     db.commit()
 
 
+def get_display_rotate_seconds():
+    """Seconds each office stays on the projector before rotating (clamped)."""
+    try:
+        return max(2, min(60, int(get_setting("display_rotate_seconds", "5"))))
+    except ValueError:
+        return 5
+
+
+def get_vote_confirm_seconds():
+    """Seconds the voter review screen waits before auto-confirming."""
+    try:
+        return max(3, min(60, int(get_setting("vote_confirm_seconds", "8"))))
+    except ValueError:
+        return 8
+
+
 def _migrate_db_on(db):
     """Add columns for rules compliance on a given db connection."""
     migrations = [
@@ -653,6 +682,7 @@ def _migrate_db_on(db):
         "ALTER TABLE offices ADD COLUMN original_vacancies INTEGER",
         "ALTER TABLE elections DROP COLUMN participants",
         "ALTER TABLE elections ADD COLUMN paper_count_enabled INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE elections ADD COLUMN steward_checkin_enabled INTEGER NOT NULL DEFAULT 1",
     ]
     for sql in migrations:
         try:
@@ -710,6 +740,16 @@ def _migrate_db_on(db):
             CREATE INDEX IF NOT EXISTS idx_count_sessions_election ON count_sessions(election_id, round_no);
             CREATE INDEX IF NOT EXISTS idx_count_session_helpers_session ON count_session_helpers(session_id);
             CREATE INDEX IF NOT EXISTS idx_count_session_tallies_session ON count_session_tallies(session_id);
+
+            CREATE TABLE IF NOT EXISTS attendance_checkins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                election_id INTEGER NOT NULL,
+                member_id INTEGER NOT NULL,
+                checked_in_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                UNIQUE(election_id, member_id),
+                FOREIGN KEY (election_id) REFERENCES elections(id),
+                FOREIGN KEY (member_id) REFERENCES members(id)
+            );
         """)
         db.commit()
     except sqlite3.OperationalError:
@@ -803,6 +843,7 @@ def admin_step_members(election_id):
         "admin/members.html",
         members=members,
         member_count=member_count,
+        attendance_sheets=attendance_register_sheet_count(member_count),
         sidebar_state=sidebar_state,
         parent_template="admin/_step_base.html",
     )
@@ -919,12 +960,43 @@ def admin_step_attendance(election_id):
         abort(404)
     in_person, _, _ = get_round_counts(election_id, election["current_round"])
     sidebar_state = compute_sidebar_state(election_id)
+
+    # Steward check-in: live digital register at the door. Only offered when
+    # the election has it enabled and a member list is imported (the check-in
+    # page lists members by name). When disabled, the admin simply counts
+    # signatures on the paper register sheets — checkin_count stays 0 so the
+    # form never pre-fills from stale taps.
+    member_count = db.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+    steward_enabled = bool(election["steward_checkin_enabled"]) and member_count > 0
+    checkin_count = 0
+    if steward_enabled:
+        checkin_count = db.execute(
+            "SELECT COUNT(*) FROM attendance_checkins WHERE election_id = ?",
+            (election_id,)
+        ).fetchone()[0]
+    steward_token = _get_or_create_steward_token() if steward_enabled else None
+    steward_url = None
+    steward_qr = None
+    if steward_token:
+        # Use the literal-IP QR URL, not the friendly hostname: steward
+        # phones with mobile data on can fail to resolve the local DNS name.
+        base = get_setting(
+            "voting_qr_url", get_setting("voting_base_url", "http://10.0.0.2")
+        ).rstrip("/")
+        steward_url = f"{base}/checkin/{steward_token}"
+        steward_qr = _qr_data_uri(steward_url)
+
     return render_template(
         "admin/step_attendance.html",
         election=election,
         in_person_participants=in_person,
         postal_voter_count=election["postal_voter_count"] or 0,
         sidebar_state=sidebar_state,
+        member_count=member_count,
+        checkin_count=checkin_count,
+        steward_token=steward_token,
+        steward_url=steward_url,
+        steward_qr=steward_qr,
     )
 
 
@@ -1319,6 +1391,16 @@ def admin_setup():
         set_setting("wifi_password", wifi_password)
         set_setting("voting_base_url", voting_base_url or "http://10.0.0.2")
         set_setting("voting_qr_url", voting_qr_url or "http://10.0.0.2")
+        try:
+            rotate = int(request.form.get("display_rotate_seconds", "5"))
+            set_setting("display_rotate_seconds", max(2, min(60, rotate)))
+        except ValueError:
+            pass
+        try:
+            confirm_secs = int(request.form.get("vote_confirm_seconds", "8"))
+            set_setting("vote_confirm_seconds", max(3, min(60, confirm_secs)))
+        except ValueError:
+            pass
         if password_to_save is not None:
             set_setting("admin_password", password_to_save)
         set_setting("setup_complete", "1")
@@ -1343,6 +1425,8 @@ def _render_setup_form():
         wifi_password=get_setting("wifi_password", ""),
         voting_base_url=get_setting("voting_base_url", "http://10.0.0.2"),
         voting_qr_url=get_setting("voting_qr_url", "http://10.0.0.2"),
+        display_rotate_seconds=get_display_rotate_seconds(),
+        vote_confirm_seconds=get_vote_confirm_seconds(),
     )
 
 
@@ -1503,9 +1587,11 @@ def admin_election_settings(election_id):
         return redirect(url_for("admin_step_settings", election_id=election_id))
 
     paper_count_enabled = 1 if request.form.get("paper_count_enabled") == "1" else 0
+    steward_checkin_enabled = 1 if request.form.get("steward_checkin_enabled") == "1" else 0
     db.execute(
-        "UPDATE elections SET paper_count_enabled = ? WHERE id = ?",
-        (paper_count_enabled, election_id)
+        "UPDATE elections SET paper_count_enabled = ?, steward_checkin_enabled = ? "
+        "WHERE id = ?",
+        (paper_count_enabled, steward_checkin_enabled, election_id)
     )
     db.commit()
     flash("Settings updated.", "success")
@@ -2973,7 +3059,9 @@ def admin_members():
     ).fetchall()
     member_count = len(members)
 
-    return render_template("admin/members.html", members=members, member_count=member_count)
+    return render_template("admin/members.html", members=members,
+                           member_count=member_count,
+                           attendance_sheets=attendance_register_sheet_count(member_count))
 
 
 @app.route("/admin/members/attendance-pdf")
@@ -2989,21 +3077,9 @@ def admin_attendance_pdf():
         flash("No members imported. Upload a CSV first.", "error")
         return redirect(url_for("admin_members"))
 
-    cong_name = get_setting("congregation_name", "Free Reformed Church")
-
-    # Find the most recent election for date/name context
-    election = db.execute(
-        "SELECT * FROM elections ORDER BY id DESC LIMIT 1"
-    ).fetchone()
-    election_name = election["name"] if election else None
-    election_date = election["election_date"] if election else None
-
-    buf = generate_attendance_register_pdf(
-        members=[dict(m) for m in members],
-        congregation_name=cong_name,
-        election_name=election_name,
-        election_date=election_date,
-    )
+    # Sheet count is automatic: as many one-page alphabetical sheets as the
+    # member list needs, sized so signature rows stay big enough to sign.
+    buf = generate_attendance_register_pdf(members=[dict(m) for m in members])
 
     return send_file(
         buf,
@@ -3011,6 +3087,123 @@ def admin_attendance_pdf():
         as_attachment=True,
         download_name="attendance_register.pdf"
     )
+
+
+# ---------------------------------------------------------------------------
+# Steward check-in (digital attendance register)
+#
+# Stewards at the door open /checkin/<token> on their phones and tap members
+# present. Multiple stewards work concurrently; the admin's attendance step
+# shows the live count. The token (stored in settings) is the only secret —
+# stewards don't get the admin password.
+# ---------------------------------------------------------------------------
+
+def _get_or_create_steward_token():
+    token = get_setting("steward_token", "")
+    if not token:
+        token = secrets.token_urlsafe(8)
+        set_setting("steward_token", token)
+    return token
+
+
+def _qr_data_uri(url):
+    """Render a QR code as a base64 PNG data URI for inline HTML display."""
+    qr = qrcode.QRCode(
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=8,
+        border=2,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    img_buf = io.BytesIO()
+    img.save(img_buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(img_buf.getvalue()).decode("ascii")
+
+
+def _steward_election_or_404(token):
+    """Validate the steward token and return the latest election (or None)."""
+    stored = get_setting("steward_token", "")
+    if not token or not stored or not secrets.compare_digest(token, stored):
+        abort(404)
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    # Check-in switched off for this election — stop accepting taps too.
+    if election and not election["steward_checkin_enabled"]:
+        abort(404)
+    return election
+
+
+@app.route("/checkin/<token>")
+def steward_checkin(token):
+    election = _steward_election_or_404(token)
+    db = get_db()
+    # Same order as the printed attendance register so stewards can scan both.
+    members = db.execute(
+        "SELECT * FROM members ORDER BY lower(last_name), lower(first_name)"
+    ).fetchall()
+    checked_ids = set()
+    if election:
+        checked_ids = {
+            r["member_id"] for r in db.execute(
+                "SELECT member_id FROM attendance_checkins WHERE election_id = ?",
+                (election["id"],)
+            ).fetchall()
+        }
+    return render_template(
+        "steward/checkin.html",
+        token=token,
+        election=election,
+        members=members,
+        checked_ids=checked_ids,
+    )
+
+
+@app.route("/checkin/<token>/data")
+def steward_checkin_data(token):
+    election = _steward_election_or_404(token)
+    if not election:
+        return jsonify({"active": False, "count": 0, "checked_ids": []})
+    db = get_db()
+    ids = [
+        r["member_id"] for r in db.execute(
+            "SELECT member_id FROM attendance_checkins WHERE election_id = ?",
+            (election["id"],)
+        ).fetchall()
+    ]
+    return jsonify({"active": True, "count": len(ids), "checked_ids": ids})
+
+
+@app.route("/checkin/<token>/toggle", methods=["POST"])
+def steward_checkin_toggle(token):
+    election = _steward_election_or_404(token)
+    if not election:
+        abort(400)
+    db = get_db()
+    try:
+        member_id = int(request.form.get("member_id", 0))
+    except ValueError:
+        abort(400)
+    if not db.execute("SELECT 1 FROM members WHERE id = ?", (member_id,)).fetchone():
+        abort(400)
+    if request.form.get("present") == "1":
+        db.execute(
+            "INSERT OR IGNORE INTO attendance_checkins (election_id, member_id) VALUES (?, ?)",
+            (election["id"], member_id)
+        )
+    else:
+        db.execute(
+            "DELETE FROM attendance_checkins WHERE election_id = ? AND member_id = ?",
+            (election["id"], member_id)
+        )
+    db.commit()
+    count = db.execute(
+        "SELECT COUNT(*) FROM attendance_checkins WHERE election_id = ?",
+        (election["id"],)
+    ).fetchone()[0]
+    return jsonify({"ok": True, "count": count})
 
 
 @app.route("/admin/members/clear", methods=["POST"])
@@ -3332,7 +3525,9 @@ def voter_submit():
     ).fetchall()
 
     selected_candidates = []
-    confirm_partial = request.form.get("confirm_partial")
+    # `confirmed` comes from the review screen (or the legacy
+    # `confirm_partial` field) and means "this ballot is final — cast it".
+    confirmed = request.form.get("confirmed") or request.form.get("confirm_partial")
     under_selected = []
 
     for office in offices:
@@ -3363,29 +3558,53 @@ def voter_submit():
                 return redirect(url_for("voter_ballot"))
             selected_candidates.append(int(cand_id_str))
 
-    # Warn if fewer than max selected — re-render ballot with selections preserved
-    if under_selected and not confirm_partial:
-        # Rebuild the ballot data for re-rendering
+    # "Change My Selection" from the review screen: back to the ballot with
+    # the choices still ticked.
+    if request.form.get("change"):
         office_candidates = []
-        selected_set = set(str(c) for c in selected_candidates)
         for office in offices:
             candidates = db.execute(
                 "SELECT * FROM candidates WHERE office_id = ? AND active = 1 ORDER BY surname_sort_key(name)",
                 (office["id"],)
             ).fetchall()
-            office_candidates.append({
-                "office": office,
-                "candidates": candidates
-            })
-
-        warning_msg = "You have not used all your votes. " + ". ".join(under_selected) + ". Press 'Confirm and Cast Vote' if this is intentional."
+            office_candidates.append({"office": office, "candidates": candidates})
         resp = make_response(render_template(
             "voter/ballot.html",
             election=election,
             office_candidates=office_candidates,
-            partial_warning=True,
+            selected_ids={str(c) for c in selected_candidates},
+            voter_code=session.get("used_code"),
+        ))
+        return no_cache(resp)
+
+    # First submit: show the review screen instead of casting straight away.
+    # The voter checks his selection, can go back and change it, and the
+    # screen auto-confirms after a short countdown in case he walks off.
+    if not confirmed:
+        selected_set = set(selected_candidates)
+        review = []
+        for office in offices:
+            candidates = db.execute(
+                "SELECT * FROM candidates WHERE office_id = ? AND active = 1 ORDER BY surname_sort_key(name)",
+                (office["id"],)
+            ).fetchall()
+            chosen = [c for c in candidates if c["id"] in selected_set]
+            if candidates:
+                review.append({
+                    "office": office,
+                    "names": [c["name"] for c in chosen],
+                    "ids": [c["id"] for c in chosen],
+                })
+        warning_msg = None
+        if under_selected:
+            warning_msg = ("You have not used all your votes. "
+                           + ". ".join(under_selected) + ".")
+        resp = make_response(render_template(
+            "voter/confirm_review.html",
+            election=election,
+            review=review,
             warning_message=warning_msg,
-            selected_ids=selected_set
+            confirm_seconds=get_vote_confirm_seconds(),
         ))
         return no_cache(resp)
 
@@ -4462,6 +4681,7 @@ def _build_display_data():
         wifi_password=wifi_password,
         vote_url=vote_url,
         vote_qr_url=vote_qr_url,
+        rotate_seconds=get_display_rotate_seconds(),
     )
     return election, ctx
 
