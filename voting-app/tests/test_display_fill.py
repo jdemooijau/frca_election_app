@@ -94,3 +94,18 @@ class TestWaitingScreenFill:
         assert "flex: 1" in block
         assert "justify-content: center" in block
         assert "align-items: center" in block
+
+
+class TestRulesScreenFill:
+    def test_rules_scaler_constants_tuned(self, election_with_codes):
+        client = election_with_codes
+        _set_phase(1, display_phase=2)  # phase 2 -> rules.html
+        resp = client.get("/display")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        # Vertical buffer raised 0.94 -> 0.96:
+        assert "* 0.96)" in html
+        assert "* 0.94)" not in html
+        # Cap raised 2.0 -> 2.4:
+        assert "hScale, 2.4)" in html
+        assert "hScale, 2.0)" not in html

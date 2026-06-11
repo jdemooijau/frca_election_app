@@ -288,12 +288,12 @@
             var available = window.innerHeight - rect.top - 16;
             var natural = layout.scrollHeight;
             if (natural < 1 || available < 1) return;
-            var vScale = (available * 0.94) / natural;
+            var vScale = (available * 0.96) / natural;
             // Cap horizontally so the longest candidate name still fits its
             // column on one line. Tiny safety margin (0.98) for sub-pixel
             // rendering quirks.
             var hScale = maxScaleForNoWrap(layout) * 0.98;
-            var scale = Math.min(vScale, hScale, 2.0);
+            var scale = Math.min(vScale, hScale, 2.4);
             // Never shrink (clamp to 1). If content already overflows the
             // viewport at scale 1, leave it - the page falls back to scrolling.
             scale = Math.max(1, scale);
