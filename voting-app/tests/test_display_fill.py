@@ -60,3 +60,15 @@ class TestProjectorLiveResultsFill:
         assert "3.4 : 2.2" not in html
         # Office content is vertically centred within its results cell:
         assert "Vertically centre each office" in html
+
+
+class TestProjectorWelcomePanel:
+    def test_prevote_panel_enlarged(self, election_with_codes):
+        client = election_with_codes
+        # Phase 3 but voting NOT opened and 0 ballots -> the pre-vote panel shows.
+        _set_phase(1, display_phase=3, voting_open=0)
+        resp = client.get("/display")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "Voting will begin shortly" in html
+        assert 'id="prevote-welcome"' in html

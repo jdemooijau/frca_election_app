@@ -223,16 +223,16 @@
        4 (Final results) the projector is showing closed-round results, so
        this banner would just be misleading. #}
     {% if not election.voting_open and total_ballots == 0 and (election.display_phase or 1) != 4 %}
-    <div style="text-align: center; padding: 40px 0;">
-        <h2 style="font-size: 32px; color: var(--navy); margin-bottom: 16px;">Voting will begin shortly</h2>
-        <p style="font-size: 20px; color: #666; margin-bottom: 24px;">
+    <div id="prevote-welcome" style="text-align: center; padding: 64px 0;">
+        <h2 style="font-size: 56px; color: var(--navy); margin-bottom: 24px;">Voting will begin shortly</h2>
+        <p style="font-size: 32px; color: #666; margin-bottom: 32px;">
             Please connect to the WiFi and have your voting code ready.
         </p>
         {% if wifi_ssid %}
         <div style="display: inline-block; padding: 20px 32px; background: var(--grey-light); border-radius: 12px;">
-            <p style="font-size: 20px; color: var(--navy); margin-bottom: 4px;"><strong>WiFi:</strong> {{ wifi_ssid }}</p>
+            <p style="font-size: 32px; color: var(--navy); margin-bottom: 4px;"><strong>WiFi:</strong> {{ wifi_ssid }}</p>
             {% if wifi_password %}
-            <p style="font-size: 20px; color: var(--navy);"><strong>Password:</strong> {{ wifi_password }}</p>
+            <p style="font-size: 32px; color: var(--navy);"><strong>Password:</strong> {{ wifi_password }}</p>
             {% endif %}
         </div>
         {% endif %}
