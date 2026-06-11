@@ -504,6 +504,11 @@
 {% block scripts %}
 <script>
 (function() {
+    // Last results HTML written to #results-container. The 1s poll only
+    // rewrites the DOM when this changes, so a static (closed) results screen
+    // is not destroyed and rebuilt every second.
+    var lastResultsHtml = null;
+
     function update() {
         var xhr = new XMLHttpRequest();
         xhr.open('GET', '/api/display-data', true);
@@ -718,9 +723,19 @@
                     html += '</div>';
                 });
                 html += '</div>';
-                container.innerHTML = html;
+                // Only touch the DOM when the rendered results actually
+                // change. Re-setting identical innerHTML every second forced a
+                // repaint and a rotation/scale re-apply that made the screen
+                // jump; a closed results screen is now stable between polls.
+                if (html !== lastResultsHtml) {
+                    container.innerHTML = html;
+                    lastResultsHtml = html;
+                }
             } else {
-                container.innerHTML = '';
+                if (lastResultsHtml !== '') {
+                    container.innerHTML = '';
+                    lastResultsHtml = '';
+                }
             }
         };
         xhr.send();
@@ -804,12 +819,25 @@
             root.style.setProperty('--proj-scale', '1');
             return;
         }
-        // Reset to 1 so we measure natural (unscaled) content height
-        root.style.setProperty('--proj-scale', '1');
-        requestAnimationFrame(function() {
-            // The runoff banner renders inside the results container above
-            // the offices grid; subtract it (and anything else that isn't
-            // the grid) or the bottom rows get clipped off-screen.
+        var grid = resultsContainer.querySelector('.display-offices');
+        // Hidden (rotated-out) offices measure 0, so the tallest visible
+        // office drives the fit. One office on screen can scale beyond the
+        // side-by-side cap.
+        var cap = (grid && grid.classList.contains('rotating')) ? 3.4 : 2.2;
+
+        // Fit the visible office(s) to the available height by measuring at
+        // the CURRENT scale and adjusting proportionally, instead of resetting
+        // to 1 and re-growing every run (which flashed the screen full-size
+        // and back on every 1s poll and rotation tick — the "heavy jumping").
+        // The measured height already includes any line wrapping at the
+        // current scale, so the fit is wrap-aware: if long names wrapped and
+        // overflowed, the correction pass shrinks to fit so no row or ELECTED
+        // badge clips off the bottom.
+        function fitOnce() {
+            var current = parseFloat(
+                getComputedStyle(root).getPropertyValue('--proj-scale')) || 1;
+            // Available = results container minus any non-grid child (e.g. the
+            // runoff banner) above the offices grid.
             var available = resultsContainer.clientHeight;
             var rcChildren = resultsContainer.children;
             for (var k = 0; k < rcChildren.length; k++) {
@@ -820,22 +848,24 @@
                                  parseFloat(ccs.marginBottom || 0);
                 }
             }
-            var natural = 0;
+            var measured = 0;
             for (var i = 0; i < officeNodes.length; i++) {
                 var h = officeContentHeight(officeNodes[i]);
-                if (h > natural) natural = h;
+                if (h > measured) measured = h;
             }
-            if (natural < 1 || available < 1) return;
-            // Hidden (rotated-out) offices measure 0, so `natural` is the
-            // visible office's height. One office on screen can scale far
-            // beyond the side-by-side cap.
-            var grid = resultsContainer.querySelector('.display-offices');
-            var cap = (grid && grid.classList.contains('rotating')) ? 3.4 : 2.2;
-            var scale = (available * 0.95) / natural;
-            // Floor below 1 so a long candidate list shrinks to fit rather
-            // than clipping the bottom names off-screen.
-            scale = Math.max(0.6, Math.min(cap, scale));
-            root.style.setProperty('--proj-scale', scale.toFixed(3));
+            if (measured < 1 || available < 1) return;
+            var target = current * (available * 0.95) / measured;
+            target = Math.max(0.6, Math.min(cap, target));
+            // Deadband so a settled screen never jitters by sub-pixel amounts.
+            if (Math.abs(target - current) > 0.02) {
+                root.style.setProperty('--proj-scale', target.toFixed(3));
+            }
+        }
+        // First pass sizes from the current scale; the second corrects for
+        // wrapping that the new scale introduces, converging in one call.
+        requestAnimationFrame(function() {
+            fitOnce();
+            requestAnimationFrame(fitOnce);
         });
     }
 
