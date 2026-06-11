@@ -72,3 +72,13 @@ class TestProjectorWelcomePanel:
         html = resp.data.decode()
         assert "Voting will begin shortly" in html
         assert 'id="prevote-welcome"' in html
+
+
+class TestWelcomeScreenFill:
+    def test_welcome_wraps_and_scales(self, election_with_codes):
+        client = election_with_codes  # display_phase defaults to 1 -> welcome.html
+        resp = client.get("/display")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert 'id="welcome-fit"' in html
+        assert "fitWelcome" in html

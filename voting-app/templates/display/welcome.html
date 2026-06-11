@@ -15,6 +15,7 @@
 </div>
 
 <div class="display-main" style="justify-content: center; align-items: center; text-align: center;">
+    <div id="welcome-fit">
     {% if election.current_round > 1 %}
     <h1 style="font-size: 88px; color: var(--navy); margin-bottom: 8px; line-height: 1.05;">Round {{ election.current_round }}</h1>
     <h2 style="font-size: 38px; color: var(--gold); margin-bottom: 48px; font-weight: 600;">Further vote required</h2>
@@ -132,5 +133,35 @@
     </div>
     {% endif %}
     {% endif %}
+    </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    function fitWelcome() {
+        var fit = document.getElementById('welcome-fit');
+        var main = document.querySelector('.display-main');
+        if (!fit || !main) return;
+        if (window.innerWidth <= 720) { fit.style.zoom = '1'; return; }
+        fit.style.zoom = '1';
+        requestAnimationFrame(function() {
+            var available = main.clientHeight;
+            var natural = fit.offsetHeight;
+            if (natural < 1 || available < 1) return;
+            // Cap 1.6x; never shrink below 1 (round-1 content is already large).
+            var scale = (available * 0.95) / natural;
+            scale = Math.max(1, Math.min(1.6, scale));
+            fit.style.zoom = scale.toFixed(3);
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', fitWelcome);
+    } else {
+        fitWelcome();
+    }
+    window.addEventListener('resize', fitWelcome);
+})();
+</script>
 {% endblock %}
