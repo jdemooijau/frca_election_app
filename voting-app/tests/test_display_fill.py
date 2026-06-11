@@ -82,3 +82,15 @@ class TestWelcomeScreenFill:
         html = resp.data.decode()
         assert 'id="welcome-fit"' in html
         assert "fitWelcome" in html
+
+
+class TestWaitingScreenFill:
+    def test_waiting_block_fills_and_centers(self):
+        with open(CSS_PATH, encoding="utf-8") as f:
+            css = f.read()
+        idx = css.find(".display-waiting {")
+        assert idx != -1
+        block = css[idx:idx + 320]
+        assert "flex: 1" in block
+        assert "justify-content: center" in block
+        assert "align-items: center" in block
