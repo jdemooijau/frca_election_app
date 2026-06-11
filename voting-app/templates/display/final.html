@@ -131,7 +131,8 @@
 
 {% set total_elected = elected_by_office | sum(attribute='names', start=[]) | length %}
 {% set total_vacancies = elected_by_office | sum(attribute='original_vacancies') %}
-<div class="display-main" style="justify-content: flex-start;">
+<div class="display-main" style="justify-content: center;">
+    <div id="final-fit">
     <h1 class="final-title">Final Results</h1>
     <div class="final-subtitle">
         {% if total_elected == 0 %}
@@ -175,6 +176,7 @@
         The church council will formally appoint the elected brother{{ '' if total_elected == 1 else 's' }} at its next meeting (Article 8).
         {% endif %}
     </p>
+    </div>
 </div>
 {% endblock %}
 
@@ -199,6 +201,30 @@
         xhr.send();
     }
     setInterval(check, 5000);
+
+    function fitFinal() {
+        var fit = document.getElementById('final-fit');
+        var main = document.querySelector('.display-main');
+        if (!fit || !main) return;
+        if (window.innerWidth <= 720) { fit.style.zoom = '1'; return; }
+        // Reset so we measure natural (unscaled) height.
+        fit.style.zoom = '1';
+        requestAnimationFrame(function() {
+            var available = main.clientHeight;
+            var natural = fit.offsetHeight;
+            if (natural < 1 || available < 1) return;
+            // Fill ~95% of the height; cap 1.9x; never shrink below 1.
+            var scale = (available * 0.95) / natural;
+            scale = Math.max(1, Math.min(1.9, scale));
+            fit.style.zoom = scale.toFixed(3);
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', fitFinal);
+    } else {
+        fitFinal();
+    }
+    window.addEventListener('resize', fitFinal);
 })();
 </script>
 {% endblock %}
