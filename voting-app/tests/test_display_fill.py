@@ -46,3 +46,17 @@ class TestFinalResultsFill:
         assert "fitFinal" in html
         # Vertical centring: the top-anchoring inline style is gone:
         assert "justify-content: flex-start" not in html
+
+
+class TestProjectorLiveResultsFill:
+    def test_single_office_cap_raised_and_office_centered(self, election_with_codes):
+        client = election_with_codes
+        _set_phase(1, display_phase=3)  # phase 3 -> projector.html
+        resp = client.get("/display")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        # Single-office scale cap raised 2.2 -> 3.0 (rotating cap stays 3.4):
+        assert "3.4 : 3.0" in html
+        assert "3.4 : 2.2" not in html
+        # Office content is vertically centred within its results cell:
+        assert "Vertically centre each office" in html

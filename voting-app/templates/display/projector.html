@@ -24,11 +24,24 @@
         margin-bottom: calc(10px * var(--proj-scale)) !important;
         padding-bottom: calc(8px * var(--proj-scale)) !important;
     }
+    /* Vertically centre each office's content within its results cell, so a
+       sparse result (one office, a few names) sits in the middle of the
+       available height instead of pinned to the top once the auto-scaler
+       hits its cap. Applies in both side-by-side and rotating modes. */
+    .display-office {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
     /* Office rotation: one office at a time, full width, much larger text.
        display:none grid items create no tracks, so the active office gets
        the whole grid width. */
     .display-offices.rotating .display-office { display: none; }
-    .display-offices.rotating .display-office.active { display: block; }
+    .display-offices.rotating .display-office.active {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
     #office-dots {
         display: none;
         text-align: center;
@@ -806,7 +819,7 @@
             // visible office's height. One office on screen can scale far
             // beyond the side-by-side cap.
             var grid = resultsContainer.querySelector('.display-offices');
-            var cap = (grid && grid.classList.contains('rotating')) ? 3.4 : 2.2;
+            var cap = (grid && grid.classList.contains('rotating')) ? 3.4 : 3.0;
             var scale = (available * 0.95) / natural;
             // Floor below 1 so a long candidate list shrinks to fit rather
             // than clipping the bottom names off-screen.
