@@ -204,7 +204,8 @@ def test_step_welcome_shows_projector_advance(election_with_codes):
     rv = election_with_codes.get("/admin/election/1/step/welcome")
     assert rv.status_code == 200
     body = rv.get_data(as_text=True)
-    assert "Welcome" in body or "Election Rules" in body
+    assert "Welcome" in body and "Candidates" in body
+    assert "Election Rules" not in body
     assert "wizard-sidebar" in body
 
 

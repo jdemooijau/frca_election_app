@@ -90,11 +90,11 @@
 
 <div style="margin-top: 18px;">
     {% if attendance_missing %}
-    <button class="btn btn-outline" disabled title="Set attendance first">Next: Welcome &amp; Rules &rarr;</button>
+    <button class="btn btn-outline" disabled title="Set attendance first">Next: Welcome &amp; Candidates &rarr;</button>
     <p style="font-size: 13px; color: #C0392B; margin-top: 6px;">Save attendance above before advancing.</p>
     {% else %}
     <a href="{{ url_for('admin_step_welcome', election_id=sidebar_state.election.id) }}" class="btn btn-primary">
-        Next: Welcome &amp; Rules &rarr;
+        Next: Welcome &amp; Candidates &rarr;
     </a>
     {% endif %}
 </div>
