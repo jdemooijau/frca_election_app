@@ -114,9 +114,9 @@
         border: 2px solid #E67E22;
         border-left-width: 8px;
         border-radius: 8px;
-        font-size: 26px;
+        font-size: 40px;
         color: #3D1F00;
-        line-height: 1.45;
+        line-height: 1.4;
     }
     .do-not-mark-title {
         font-weight: 800;
@@ -127,7 +127,7 @@
         font-size: 24px;
     }
     .do-not-mark-office {
-        margin-bottom: 8px;
+        margin-bottom: 14px;
     }
     .do-not-mark-office:last-child { margin-bottom: 0; }
     .do-not-mark-office strong { color: var(--navy); }
@@ -303,7 +303,10 @@
             </div>
             <div class="instruction-card">
                 <h2>Option B <span style="font-weight: 400; color: #6b7480;">(Paper Ballot)</span></h2>
-                <ol>
+                {# When a paper guide is present (round > 1) the valid names are
+                   the important thing, and the two generic steps would shrink
+                   them; hide the steps so the names can be large. #}
+                <ol id="paper-steps" style="{{ 'display:none' if paper_guide else '' }}">
                     <li>Mark your selections on the <strong>ballot paper</strong></li>
                     <li>Fold the ballot and hand it in for <strong>manual counting</strong></li>
                 </ol>
@@ -616,6 +619,15 @@
                 } else {
                     dnm.style.display = 'none';
                 }
+            }
+
+            // When the valid-names box is showing (round > 1), hide the two
+            // generic Option B steps so the names get the whole card and stay
+            // large; show the steps again when there is no names box (round 1).
+            var paperSteps = document.getElementById('paper-steps');
+            if (paperSteps) {
+                var hasGuide = Array.isArray(data.paper_guide) && data.paper_guide.length > 0;
+                paperSteps.style.display = hasGuide ? 'none' : '';
             }
 
             var container = document.getElementById('results-container');
