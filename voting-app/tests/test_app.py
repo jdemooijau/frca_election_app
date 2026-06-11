@@ -244,7 +244,11 @@ class TestVoteSubmission:
 
         # Second attempt with same code
         resp = client.post("/vote", data={"code": test_code}, follow_redirects=True)
-        assert b"already been used" in resp.data
+        # Rejection message (reworded 2026-05-04: "used" -> "registered").
+        # Assert the security property too, so the test guards behaviour, not
+        # just wording: a reused code must never be handed a ballot.
+        assert b"already been registered" in resp.data
+        assert b"Cast Your Vote" not in resp.data
 
 
 # ---------------------------------------------------------------------------
@@ -456,7 +460,11 @@ class TestSecondRound:
 
         # Try the same code again — should be burned
         resp = client.post("/vote", data={"code": test_code}, follow_redirects=True)
-        assert b"already been used" in resp.data
+        # Rejection message (reworded 2026-05-04: "used" -> "registered").
+        # Assert the security property too, so the test guards behaviour, not
+        # just wording: a reused code must never be handed a ballot.
+        assert b"already been registered" in resp.data
+        assert b"Cast Your Vote" not in resp.data
 
     def test_minutes_excludes_dropped_candidates_from_round_2(self, election_with_codes):
         """A candidate who was not carried forward must not appear in the

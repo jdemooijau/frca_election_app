@@ -219,7 +219,8 @@ class MassTestRunner:
 
         # Verify a used code is rejected
         resp = self.client.post("/vote", data={"code": codes[0]}, follow_redirects=True)
-        self.check(b"already been used" in resp.data, "Used code rejected")
+        self.check(b"already been registered" in resp.data, "Used code rejected")
+        self.check(b"Cast Your Vote" not in resp.data, "Used code not given a ballot")
 
         # Close voting
         self.toggle_voting(1)
@@ -451,7 +452,8 @@ class MassTestRunner:
         self.inject_code(1, code)
         self.cast_vote(code, {1: [1]}, confirm_partial=True)
         resp = self.client.post("/vote", data={"code": code}, follow_redirects=True)
-        self.check(b"already been used" in resp.data, "Used code rejected")
+        self.check(b"already been registered" in resp.data, "Used code rejected")
+        self.check(b"Cast Your Vote" not in resp.data, "Used code not given a ballot")
 
         # Code when voting closed
         self.toggle_voting(1)  # close
