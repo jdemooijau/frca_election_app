@@ -2765,6 +2765,11 @@ def admin_soft_reset(election_id):
     # Un-burn all codes (so they can be reused)
     db.execute("UPDATE codes SET used = 0 WHERE election_id = ?", (election_id,))
 
+    # Clear any in-flight provisional ballots. Codes are now un-burned, so a
+    # stale provisional (a voter mid-review when the reset happened) could be
+    # swept and cast into the redo. Attendance is kept: same meeting.
+    db.execute("DELETE FROM provisional_ballots WHERE election_id = ?", (election_id,))
+
     # Clear round counts (participants, paper ballot count)
     db.execute("DELETE FROM round_counts WHERE election_id = ? AND round_number = ?",
                (election_id, current_round))
@@ -2816,6 +2821,11 @@ def admin_hard_reset(election_id):
     # Clear all round counts
     db.execute("DELETE FROM round_counts WHERE election_id = ?", (election_id,))
 
+    # Clear in-flight provisional ballots and attendance check-ins: a hard
+    # reset returns to setup, so the re-run starts with fresh attendance.
+    db.execute("DELETE FROM provisional_ballots WHERE election_id = ?", (election_id,))
+    db.execute("DELETE FROM attendance_checkins WHERE election_id = ?", (election_id,))
+
     # Reset election to round 1
     db.execute(
         "UPDATE elections SET current_round = 1, voting_open = 0, show_results = 0, postal_voter_count = 0, display_phase = 1 WHERE id = ?",
@@ -2852,7 +2862,7 @@ def admin_hard_reset(election_id):
     )
 
     db.commit()
-    flash("Hard reset complete. All votes, codes, and postal votes cleared. Candidates reactivated. Generate new codes before voting.", "success")
+    flash("Hard reset complete. All votes, codes, postal votes, and attendance cleared. Candidates reactivated. Generate new codes before voting.", "success")
     return redirect(url_for("admin_step_offices", election_id=election_id))
 
 

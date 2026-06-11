@@ -303,6 +303,74 @@ class TestElectionDeletion:
 
 
 # ---------------------------------------------------------------------------
+# Election reset tests
+# ---------------------------------------------------------------------------
+
+class TestElectionReset:
+    @staticmethod
+    def _seed_checkin_and_provisional():
+        db = get_db()
+        db.execute("INSERT INTO members (last_name, first_name) VALUES ('Smit', 'Jan')")
+        mid = db.execute(
+            "SELECT id FROM members ORDER BY id DESC LIMIT 1"
+        ).fetchone()["id"]
+        db.execute(
+            "INSERT INTO attendance_checkins (election_id, member_id) VALUES (1, ?)",
+            (mid,)
+        )
+        db.execute(
+            "INSERT INTO provisional_ballots "
+            "(election_id, round_number, code_hash, selections, cast_deadline) "
+            "VALUES (1, 1, 'resetprov', '[]', datetime('now', 'localtime'))"
+        )
+        db.commit()
+
+    def test_soft_reset_clears_provisional_keeps_attendance(self, election_with_codes):
+        """Soft reset must clear stale provisional ballots (codes are
+        un-burned, so a leftover provisional could be swept into the redo)
+        but KEEP attendance — it is the same meeting, same attendees."""
+        client = election_with_codes
+        with app.app_context():
+            self._seed_checkin_and_provisional()
+        resp = client.post(
+            "/admin/election/1/soft-reset",
+            data={"confirm_text": "RESET", "password": "admin"},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        with app.app_context():
+            db = get_db()
+            assert db.execute(
+                "SELECT COUNT(*) c FROM provisional_ballots WHERE election_id = 1"
+            ).fetchone()["c"] == 0
+            assert db.execute(
+                "SELECT COUNT(*) c FROM attendance_checkins WHERE election_id = 1"
+            ).fetchone()["c"] == 1
+
+    def test_hard_reset_clears_provisional_and_attendance(self, election_with_codes):
+        """Hard reset returns to setup, so it must clear both stale
+        provisional ballots and attendance check-ins (a fresh re-run gets
+        its own attendance)."""
+        client = election_with_codes
+        with app.app_context():
+            self._seed_checkin_and_provisional()
+        resp = client.post(
+            "/admin/election/1/hard-reset",
+            data={"confirm_text": "HARD RESET", "password": "admin"},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        with app.app_context():
+            db = get_db()
+            assert db.execute(
+                "SELECT COUNT(*) c FROM provisional_ballots WHERE election_id = 1"
+            ).fetchone()["c"] == 0
+            assert db.execute(
+                "SELECT COUNT(*) c FROM attendance_checkins WHERE election_id = 1"
+            ).fetchone()["c"] == 0
+
+
+# ---------------------------------------------------------------------------
 # Anonymity tests
 # ---------------------------------------------------------------------------
 
