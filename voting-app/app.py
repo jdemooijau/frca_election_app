@@ -4844,7 +4844,7 @@ def display():
         ctx["offices"] = offices
         return render_template("display/welcome.html", **ctx)
     elif phase == 2:
-        return render_template("display/rules.html", **ctx)
+        return render_template("display/slate.html", **ctx)
     elif phase == 4:
         if election["show_results"]:
             return render_template("display/projector.html", **ctx)

@@ -103,16 +103,21 @@ class TestWaitingScreenFill:
         assert "align-items: center" in block
 
 
-class TestRulesScreenFill:
-    def test_rules_scaler_constants_tuned(self, election_with_codes):
+class TestSlateScreen:
+    def test_phase2_renders_candidate_slate_not_rules(self, election_with_codes):
         client = election_with_codes
-        _set_phase(1, display_phase=2)  # phase 2 -> rules.html
+        _set_phase(1, display_phase=2)  # phase 2 -> slate.html
         resp = client.get("/display")
         assert resp.status_code == 200
         html = resp.data.decode()
-        # Vertical buffer raised 0.94 -> 0.96:
+        # Candidate slate is shown (an office heading) with the vote threshold.
+        assert "For Elder" in html
+        assert "To be elected" in html
+        # Election Rules article prose is gone.
+        assert "Election Rules" not in html
+        assert "Subsequent Rounds" not in html
+        assert "Objections of a formal nature" not in html
+        # Scale-to-fit scaler survives the rename with its tuned constants.
+        assert "autoSizeSlate" in html
         assert "* 0.96)" in html
-        assert "* 0.94)" not in html
-        # Cap raised 2.0 -> 2.4:
         assert "hScale, 2.4)" in html
-        assert "hScale, 2.0)" not in html
