@@ -272,6 +272,17 @@ def _init_db_on(db):
             FOREIGN KEY (member_id) REFERENCES members(id)
         );
 
+        CREATE TABLE IF NOT EXISTS provisional_ballots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            election_id INTEGER NOT NULL,
+            round_number INTEGER NOT NULL,
+            code_hash TEXT NOT NULL UNIQUE,
+            selections TEXT NOT NULL,
+            cast_deadline TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (election_id) REFERENCES elections(id)
+        );
+
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -749,6 +760,17 @@ def _migrate_db_on(db):
                 UNIQUE(election_id, member_id),
                 FOREIGN KEY (election_id) REFERENCES elections(id),
                 FOREIGN KEY (member_id) REFERENCES members(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS provisional_ballots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                election_id INTEGER NOT NULL,
+                round_number INTEGER NOT NULL,
+                code_hash TEXT NOT NULL UNIQUE,
+                selections TEXT NOT NULL,
+                cast_deadline TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                FOREIGN KEY (election_id) REFERENCES elections(id)
             );
         """)
         db.commit()
@@ -1741,6 +1763,10 @@ def admin_toggle_voting(election_id):
     # "Show Results on Projector" button (admin_toggle_results), or by
     # advancing display_phase to 4 for the final summary view.
     if new_state == 0:
+        # Cast pending provisional ballots first — those voters pressed
+        # "Cast Your Vote" while the round was open, so they count even if
+        # their review countdown hadn't expired yet.
+        sweep_provisional_ballots(cast_all=True)
         db.execute(
             "UPDATE elections SET voting_open = 0 WHERE id = ?",
             (election_id,)
@@ -3473,6 +3499,13 @@ def voter_ballot():
         flash("This code is no longer valid.", "error")
         return redirect(url_for("voter_enter_code"))
 
+    # Back on the ballot (e.g. browser Back from the review screen): cancel
+    # any pending provisional ballot so the sweep can't cast superseded
+    # selections while the voter is re-picking.
+    db.execute("DELETE FROM provisional_ballots WHERE code_hash = ?", (code_h,))
+    db.commit()
+    session.pop("provisional_pending", None)
+
     offices = db.execute(
         "SELECT * FROM offices WHERE election_id = ? ORDER BY sort_order",
         (election_id,)
@@ -3496,6 +3529,78 @@ def voter_ballot():
         voter_code=code_row["plaintext"] if code_row["plaintext"] else None,
     ))
     return no_cache(resp)
+
+
+def _cast_digital_ballot(db, election, code_h, selected_candidates,
+                         code_for_log=None, detail=None):
+    """Atomically burn a code and record its votes.
+
+    Returns True if this call cast the ballot, False if the code was already
+    used (someone — voter tap or sweep — got there first). Any provisional
+    ballot for the code is removed either way, destroying the temporary
+    code-to-selection link the moment it is no longer needed.
+    """
+    result = db.execute(
+        "UPDATE codes SET used = 1 WHERE code_hash = ? AND used = 0",
+        (code_h,)
+    )
+    if result.rowcount == 0:
+        db.rollback()
+        db.execute("DELETE FROM provisional_ballots WHERE code_hash = ?", (code_h,))
+        db.commit()
+        return False
+
+    # Record votes — NO link to the code
+    for cand_id in selected_candidates:
+        db.execute(
+            "INSERT INTO votes (election_id, round_number, candidate_id, source) VALUES (?, ?, ?, 'digital')",
+            (election["id"], election["current_round"], cand_id)
+        )
+    increment_digital_ballot(election["id"], election["current_round"])
+    db.execute("DELETE FROM provisional_ballots WHERE code_hash = ?", (code_h,))
+    db.commit()
+    log_voter_audit(
+        election["id"], code_for_log, "vote_submitted",
+        detail or f"Recorded {len(selected_candidates)} candidate selection(s)",
+        round_number=election["current_round"]
+    )
+    return True
+
+
+def sweep_provisional_ballots(cast_all=False):
+    """Cast provisional ballots whose review deadline has passed.
+
+    The review screen's countdown runs on the voter's phone, which freezes
+    when the phone locks. This server-side backstop — piggybacked on the
+    display poll and the round-close action — casts the ballot anyway, so a
+    sleeping phone can never leave the meeting stuck at "1 still to vote".
+    With cast_all=True (closing the round) every pending ballot is cast
+    regardless of deadline: those voters pressed Cast Your Vote while the
+    round was open.
+    """
+    db = get_db()
+    where = "" if cast_all else " WHERE cast_deadline <= datetime('now', 'localtime')"
+    rows = db.execute("SELECT * FROM provisional_ballots" + where).fetchall()
+    for row in rows:
+        election = db.execute(
+            "SELECT * FROM elections WHERE id = ?", (row["election_id"],)
+        ).fetchone()
+        # A ballot may only be cast into its own open round; anything else
+        # is stale and dropped.
+        if (not election or not election["voting_open"]
+                or election["current_round"] != row["round_number"]):
+            db.execute("DELETE FROM provisional_ballots WHERE id = ?", (row["id"],))
+            db.commit()
+            continue
+        try:
+            selections = json.loads(row["selections"])
+            _cast_digital_ballot(
+                db, election, row["code_hash"], selections,
+                detail=(f"Auto-cast {len(selections)} selection(s) — "
+                        "review deadline passed"),
+            )
+        except Exception:
+            db.rollback()  # leave the row; the next sweep retries
 
 
 @app.route("/submit", methods=["POST"])
@@ -3558,9 +3663,12 @@ def voter_submit():
                 return redirect(url_for("voter_ballot"))
             selected_candidates.append(int(cand_id_str))
 
-    # "Change My Selection" from the review screen: back to the ballot with
-    # the choices still ticked.
+    # "Change My Selection" from the review screen: cancel the provisional
+    # ballot and go back to the ballot with the choices still ticked.
     if request.form.get("change"):
+        db.execute("DELETE FROM provisional_ballots WHERE code_hash = ?", (code_h,))
+        db.commit()
+        session.pop("provisional_pending", None)
         office_candidates = []
         for office in offices:
             candidates = db.execute(
@@ -3599,52 +3707,45 @@ def voter_submit():
         if under_selected:
             warning_msg = ("You have not used all your votes. "
                            + ". ".join(under_selected) + ".")
+
+        # Store the selections as a provisional ballot. If the phone goes
+        # quiet on the review screen (locked, pocketed, battery dead), the
+        # server-side sweep casts it shortly after the on-screen countdown
+        # would have — the count can never stall waiting for this voter.
+        confirm_seconds = get_vote_confirm_seconds()
+        db.execute(
+            "INSERT INTO provisional_ballots "
+            "(election_id, round_number, code_hash, selections, cast_deadline) "
+            "VALUES (?, ?, ?, ?, datetime('now', 'localtime', ?)) "
+            "ON CONFLICT(code_hash) DO UPDATE SET "
+            "election_id = excluded.election_id, "
+            "round_number = excluded.round_number, "
+            "selections = excluded.selections, "
+            "cast_deadline = excluded.cast_deadline",
+            (election_id, election["current_round"], code_h,
+             json.dumps(selected_candidates),
+             f"+{confirm_seconds + 2} seconds")
+        )
+        db.commit()
+        session["provisional_pending"] = True
+
         resp = make_response(render_template(
             "voter/confirm_review.html",
             election=election,
             review=review,
             warning_message=warning_msg,
-            confirm_seconds=get_vote_confirm_seconds(),
+            confirm_seconds=confirm_seconds,
         ))
         return no_cache(resp)
 
     code_for_log = session.get("used_code")
+    had_pending = session.pop("provisional_pending", False)
 
     # Atomic transaction: burn code + record votes
     try:
-        result = db.execute(
-            "UPDATE codes SET used = 1 WHERE code_hash = ? AND used = 0",
-            (code_h,)
-        )
-        if result.rowcount == 0:
-            # Code was already used (race condition)
-            db.rollback()
-            session.pop("code_hash", None)
-            session.pop("election_id", None)
-            session.pop("used_code", None)
-            flash("Your vote has already been registered with this code.", "error")
-            log_voter_audit(
-                election_id, code_for_log, "rejected_already_used_at_submit",
-                "Submit reached burn step but code was already used (race)",
-                round_number=election["current_round"]
-            )
-            return redirect(url_for("voter_enter_code"))
-
-        # Record votes — NO link to the code
-        for cand_id in selected_candidates:
-            db.execute(
-                "INSERT INTO votes (election_id, round_number, candidate_id, source) VALUES (?, ?, ?, 'digital')",
-                (election_id, election["current_round"], cand_id)
-            )
-
-        # Increment digital ballot counter
-        increment_digital_ballot(election_id, election["current_round"])
-
-        db.commit()
-        log_voter_audit(
-            election_id, code_for_log, "vote_submitted",
-            f"Recorded {len(selected_candidates)} candidate selection(s)",
-            round_number=election["current_round"]
+        cast_ok = _cast_digital_ballot(
+            db, election, code_h, selected_candidates,
+            code_for_log=code_for_log,
         )
     except Exception as ex:
         db.rollback()
@@ -3652,6 +3753,31 @@ def voter_submit():
         log_voter_audit(
             election_id, code_for_log, "submit_error",
             f"Exception during burn/insert: {type(ex).__name__}",
+            round_number=election["current_round"]
+        )
+        return redirect(url_for("voter_enter_code"))
+
+    if not cast_ok:
+        if had_pending:
+            # The server-side sweep already cast this voter's provisional
+            # ballot (the phone slept past the review deadline before he
+            # tapped Confirm). His vote is in — show the confirmation page.
+            log_voter_audit(
+                election_id, code_for_log, "confirm_after_auto_cast",
+                "Confirm arrived after the provisional ballot was auto-cast",
+                round_number=election["current_round"]
+            )
+            session.pop("code_hash", None)
+            return redirect(url_for("voter_confirmation"))
+
+        # Code was already used (race condition / reuse attempt)
+        session.pop("code_hash", None)
+        session.pop("election_id", None)
+        session.pop("used_code", None)
+        flash("Your vote has already been registered with this code.", "error")
+        log_voter_audit(
+            election_id, code_for_log, "rejected_already_used_at_submit",
+            "Submit reached burn step but code was already used (race)",
             round_number=election["current_round"]
         )
         return redirect(url_for("voter_enter_code"))
@@ -4719,6 +4845,9 @@ def display():
 @csrf.exempt
 def api_display_data():
     """JSON endpoint for live display refresh."""
+    # The projector/admin pages poll this every second while voting runs,
+    # which makes it the heartbeat for casting overdue provisional ballots.
+    sweep_provisional_ballots()
     db = get_db()
     election = db.execute(
         "SELECT * FROM elections ORDER BY id DESC LIMIT 1"

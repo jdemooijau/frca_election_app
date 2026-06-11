@@ -150,3 +150,118 @@ class TestConfirmSecondsSetting:
             assert get_vote_confirm_seconds() == 60
             set_setting("vote_confirm_seconds", "junk")
             assert get_vote_confirm_seconds() == 8
+
+
+# ---------------------------------------------------------------------------
+# Server-side provisional ballots: the sweep backstop
+# ---------------------------------------------------------------------------
+
+def _provisional_count():
+    with app.app_context():
+        return get_db().execute(
+            "SELECT COUNT(*) FROM provisional_ballots").fetchone()[0]
+
+
+def _expire_provisionals():
+    with app.app_context():
+        db = get_db()
+        db.execute("UPDATE provisional_ballots SET cast_deadline = "
+                   "datetime('now', 'localtime', '-1 seconds')")
+        db.commit()
+
+
+def _code_used():
+    with app.app_context():
+        return get_db().execute(
+            "SELECT used FROM codes WHERE code_hash = ?",
+            (hash_code("RVWTST"),)).fetchone()["used"]
+
+
+class TestProvisionalBallots:
+    def test_review_creates_provisional(self, voting_client):
+        voting_client.post("/submit", data={"office_1": ["1", "2"]})
+        with app.app_context():
+            row = get_db().execute(
+                "SELECT * FROM provisional_ballots").fetchone()
+        assert row is not None
+        assert row["round_number"] == 1
+        # Deadline is countdown + 2s grace in the future
+        with app.app_context():
+            remaining = get_db().execute(
+                "SELECT CAST(strftime('%s', cast_deadline) AS INTEGER) - "
+                "CAST(strftime('%s', datetime('now', 'localtime')) AS INTEGER) "
+                "FROM provisional_ballots").fetchone()[0]
+        assert 8 <= remaining <= 10
+
+    def test_resubmit_updates_provisional_not_duplicates(self, voting_client):
+        voting_client.post("/submit", data={"office_1": "1"})
+        voting_client.post("/submit", data={"office_1": ["1", "2"]})
+        assert _provisional_count() == 1
+
+    def test_change_cancels_provisional(self, voting_client):
+        voting_client.post("/submit", data={"office_1": "1"})
+        assert _provisional_count() == 1
+        voting_client.post("/submit", data={"office_1": "1", "change": "1"})
+        assert _provisional_count() == 0
+        assert _votes_count() == 0
+
+    def test_back_to_ballot_cancels_provisional(self, voting_client):
+        voting_client.post("/submit", data={"office_1": "1"})
+        assert _provisional_count() == 1
+        voting_client.get("/ballot")
+        assert _provisional_count() == 0
+
+    def test_confirm_removes_provisional(self, voting_client):
+        voting_client.post("/submit", data={"office_1": ["1", "2"]})
+        voting_client.post("/submit", data={"office_1": ["1", "2"], "confirmed": "1"})
+        assert _provisional_count() == 0
+        assert _votes_count() == 2
+
+    def test_sweep_casts_expired_provisional(self, voting_client):
+        voting_client.post("/submit", data={"office_1": ["1", "2"]})
+        # Not yet expired: the poll must NOT cast it
+        voting_client.get("/api/display-data")
+        assert _votes_count() == 0
+        # Expired: the poll casts it
+        _expire_provisionals()
+        voting_client.get("/api/display-data")
+        assert _votes_count() == 2
+        assert _code_used() == 1
+        assert _provisional_count() == 0
+
+    def test_confirm_after_sweep_shows_confirmation_no_double_cast(self, voting_client):
+        voting_client.post("/submit", data={"office_1": ["1", "2"]})
+        _expire_provisionals()
+        voting_client.get("/api/display-data")  # sweep casts
+        assert _votes_count() == 2
+        # The woken-up phone now submits its Confirm form
+        resp = voting_client.post(
+            "/submit", data={"office_1": ["1", "2"], "confirmed": "1"})
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith("/confirmation")
+        assert _votes_count() == 2  # not 4
+
+    def test_close_round_casts_pending_provisionals(self, voting_client):
+        # Future deadline — voter pressed Cast Your Vote moments before the
+        # chairman closes the round. The ballot must still count.
+        voting_client.post("/submit", data={"office_1": ["1", "2"]})
+        assert _votes_count() == 0
+        voting_client.post("/admin/election/1/voting")  # close
+        assert _votes_count() == 2
+        assert _provisional_count() == 0
+        with app.app_context():
+            voting_open = get_db().execute(
+                "SELECT voting_open FROM elections WHERE id = 1"
+            ).fetchone()["voting_open"]
+        assert voting_open == 0
+
+    def test_sweep_audit_logged(self, voting_client):
+        voting_client.post("/submit", data={"office_1": "1"})
+        _expire_provisionals()
+        voting_client.get("/api/display-data")
+        with app.app_context():
+            row = get_db().execute(
+                "SELECT * FROM voter_audit_log WHERE result = 'vote_submitted' "
+                "ORDER BY id DESC LIMIT 1").fetchone()
+        assert row is not None
+        assert "Auto-cast" in row["detail"]
