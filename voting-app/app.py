@@ -1814,7 +1814,7 @@ def admin_set_display_phase(election_id):
     """Advance or go back in the projector display phase flow.
 
     Phase 1 = Welcome (congregation + election details)
-    Phase 2 = Election Rules (candidates list + articles 4, 6, 12)
+    Phase 2 = Candidates (candidate slate + vote threshold)
     Phase 3 = Voting (opens voting automatically on first entry)
     Phase 4 = Final Results (chairman-triggered end-of-election summary)
     """
@@ -1885,7 +1885,7 @@ def admin_set_display_phase(election_id):
                 (new_phase, election_id)
             )
         db.commit()
-        phase_names = {1: "Welcome", 2: "Election Rules", 3: "Voting", 4: "Final Results"}
+        phase_names = {1: "Welcome", 2: "Candidates", 3: "Voting", 4: "Final Results"}
         flash(f"Projector display: {phase_names[new_phase]}", "success")
 
     referrer = request.referrer or ""
