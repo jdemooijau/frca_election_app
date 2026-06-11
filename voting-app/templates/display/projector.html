@@ -825,19 +825,9 @@
         // side-by-side cap.
         var cap = (grid && grid.classList.contains('rotating')) ? 3.4 : 2.2;
 
-        // Fit the visible office(s) to the available height by measuring at
-        // the CURRENT scale and adjusting proportionally, instead of resetting
-        // to 1 and re-growing every run (which flashed the screen full-size
-        // and back on every 1s poll and rotation tick — the "heavy jumping").
-        // The measured height already includes any line wrapping at the
-        // current scale, so the fit is wrap-aware: if long names wrapped and
-        // overflowed, the correction pass shrinks to fit so no row or ELECTED
-        // badge clips off the bottom.
-        function fitOnce() {
-            var current = parseFloat(
-                getComputedStyle(root).getPropertyValue('--proj-scale')) || 1;
-            // Available = results container minus any non-grid child (e.g. the
-            // runoff banner) above the offices grid.
+        function availableHeight() {
+            // Results container minus any non-grid child (e.g. the runoff
+            // banner) above the offices grid.
             var available = resultsContainer.clientHeight;
             var rcChildren = resultsContainer.children;
             for (var k = 0; k < rcChildren.length; k++) {
@@ -848,25 +838,40 @@
                                  parseFloat(ccs.marginBottom || 0);
                 }
             }
-            var measured = 0;
+            return available;
+        }
+        function tallestOffice() {
+            var m = 0;
             for (var i = 0; i < officeNodes.length; i++) {
                 var h = officeContentHeight(officeNodes[i]);
-                if (h > measured) measured = h;
+                if (h > m) m = h;
             }
-            if (measured < 1 || available < 1) return;
-            var target = current * (available * 0.95) / measured;
-            target = Math.max(0.6, Math.min(cap, target));
-            // Deadband so a settled screen never jitters by sub-pixel amounts.
-            if (Math.abs(target - current) > 0.02) {
-                root.style.setProperty('--proj-scale', target.toFixed(3));
-            }
+            return m;
         }
-        // First pass sizes from the current scale; the second corrects for
-        // wrapping that the new scale introduces, converging in one call.
-        requestAnimationFrame(function() {
-            fitOnce();
-            requestAnimationFrame(fitOnce);
-        });
+
+        // Measure SYNCHRONOUSLY, all in one JS turn: set the scale, read
+        // layout (forces a reflow but NOT a paint), set again. The browser
+        // only paints the final scale, so the intermediate full-size (scale 1)
+        // layout is never shown. The old code split the reset and the rescale
+        // across animation frames, which painted the scale-1 layout for one
+        // frame on every poll and rotation tick (the "heavy jumping"), and a
+        // later proportional rewrite could get stuck at a too-large scale on
+        // the live loop while a manual refresh fitted correctly.
+        root.style.setProperty('--proj-scale', '1');
+        var available = availableHeight();
+        var natural = tallestOffice();           // height at scale 1 (no wrap)
+        if (natural < 1 || available < 1) return;
+        var scale = Math.max(0.6, Math.min(cap, (available * 0.95) / natural));
+        root.style.setProperty('--proj-scale', scale.toFixed(3));
+        // Wrap-aware correction: at the applied scale long names may wrap and
+        // make the office taller than predicted. Re-measure (still in this
+        // same synchronous turn) and shrink to fit so no row or ELECTED badge
+        // clips off the bottom.
+        var actual = tallestOffice();            // height at `scale` (wrapped)
+        if (actual > available) {
+            scale = Math.max(0.6, scale * (available * 0.95) / actual);
+            root.style.setProperty('--proj-scale', scale.toFixed(3));
+        }
     }
 
     // Re-run after every results re-render (debounced)
