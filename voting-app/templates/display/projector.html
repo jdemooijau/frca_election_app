@@ -31,7 +31,10 @@
     .display-office {
         display: flex;
         flex-direction: column;
-        justify-content: center;
+        /* `safe` so a candidate list taller than the cell aligns to the top
+           (header + first rows stay visible) instead of centring and clipping
+           both ends off-screen. */
+        justify-content: safe center;
     }
     /* Office rotation: one office at a time, full width, much larger text.
        display:none grid items create no tracks, so the active office gets
@@ -40,7 +43,7 @@
     .display-offices.rotating .display-office.active {
         display: flex;
         flex-direction: column;
-        justify-content: center;
+        justify-content: safe center;
     }
     #office-dots {
         display: none;
@@ -819,7 +822,7 @@
             // visible office's height. One office on screen can scale far
             // beyond the side-by-side cap.
             var grid = resultsContainer.querySelector('.display-offices');
-            var cap = (grid && grid.classList.contains('rotating')) ? 3.4 : 3.0;
+            var cap = (grid && grid.classList.contains('rotating')) ? 3.4 : 2.2;
             var scale = (available * 0.95) / natural;
             // Floor below 1 so a long candidate list shrinks to fit rather
             // than clipping the bottom names off-screen.

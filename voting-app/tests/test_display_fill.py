@@ -49,17 +49,20 @@ class TestFinalResultsFill:
 
 
 class TestProjectorLiveResultsFill:
-    def test_single_office_cap_raised_and_office_centered(self, election_with_codes):
+    def test_single_office_cap_and_safe_centering(self, election_with_codes):
         client = election_with_codes
         _set_phase(1, display_phase=3)  # phase 3 -> projector.html
         resp = client.get("/display")
         assert resp.status_code == 200
         html = resp.data.decode()
-        # Single-office scale cap raised 2.2 -> 3.0 (rotating cap stays 3.4):
-        assert "3.4 : 3.0" in html
-        assert "3.4 : 2.2" not in html
-        # Office content is vertically centred within its results cell:
+        # Single-office scale cap is 2.2 (rotating cap stays 3.4). A brief
+        # raise to 3.0 over-scaled dense offices (wrapped names, clipped rows).
+        assert "3.4 : 2.2" in html
+        assert "3.4 : 3.0" not in html
+        # Office content centres within its cell, but "safe" so a list taller
+        # than the cell top-aligns instead of clipping the header off-screen.
         assert "Vertically centre each office" in html
+        assert "safe center" in html
 
 
 class TestProjectorWelcomePanel:
