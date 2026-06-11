@@ -51,11 +51,15 @@ Two templates already have an auto-scaler:
 Two mechanisms, chosen per template by whether it already scales:
 
 - **Scale then centre** for templates with no scaler and fixed sizes
-  (`final.html`, `welcome.html`): a one-shot JS scaler measures natural
-  content height against the available height, sets a CSS variable that
-  multiplies the font sizes, capped, floored at 1.0 (never shrink), and the
-  block is vertically centred so any leftover space splits top and bottom.
-  Runs once on load and on `resize`. Guarded at `innerWidth <= 720`.
+  (`final.html`, `welcome.html`): the content is wrapped in a single
+  element and a one-shot JS scaler measures that wrapper's natural height
+  against the available height, then sets CSS `zoom` on the wrapper to fill,
+  capped, floored at 1.0 (never shrink). `zoom` (not `transform: scale`) is
+  used because it affects layout size, so the flex container keeps the
+  scaled block vertically centred and any leftover space splits top and
+  bottom. Church projectors run Chromium-based browsers, where `zoom` is
+  fully supported. Runs once on load and on `resize`. Guarded at
+  `innerWidth <= 720`.
 - **Tune the existing scaler / centre in CSS** for templates that already
   scale or need only alignment (`projector.html`, `rules.html`,
   `waiting.html`).
@@ -66,11 +70,11 @@ No scaler today; `justify-content: flex-start` pins content to the top.
 
 - Override the inline style on `.display-main` from
   `justify-content: flex-start` to `justify-content: center` so the
-  title + offices + note block centres in the already-filled container.
-- Add a one-shot inline script: measure the summed natural height of the
-  `.display-main` children (title, subtitle, offices, note) against
-  `.display-main` `clientHeight`, set `--final-scale` that multiplies the
-  font sizes (title, office heading, vacancy line, names, note).
+  content centres in the already-filled container.
+- Wrap the title + subtitle + offices + note in one `<div id="final-fit">`.
+- Add a one-shot inline script: reset `zoom` to 1, measure
+  `#final-fit` natural height against `.display-main` `clientHeight`, then
+  set `#final-fit` `zoom` to fill.
 - Run on load and `resize`. No polling: `final.html` only re-checks the
   phase every 5s and reloads on a phase change.
 - Scale **cap 1.9x**, **floor 1.0**. Skip when `innerWidth <= 720`.
@@ -110,10 +114,11 @@ Phase 1, the first screen the congregation sees. Already centred
 large phone-instructions card; round 2+ is sparse (a heading, office
 cards, a short note).
 
-- Add a one-shot scale-to-fit script matching Part 1: measure
-  `.display-main` natural content height against its `clientHeight`, set
-  `--welcome-scale` multiplying the inline font sizes via a small set of
-  scoped CSS rules, **cap 1.6x**, **floor 1.0**, guard `innerWidth <= 720`.
+- Wrap the `.display-main` content in one `<div id="welcome-fit">` and add
+  a one-shot scale-to-fit script matching Part 1: reset `zoom` to 1,
+  measure `#welcome-fit` natural height against `.display-main`
+  `clientHeight`, set `#welcome-fit` `zoom` to fill, **cap 1.6x**,
+  **floor 1.0**, guard `innerWidth <= 720`.
 - The template already vertically centres, so no alignment change. The
   scaler only grows sparse content to fill; with floor 1.0 it never shrinks
   the content-heavy round-1 card (it computes ~1.0 when already full, so no
