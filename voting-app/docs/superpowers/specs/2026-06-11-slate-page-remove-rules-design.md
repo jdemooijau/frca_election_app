@@ -10,6 +10,15 @@ phase-2 projector screen becomes a candidate Slate screen: it still shows who
 is standing and the vote threshold to be elected, but not the article prose.
 The admin walk-through wording that references "Rules" is renamed to match.
 
+## Naming: display vs technical
+
+All user-facing text says **"Candidates"** (projector heading, admin step
+labels and buttons). The internal/technical identifiers keep the name
+**slate**: the template file `slate.html`, the CSS/JS identifiers
+`--slate-scale`, `autoSizeSlate`, `.slate-*`, and the render call. So a reader
+of the code sees "slate"; a person in front of the projector or admin sees
+"Candidates".
+
 ## Background
 
 Phase-2 projector screen ([rules.html](../../../templates/display/rules.html))
@@ -48,10 +57,11 @@ rewrite it as a full-width Slate screen.
   attendance warning box. Remove the now-unused CSS (`.rules-column`,
   `.article-block`, `.threshold-line`, and the two-column `.rules-layout`
   grid).
-- Keep the candidate slate as the whole screen, full width: the existing
-  heading ("Slate / Candidate List" in round 1, "Remaining Candidates -
-  Round N" in later rounds) and the `.candidate-offices` auto-fit grid of
-  offices with their candidate lists.
+- Keep the candidate slate as the whole screen, full width: the heading reads
+  "Candidates" in round 1 and "Remaining Candidates - Round N" in later rounds,
+  above the `.candidate-offices` auto-fit grid of offices with their candidate
+  lists. (The round-1 heading was "Slate / Candidate List"; it becomes
+  "Candidates".)
 - Keep the participants strip (brothers present / postal / total) as-is.
 - Keep the scale-to-fit scaler, renamed for the new purpose:
   `autoSizeRules` -> `autoSizeSlate`, `--rules-scale` -> `--slate-scale`,
@@ -77,14 +87,14 @@ reads as a standing fact about this election rather than a rule citation.
 ## Part 3: Admin interface wording
 
 - [step_welcome.html](../../../templates/admin/step_welcome.html): block title
-  and `step_tag` "Welcome & Rules" -> "Welcome & Slate"; `step_heading` "Walk
-  the projector through Welcome and Election Rules" -> "Walk the projector
-  through Welcome and the Slate"; intro prose "Welcome and Election Rules" ->
-  "Welcome and the Slate"; `proj_phases` label `(2, "Election Rules")` ->
-  `(2, "Slate")`; button "Next: Election Rules" -> "Next: Slate". The route and
-  template filename (`admin_step_welcome` / `step_welcome.html`) stay.
+  and `step_tag` "Welcome & Rules" -> "Welcome & Candidates"; `step_heading`
+  "Walk the projector through Welcome and Election Rules" -> "Walk the projector
+  through Welcome and Candidates"; intro prose "Welcome and Election Rules" ->
+  "Welcome and Candidates"; `proj_phases` label `(2, "Election Rules")` ->
+  `(2, "Candidates")`; button "Next: Election Rules" -> "Next: Candidates". The
+  route and template filename (`admin_step_welcome` / `step_welcome.html`) stay.
 - [step_attendance.html](../../../templates/admin/step_attendance.html): the
-  two "Next: Welcome & Rules" labels -> "Next: Welcome & Slate".
+  two "Next: Welcome & Rules" labels -> "Next: Welcome & Candidates".
 
 ## Untouched
 
@@ -102,8 +112,8 @@ reads as a standing fact about this election rather than a rule citation.
   nature") or an "Election Rules" heading.
 - Keep a guard that the scaler constants survive the rename (the tuned 0.96 /
   2.4 values, now under `autoSizeSlate`).
-- Add an admin-wording guard: the welcome step renders "Welcome & Slate" and
-  not "Election Rules".
+- Add an admin-wording guard: the welcome step renders "Welcome & Candidates"
+  and not "Election Rules".
 - Run the full suite; check `test_wizard_sidebar.py` and any other test that
   references the rules phase still passes (update wording assertions if they
   assert the old "Rules" label).
