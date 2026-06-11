@@ -252,6 +252,57 @@ class TestVoteSubmission:
 
 
 # ---------------------------------------------------------------------------
+# Election deletion tests
+# ---------------------------------------------------------------------------
+
+class TestElectionDeletion:
+    def test_delete_cascades_checkins_and_provisional(self, election_with_codes):
+        """Deleting an election must cascade ALL child tables. Both
+        attendance_checkins and provisional_ballots have a NOT NULL FK to
+        elections with foreign_keys=ON, so a leftover row in either blocks
+        the delete with a FOREIGN KEY constraint error."""
+        client = election_with_codes
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO members (last_name, first_name) VALUES ('Smit', 'Jan')"
+            )
+            member_id = db.execute(
+                "SELECT id FROM members ORDER BY id DESC LIMIT 1"
+            ).fetchone()["id"]
+            db.execute(
+                "INSERT INTO attendance_checkins (election_id, member_id) "
+                "VALUES (1, ?)", (member_id,)
+            )
+            db.execute(
+                "INSERT INTO provisional_ballots "
+                "(election_id, round_number, code_hash, selections, cast_deadline) "
+                "VALUES (1, 1, 'deadbeefcafe', '[]', datetime('now', 'localtime'))"
+            )
+            db.commit()
+
+        resp = client.post(
+            "/admin/election/1/delete",
+            data={"confirm_name": "Test Election"},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        assert b"deleted" in resp.data
+
+        with app.app_context():
+            db = get_db()
+            assert db.execute(
+                "SELECT COUNT(*) c FROM elections WHERE id = 1"
+            ).fetchone()["c"] == 0
+            assert db.execute(
+                "SELECT COUNT(*) c FROM attendance_checkins WHERE election_id = 1"
+            ).fetchone()["c"] == 0
+            assert db.execute(
+                "SELECT COUNT(*) c FROM provisional_ballots WHERE election_id = 1"
+            ).fetchone()["c"] == 0
+
+
+# ---------------------------------------------------------------------------
 # Anonymity tests
 # ---------------------------------------------------------------------------
 

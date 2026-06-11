@@ -2898,6 +2898,11 @@ def admin_election_delete(election_id):
     )
     db.execute("DELETE FROM offices WHERE election_id = ?", (election_id,))
     db.execute("DELETE FROM round_counts WHERE election_id = ?", (election_id,))
+    # attendance_checkins and provisional_ballots both have a NOT NULL FK to
+    # elections (foreign_keys=ON), so they must be cleared before the election
+    # row or the delete fails. Any new election-scoped table must be added here.
+    db.execute("DELETE FROM attendance_checkins WHERE election_id = ?", (election_id,))
+    db.execute("DELETE FROM provisional_ballots WHERE election_id = ?", (election_id,))
     db.execute("DELETE FROM elections WHERE id = ?", (election_id,))
     db.commit()
 
