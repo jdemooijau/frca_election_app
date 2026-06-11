@@ -63,6 +63,10 @@ class TestProjectorLiveResultsFill:
         # than the cell top-aligns instead of clipping the header off-screen.
         assert "Vertically centre each office" in html
         assert "safe center" in html
+        # The reload guard must be phase/show_results-aware, not "reload on
+        # any phase != 3" (which reset the office rotation every second in
+        # phase 4 so it never advanced to the next office).
+        assert "stillProjector" in html
 
 
 class TestProjectorWelcomePanel:

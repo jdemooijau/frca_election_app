@@ -512,8 +512,16 @@
             var data = JSON.parse(xhr.responseText);
             if (!data.active) return;
 
-            // Phase changed — reload to get the correct template
-            if (data.display_phase && data.display_phase !== 3) {
+            // Reload only when the projector should switch to a DIFFERENT
+            // template. projector.html is the correct template for the voting
+            // phase (3), phase 4 while results are shown on the projector, and
+            // any later phase. Reloading on every non-3 phase (the old guard)
+            // re-ran this script every second in phase 4, resetting the office
+            // rotation to the first office so it never advanced.
+            var phase = data.display_phase || 1;
+            var stillProjector = phase === 3 || phase >= 5 ||
+                                 (phase === 4 && data.show_results);
+            if (!stillProjector) {
                 location.reload();
                 return;
             }
