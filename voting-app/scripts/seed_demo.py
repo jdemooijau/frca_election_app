@@ -161,27 +161,27 @@ def _create_demo_election(conn, candidate_names):
     )
     election_id = cursor.lastrowid
 
-    # Elder office — 3 vacancies, 6 candidates, max_selections = 3
+    # Elder office: 5 vacancies, 10 candidates, max_selections = 5
     cursor = conn.execute(
         "INSERT INTO offices (election_id, name, max_selections, vacancies, sort_order) "
-        "VALUES (?, 'Elder', 3, 3, 1)",
+        "VALUES (?, 'Elder', 5, 5, 1)",
         (election_id,),
     )
     elder_office_id = cursor.lastrowid
-    for i, name in enumerate(candidate_names[:6]):
+    for i, name in enumerate(candidate_names[:10]):
         conn.execute(
             "INSERT INTO candidates (office_id, name, sort_order) VALUES (?, ?, ?)",
             (elder_office_id, name, i + 1),
         )
 
-    # Deacon office — 2 vacancies, 4 candidates, max_selections = 2
+    # Deacon office: 4 vacancies, 8 candidates, max_selections = 4
     cursor = conn.execute(
         "INSERT INTO offices (election_id, name, max_selections, vacancies, sort_order) "
-        "VALUES (?, 'Deacon', 2, 2, 2)",
+        "VALUES (?, 'Deacon', 4, 4, 2)",
         (election_id,),
     )
     deacon_office_id = cursor.lastrowid
-    for i, name in enumerate(candidate_names[6:10]):
+    for i, name in enumerate(candidate_names[10:18]):
         conn.execute(
             "INSERT INTO candidates (office_id, name, sort_order) VALUES (?, ?, ?)",
             (deacon_office_id, name, i + 1),
@@ -304,7 +304,7 @@ def main():
 
     # Generate candidate names
     member_names = _load_member_names(conn, _VOTING_APP_DIR)
-    candidate_names = generate_demo_names(count=10, member_names=member_names)
+    candidate_names = generate_demo_names(count=18, member_names=member_names)
     logger.info(f"  Generated {len(candidate_names)} candidate names")
 
     # Create demo election
@@ -350,7 +350,7 @@ def main():
     if backup_path:
         print(f"  [OK] Backup: {backup_path}")
     print(f"  [OK] Election: {election_name}")
-    print(f"  [OK] Offices: Elder (3 vacancies, 6 candidates), Deacon (2 vacancies, 4 candidates)")
+    print(f"  [OK] Offices: Elder (5 vacancies, 10 candidates), Deacon (4 vacancies, 8 candidates)")
     print(f"  [OK] Admin password reset to: admin")
     print(f"  [OK] Voting codes: {len(codes)}")
     print(f"  [OK] Code slips: {code_slips_path}")
