@@ -18,23 +18,38 @@ OUT = "screenshots"
 VOTING_APP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voting-app")
 DATA_DIR = os.path.join(VOTING_APP_DIR, "data")
 
+# Demo-maximum slate (matches seed_demo.py: Elder 10 candidates / 5
+# vacancies, Deacon 8 / 4). Names follow the invented-surname fallback
+# style so screenshots never show a real family name.
+ELDER_NAMES = [
+    "H. Brouwerhof", "J. Groenevelt", "W. de Kempenaar", "N. ten Heuvel",
+    "G. van Dijkstra", "P. van Rijksen", "S. Veldhoeven", "M. ten Boskamp",
+    "A. Kuiperveld", "T. Zuiderhoek",
+]
+DEACON_NAMES = [
+    "F. Bosveldt", "R. Mulderhoek", "D. van Leeuwenburg", "A. Visserman",
+    "C. Molenaarshof", "R. Duinhoven", "I. Westerhoek", "T. Kortenhoeve",
+]
+
 
 def start_server():
-    """Start the waitress server as a subprocess and wait for it to be ready."""
-    db_path = os.path.join(DATA_DIR, "frca_election.db")
-    backup_path = None
-    if os.path.exists(db_path):
-        backup_path = db_path + ".screenshots_backup"
-        shutil.copy2(db_path, backup_path)
-        os.remove(db_path)
-        secret_key = os.path.join(DATA_DIR, ".secret_key")
-        if os.path.exists(secret_key):
-            os.remove(secret_key)
-        print(f"  Backed up existing database to {os.path.basename(backup_path)}")
+    """Start the waitress server against a scratch db and wait for it.
+
+    The app honors FRCA_DB_PATH, so the real data/frca_election.db is
+    never opened, moved, or deleted; the screenshot run gets its own
+    throwaway database in the system temp directory.
+    """
+    import tempfile
+    scratch_db = os.path.join(
+        tempfile.mkdtemp(prefix="frca_screenshots_"), "screenshots.db")
+    env = os.environ.copy()
+    env["FRCA_DB_PATH"] = scratch_db
+    print(f"  Scratch database: {scratch_db}")
 
     proc = subprocess.Popen(
         [sys.executable, "-m", "waitress", "--host=127.0.0.1", "--port=5000", "app:app"],
         cwd=VOTING_APP_DIR,
+        env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -45,48 +60,33 @@ def start_server():
             s = socket.create_connection(("127.0.0.1", 5000), timeout=1)
             s.close()
             print("  Server is ready.")
-            return proc, backup_path
+            return proc, scratch_db
         except OSError:
             time.sleep(0.5)
     proc.kill()
     raise RuntimeError("Server failed to start within 15 seconds")
 
 
-def stop_server(proc, backup_path):
-    """Stop the server and clean up the screenshot database."""
+def stop_server(proc, scratch_db):
+    """Stop the server and remove the scratch database directory."""
     proc.terminate()
     try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
         proc.kill()
 
-    db_path = os.path.join(DATA_DIR, "frca_election.db")
-    secret_key = os.path.join(DATA_DIR, ".secret_key")
-
     # Windows can hold the DB file briefly after the waitress subprocess
     # exits. Retry a few times before giving up.
-    def _remove(path):
-        for _ in range(10):
-            if not os.path.exists(path):
-                return True
-            try:
-                os.remove(path)
-                return True
-            except PermissionError:
-                time.sleep(0.5)
-        return False
-
-    if not _remove(db_path):
-        print(f"  Warning: could not remove {db_path}; restore manually.")
-    _remove(secret_key)
-
-    if backup_path and os.path.exists(backup_path):
+    scratch_dir = os.path.dirname(scratch_db)
+    for _ in range(10):
         try:
-            shutil.move(backup_path, db_path)
-            print("  Restored original database.")
-        except OSError as exc:
-            print(f"  Warning: could not restore backup ({exc}); "
-                  f"backup is at {backup_path}")
+            shutil.rmtree(scratch_dir)
+            print("  Removed scratch database.")
+            return
+        except (PermissionError, OSError):
+            time.sleep(0.5)
+    print(f"  Warning: could not remove scratch dir {scratch_dir}; "
+          "it is in the system temp and safe to delete manually.")
 
 
 def shot(page, name, mobile=False):
@@ -107,15 +107,15 @@ def add_candidate_tag(page, name):
 
 def main():
     print("Starting server...")
-    proc, backup_path = start_server()
+    proc, scratch_db = start_server()
     try:
-        _capture_all()
+        _capture_all(scratch_db)
     finally:
         print("\nStopping server...")
-        stop_server(proc, backup_path)
+        stop_server(proc, scratch_db)
 
 
-def _capture_all():
+def _capture_all(scratch_db):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         ctx = browser.new_context()
@@ -185,21 +185,22 @@ def _capture_all():
         page.wait_for_load_state("networkidle")
         shot(page, "07_election_setup_empty")
 
-        # --- 08: Add Elder office mid-fill
+        # --- 08: Add Elder office mid-fill (demo maximum: 10 candidates,
+        # 5 vacancies; names follow the fallback-list style)
         print("08. Add Elder office")
         page.fill('#office_name', 'Elder')
-        page.fill('#vacancies', '2')
-        for name in ['H. de Vries', 'J. van der Berg',
-                     'P. Kloosterman', 'W. Hoekstra']:
+        page.fill('#vacancies', '5')
+        for name in ELDER_NAMES:
             add_candidate_tag(page, name)
         shot(page, "08_add_elder_office")
         page.click('#add-office-form button[type="submit"]')
         page.wait_for_load_state("networkidle")
 
-        # --- Add Deacon office, then capture both offices saved
+        # --- Add Deacon office (8 candidates, 4 vacancies), then capture
+        # both offices saved
         page.fill('#office_name', 'Deacon')
-        page.fill('#vacancies', '1')
-        for name in ['R. Dijkstra', 'A. Visser']:
+        page.fill('#vacancies', '4')
+        for name in DEACON_NAMES:
             add_candidate_tag(page, name)
         page.click('#add-office-form button[type="submit"]')
         page.wait_for_load_state("networkidle")
@@ -217,7 +218,7 @@ def _capture_all():
         # codes do not leak into the admin UI). Read them directly from
         # the SQLite db (the screenshot run is against a throwaway DB).
         import sqlite3
-        db_path = os.path.join(DATA_DIR, "frca_election.db")
+        db_path = scratch_db
         with sqlite3.connect(db_path) as conn:
             rows = conn.execute(
                 "SELECT plaintext FROM codes WHERE election_id = ? "
@@ -275,10 +276,12 @@ def _capture_all():
             cbs = voter.locator('input[type="checkbox"]')
             n = cbs.count()
             print(f"   {n} checkboxes on ballot")
-            if n >= 5:
-                cbs.nth(0).check()
-                cbs.nth(1).check()
-                cbs.nth(4).check()
+            if n >= 18:
+                # 5 elders (of the first 10) + 4 deacons (of the last 8)
+                for e in (0, 1, 4, 6, 8):
+                    cbs.nth(e).check()
+                for d in (10, 11, 14, 16):
+                    cbs.nth(d).check()
             print("16. Voter (ballot selected)")
             shot(voter, "16_voter_ballot_selected", mobile=True)
 
@@ -305,10 +308,12 @@ def _capture_all():
                 vp.wait_for_load_state("networkidle")
                 cbs = vp.locator('input[type="checkbox"]')
                 n = cbs.count()
-                if n >= 5:
-                    for e in random.sample(range(4), 2):
+                if n >= 18:
+                    # Random full selections: 5 of 10 elders, 4 of 8 deacons
+                    for e in random.sample(range(10), 5):
                         cbs.nth(e).check()
-                    cbs.nth(random.choice([4, 5])).check()
+                    for d in random.sample(range(10, 18), 4):
+                        cbs.nth(d).check()
                     vp.click('button[type="submit"]')
                     vp.wait_for_load_state("networkidle")
                     cast += 1
@@ -354,8 +359,55 @@ def _capture_all():
         page.wait_for_load_state("networkidle")
         shot(page, "22_dashboard_with_election")
 
+        # --- 23/24: Sample PDFs (code slips + paper ballot) downloaded
+        # through the admin session, saved alongside PNG rasters of page 1
+        # and a single-card crop for the docs.
+        print("23. Code slips PDF + rasters")
+        _save_pdf_with_rasters(
+            page, f"{BASE}/admin/election/{eid}/codes/pdf",
+            "code_slips", "23_code_slips", single_h_mm=90)
+        print("24. Paper ballot PDF + rasters")
+        _save_pdf_with_rasters(
+            page, f"{BASE}/admin/election/{eid}/paper-ballot-pdf/1",
+            "paper_ballot", "24_paper_ballot", single_h_mm=91)
+
         browser.close()
         print("\nAll screenshots captured!")
+
+
+def _save_pdf_with_rasters(page, url, pdf_name, png_name, single_h_mm):
+    """Download a PDF via the admin session; write it plus two PNGs.
+
+    Writes <pdf_name>.pdf, <png_name>.png (full page 1) and
+    <png_name>_single.png (top-left card crop, single_h_mm tall) into OUT.
+    """
+    import fitz  # PyMuPDF
+
+    resp = page.context.request.get(url)
+    if resp.status != 200:
+        print(f"  !! {url} returned {resp.status}, skipping")
+        return
+    pdf_path = os.path.join(OUT, f"{pdf_name}.pdf")
+    with open(pdf_path, "wb") as f:
+        f.write(resp.body())
+    print(f"  -> {pdf_name}.pdf")
+
+    doc = fitz.open(pdf_path)
+    page1 = doc[0]
+    page1.get_pixmap(dpi=110).save(os.path.join(OUT, f"{png_name}.png"))
+    print(f"  -> {png_name}.png")
+
+    # Top-left card: 8mm page margin, one column wide (half the usable
+    # width), single_h_mm tall. 1mm = 72/25.4 pt.
+    mm = 72 / 25.4
+    margin = 8 * mm
+    card_w = (page1.rect.width - 2 * margin - 6 * mm) / 2
+    clip = fitz.Rect(margin, margin, margin + card_w,
+                     margin + single_h_mm * mm)
+    page1.get_pixmap(dpi=150, clip=clip).save(
+        os.path.join(OUT, f"{png_name}_single.png"))
+    print(f"  -> {png_name}_single.png")
+    doc.close()
 
 
 if __name__ == "__main__":
