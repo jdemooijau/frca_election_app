@@ -121,3 +121,28 @@ class TestSlateScreen:
         assert "autoSizeSlate" in html
         assert "* 0.96)" in html
         assert "hScale, 2.4)" in html
+
+    def test_slate_two_col_list_and_shrink_floor(self, admin_client):
+        # A 10-candidate office flows its name list into two columns and
+        # the scaler may shrink below 1 so the slate always fits a beamer.
+        admin_client.post("/admin/election/new", data={
+            "name": "Slate Fit", "max_rounds": "2",
+        })
+        admin_client.post("/admin/election/1/setup", data={
+            "office_name": "Elder",
+            "vacancies": "5",
+            "max_selections": "5",
+            "candidate_names": "\n".join(
+                f"Candidate {i}" for i in range(1, 11)),
+            "confirm_slate_override": "1",
+        })
+        _set_phase(1, display_phase=2)
+        resp = admin_client.get("/display")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        # Two-column list kicks in at 6+ candidates.
+        assert 'candidate-list two-col' in html
+        assert "column-count: 2" in html
+        # Shrink floor replaced the old grow-only clamp.
+        assert "Math.max(0.6, scale)" in html
+        assert "Math.max(1, scale)" not in html

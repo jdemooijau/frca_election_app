@@ -83,9 +83,17 @@
         padding: calc(12px * var(--slate-scale)) calc(16px * var(--slate-scale));
         border-bottom: 1px solid var(--grey);
         color: var(--navy);
+        break-inside: avoid;
     }
     .candidate-list li:last-child {
         border-bottom: none;
+    }
+    /* Long slates (6+ names) flow into two columns so ten names become
+       five rows and the text stays readable from the back of the church.
+       Same idea as the projector's two-col treatment. */
+    .candidate-list.two-col {
+        column-count: 2;
+        column-gap: calc(48px * var(--slate-scale));
     }
 </style>
 {% endblock %}
@@ -142,7 +150,7 @@
                 {% endif %}
             </h3>
             {% if item.candidates %}
-            <ul class="candidate-list">
+            <ul class="candidate-list{% if item.candidates|length >= 6 %} two-col{% endif %}">
                 {% for cand in item.candidates %}
                 <li>Br. {{ cand.name }}</li>
                 {% endfor %}
@@ -214,7 +222,11 @@
             var vScale = (available * 0.96) / natural;
             var hScale = maxScaleForNoWrap(layout) * 0.98;
             var scale = Math.min(vScale, hScale, 2.4);
-            scale = Math.max(1, scale);
+            // Shrink floor: a slate that cannot fit at scale 1 must shrink
+            // to fit the beamer (nobody scrolls a projector). 0.6 keeps the
+            // text readable; the page-scroll override below stays as a last
+            // resort for pathological cases.
+            scale = Math.max(0.6, scale);
             root.style.setProperty('--slate-scale', scale.toFixed(3));
         });
     }
