@@ -34,6 +34,10 @@ FALLBACK_ELDER_CANDIDATES = [
     "Neil ten Heuvel",
     "Gary van Dijkstra",
     "Peter van Rijksen",
+    "Scott Veldhoeven",
+    "Mark ten Boskamp",
+    "Adrian Kuiperveld",
+    "Tony Zuiderhoek",
 ]
 
 FALLBACK_DEACON_CANDIDATES = [
@@ -41,11 +45,15 @@ FALLBACK_DEACON_CANDIDATES = [
     "Ryan Mulderhoek",
     "Derek van Leeuwenburg",
     "Andrew Visserman",
+    "Chris Molenaarshof",
+    "Rob Duinhoven",
+    "Isaac Westerhoek",
+    "Tom Kortenhoeve",
 ]
 
 # Real Dutch surnames — common and recognisable.  The pool is large enough
 # that even after excluding members already in the database we can still
-# pick 8+ unique candidates.
+# pick 18+ unique candidates.
 DUTCH_SURNAMES = [
     "Bakker", "Bos", "Bosman", "Bouwman", "Brouwer", "Derksen",
     "Dekker", "Dijkstra", "Evers", "Groen", "Groenendijk",
