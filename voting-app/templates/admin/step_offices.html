@@ -10,7 +10,7 @@
     <form method="POST" action="{{ url_for('admin_load_sample_offices', election_id=sidebar_state.election.id) }}" style="margin-top: 8px;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <p style="font-size: 13px; color: #666; margin-bottom: 6px;">
-            Pre-fills <strong>Elder</strong> (3 vacancies, 6 candidates) and <strong>Deacon</strong> (2 vacancies, 4 candidates) with names from the sample pool. Useful for dry runs and demos.
+            Pre-fills <strong>Elder</strong> (5 vacancies, 10 candidates) and <strong>Deacon</strong> (4 vacancies, 8 candidates) with names from the sample pool. Useful for dry runs and demos.
         </p>
         <button type="submit" class="btn btn-outline btn-small">Load sample candidates</button>
     </form>
