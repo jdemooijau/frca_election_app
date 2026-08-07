@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Demo election now seeds the supported maximum slate: 10 elder
+  candidates (5 vacancies) and 8 deacon candidates (4 vacancies), in
+  both `seed_demo.py` and the admin "Load sample candidates" helper.
+- `scripts/check_display_fit.py`: automated projector-fit check
+  (Playwright) for the demo maximum at 1920x1080 and 1280x720.
+- Ballot layout test scenario for 10+8 candidates.
+- `app.py` now honours the `FRCA_DB_PATH` environment variable
+  (already the documented override for `seed_demo.py`), so scripts
+  and test harnesses can redirect the database before importing the
+  app.
+
+### Fixed
+
+- Candidates slate screen clipped long slates on the projector: name
+  lists now flow into two columns at 6+ names and the auto-scaler can
+  shrink below 1 (floor 0.6).
+- Projector results screen clipped the bottom rows on 720p beamers
+  with large slates: scale floor lowered to 0.45 and available height
+  clamped to the visible viewport.
+- Closed-results projector screen still clipped its bottom rows
+  because the offices grid overhung the visible area below the runoff
+  banner. The grid is now clamped by the flex layout so it cannot
+  extend past the screen.
+- Round-2 instructions panel (the Option A / Option B cards plus the
+  valid-names box) had no auto-scaler at all and overflowed 720p
+  beamers. It now shrinks to fit like the other display panels.
+- Ballot page-fit height model in `pdf_generators.py`. 10-candidate
+  slates dropped to 4 ballots per A4 even with short names, and the
+  cost of the extra round-2 warning slot was unaccounted for. Six
+  ballots per A4 now holds for both rounds, up to 13 candidates in
+  round 1 and 12 in round 2.
+
 ### Removed
 
 - `7_wifi_handout.pdf` (the 10-copy WiFi-join sheet) is no longer
