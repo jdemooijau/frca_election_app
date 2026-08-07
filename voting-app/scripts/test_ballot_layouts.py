@@ -31,7 +31,7 @@ def _office(name, max_selections, candidate_names):
     }
 
 
-# Realistic range: 1-2 offices, max 8 candidates per office.
+# Realistic range: 1-2 offices, max 10 candidates per office.
 # Each tuple: (filename_tag, human_label, office_data)
 SCENARIOS = [
     # Each scenario includes the long worst-case name "Pieter van der Berg"
@@ -89,6 +89,16 @@ SCENARIOS = [
                                 + [f"Elder {n}" for n in "ABCDEFG"]),
             _office("Deacon", 4, ["Pieter van der Berg"]
                                  + [f"Deacon {n}" for n in "ABCDEFG"]),
+        ],
+    ),
+    (
+        "08_2offices_10plus8",
+        "2 offices, 10 + 8 (new maximum)",
+        [
+            _office("Elder", 5, ["Pieter van der Berg"]
+                                + [f"Elder Candidate {n}" for n in "ABCDEFGHI"]),
+            _office("Deacon", 4, ["Pieter van der Berg"]
+                                 + [f"Deacon Candidate {n}" for n in "ABCDEFG"]),
         ],
     ),
 ]
