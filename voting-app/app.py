@@ -55,7 +55,13 @@ from election_rules import (
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-DB_PATH = os.path.join(DATA_DIR, "frca_election.db")
+# FRCA_DB_PATH redirects the whole app at a scratch database. It must be
+# honoured here, at import time, because init_db()/migrate_db() run at
+# module scope (bottom of this file): a caller that only reassigns
+# app_module.DB_PATH after importing has already touched the real db.
+# Same override name as scripts/seed_demo.py and scripts/reset_app.py.
+DB_PATH = os.environ.get("FRCA_DB_PATH") or os.path.join(
+    DATA_DIR, "frca_election.db")
 
 # Force production mode — no dev server, no debug
 os.environ.pop("FLASK_ENV", None)

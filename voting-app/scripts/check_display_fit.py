@@ -1,11 +1,18 @@
 """Screenshot-and-assert harness for the projector display screens.
 
 Seeds a scratch db with the demo maximum (10 elder / 8 deacon candidates),
-serves the app on port 5001 with a monkeypatched DB_PATH (the real
-data/frca_election.db is never touched), then drives Playwright through
-the display states at 1920x1080 and 1280x720. Each state must fit its
-viewport: no page overflow, no clipped candidate rows, and no content
-panel hanging below the fold.
+serves the app on port 5001, then drives Playwright through the display
+states at 1920x1080 and 1280x720. Each state must fit its viewport: no
+page overflow, no clipped candidate rows, no content panel hanging below
+the fold, and no panel clipping content inside its own box.
+
+The real data/frca_election.db is never touched. app.py runs
+init_db()/migrate_db() at module scope, so reassigning app_module.DB_PATH
+after the import would already be too late. This script therefore sets
+FRCA_DB_PATH (the same override scripts/seed_demo.py and
+scripts/reset_app.py use) BEFORE importing app, and reassigns
+app_module.DB_PATH afterwards as belt and braces. That is why the app
+imports sit below the path constants rather than at the top of the file.
 
 Usage:
     cd voting-app
@@ -14,8 +21,8 @@ Usage:
 The port must be free. Stop any running dev server first, or point the
 harness elsewhere with FIT_CHECK_PORT=5057.
 
-Exit code 0 = all states fit. Screenshots are written to
-display_fit_output/ for eyeballing either way.
+Exit codes: 0 = all states fit, 1 = a state does not fit, 2 = port busy.
+Screenshots are written to display_fit_output/ for eyeballing either way.
 """
 
 import os
@@ -31,15 +38,20 @@ _VOTING_APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _VOTING_APP_DIR not in sys.path:
     sys.path.insert(0, _VOTING_APP_DIR)
 
-import app as app_module
-from app import app, _init_db_on, _migrate_db_on
-from demo_names import generate_demo_names
-
 PORT = int(os.environ.get("FIT_CHECK_PORT", "5001"))
 BASE = f"http://127.0.0.1:{PORT}"
 OUT = os.path.join(_VOTING_APP_DIR, "display_fit_output")
 DB = os.path.join(OUT, "fit_check.db")
 VIEWPORTS = [(1920, 1080), (1280, 720)]
+
+# Point the app at the scratch db before importing it. The directory has
+# to exist first: the import-time init_db() creates the file there.
+os.makedirs(OUT, exist_ok=True)
+os.environ["FRCA_DB_PATH"] = DB
+
+import app as app_module  # noqa: E402  (must follow FRCA_DB_PATH)
+from app import app, _init_db_on, _migrate_db_on  # noqa: E402
+from demo_names import generate_demo_names  # noqa: E402
 
 
 def require_free_port():
@@ -63,8 +75,11 @@ def require_free_port():
 
 def seed():
     os.makedirs(OUT, exist_ok=True)
-    if os.path.exists(DB):
-        os.remove(DB)
+    # Drop the file the import-time init_db() created, plus its WAL
+    # sidecars: a stale -wal against a fresh db reads as corruption.
+    for path in (DB, DB + "-wal", DB + "-shm"):
+        if os.path.exists(path):
+            os.remove(path)
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
     _init_db_on(conn)
@@ -168,11 +183,19 @@ STATES = [
         current_round=2, voting_open=1, show_results=0, display_phase=3)), 3),
 ]
 
-# Panels that hold the variable-length content. A panel whose box ends
-# below the fold is clipped: the display screens set overflow:hidden, so
-# scrollHeight alone never reports it (it stays pinned at the viewport
-# height) and a row-level check misses screens that render names as prose
-# rather than as .display-candidate rows.
+# Panels that hold the variable-length content. Each is checked two ways.
+#
+# 1. Overhang: the panel box ends below the fold. Page scrollHeight never
+#    reports this (the display screens set overflow:hidden, so it stays
+#    pinned at the viewport height), and a row-level check misses screens
+#    that render names as prose rather than .display-candidate rows.
+# 2. Inner clipping: the panel box stays on screen but eats its own
+#    content, because .display-office and .display-results carry
+#    overflow:hidden and the offices grid is clamped to its container.
+#    Reachable whenever the 0.45 scale floor binds and the shrunk content
+#    still does not fit, which is exactly the 10+8 worst case. Nothing
+#    hangs below the fold in that situation, so only scrollHeight vs
+#    clientHeight inside the panel catches it.
 PANEL_SELECTORS = (".display-offices, .display-office, .display-instructions,"
                    " .office-candidates, .candidate-list, .display-results")
 
@@ -192,18 +215,22 @@ OVERFLOW_JS = """
         }
     });
     let overhang = [];
+    let innerClip = [];
     document.querySelectorAll(panelSelectors).forEach(el => {
         if (el.offsetParent === null) return;  // hidden (rotated out)
         const r = el.getBoundingClientRect();
         if (r.height === 0) return;
+        const cls = (el.className || 'panel').toString().slice(0, 30);
         const over = Math.round(r.bottom - window.innerHeight);
         if (over > tolerance) {
-            overhang.push(
-                (el.className || 'panel').toString().slice(0, 30)
-                + ' +' + over + 'px');
+            overhang.push(cls + ' +' + over + 'px');
+        }
+        const inner = el.scrollHeight - el.clientHeight;
+        if (inner > tolerance) {
+            innerClip.push(cls + ' +' + inner + 'px');
         }
     });
-    return {pageOverflow, clipped, overhang};
+    return {pageOverflow, clipped, overhang, innerClip};
 }
 """
 
@@ -236,11 +263,13 @@ def main():
                 result = page.evaluate(OVERFLOW_JS, PANEL_SELECTORS)
                 ok = (result["pageOverflow"] <= 2
                       and not result["clipped"]
-                      and not result["overhang"])
+                      and not result["overhang"]
+                      and not result["innerClip"])
                 print(f"  {'OK  ' if ok else 'FAIL'} {name} at "
                       f"{width}x{height}  overflow={result['pageOverflow']}"
                       f" clipped={result['clipped']}"
-                      f" overhang={result['overhang']}")
+                      f" overhang={result['overhang']}"
+                      f" inner_clip={result['innerClip']}")
                 if not ok:
                     failures.append(f"{name} at {width}x{height}")
             page.close()
