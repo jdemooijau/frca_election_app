@@ -749,6 +749,9 @@
                     lastResultsHtml = '';
                 }
             }
+            // The poll both toggles the instructions panel and rewrites its
+            // valid-names box, so re-fit after every update.
+            fitInstructions();
         };
         xhr.send();
     }
@@ -898,6 +901,51 @@
         }
     }
 
+    // The round-2 instructions panel (Option A/B cards plus the valid-names
+    // box) is fixed-size type on a fixed layout, so on a 720p beamer it ran
+    // ~694px past the fold with nothing to shrink it. Scale-to-fit, but
+    // SHRINK ONLY (cap 1.0) so 1080p renders exactly as it always has.
+    function fitInstructions() {
+        var panel = document.getElementById('instructions-panel');
+        var main = document.querySelector('.display-main');
+        if (!panel || !main) return;
+        if (window.innerWidth <= 720) {
+            panel.style.zoom = '1';
+            return;
+        }
+        // Measure natural size, then apply, in ONE synchronous turn (same
+        // reasoning as autoSizeOffices: splitting this across animation
+        // frames paints the unscaled panel for a frame on every poll).
+        panel.style.zoom = '1';
+        if (panel.offsetParent === null) return;   // hidden this poll
+        // Space from the panel's top to the bottom of the main area. The
+        // panel's top is set by the fixed-size summary strip above it, so
+        // this is stable and does not depend on the panel's own height.
+        var available = main.getBoundingClientRect().bottom -
+                        panel.getBoundingClientRect().top;
+        var natural = panel.getBoundingClientRect().height;
+        if (natural < 1 || available < 1) return;
+        // CSS zoom RE-FLOWS text: at a smaller zoom the panel gets a wider
+        // effective layout width, so its wrapped height falls by more than
+        // the zoom factor. A single proportional pass therefore badly
+        // over-shrinks (it rendered at ~55% of the space it was given, tiny
+        // on a beamer). Guess, measure, then grow back into the slack.
+        var best = Math.min(1, available / natural);
+        var scale = best;
+        for (var i = 0; i < 4; i++) {
+            panel.style.zoom = scale.toFixed(3);
+            var h = panel.getBoundingClientRect().height;
+            if (h > available) {                 // overshot, pull back in
+                scale = scale * (available * 0.99) / h;
+                continue;
+            }
+            best = scale;                        // known to fit
+            if (scale >= 1 || h > available * 0.97) break;
+            scale = Math.min(1, scale * (available * 0.99) / h);
+        }
+        panel.style.zoom = best.toFixed(3);
+    }
+
     // Re-run after every results re-render (debounced)
     (function() {
         var resultsContainer = document.getElementById('results-container');
@@ -918,13 +966,17 @@
     function initDisplay() {
         applyRotation();
         autoSizeOffices();
+        fitInstructions();
     }
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initDisplay);
     } else {
         initDisplay();
     }
-    window.addEventListener('resize', autoSizeOffices);
+    window.addEventListener('resize', function() {
+        autoSizeOffices();
+        fitInstructions();
+    });
 
     setInterval(update, 1000);
 })();
