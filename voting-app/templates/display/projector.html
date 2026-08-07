@@ -838,8 +838,9 @@
         var cap = (grid && grid.classList.contains('rotating')) ? 3.4 : 2.2;
 
         function availableHeight() {
-            // Clamp to the visible viewport: on short beamers the container
-            // reports more height than is on screen (Total row clipped off).
+            // Clamp to what is actually visible: on short beamers the
+            // container can report more height than the viewport shows,
+            // which left the Total row clipped off the bottom.
             var rcTop = resultsContainer.getBoundingClientRect().top;
             var available = Math.min(
                 resultsContainer.clientHeight,

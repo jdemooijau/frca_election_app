@@ -79,7 +79,7 @@ class TestProjectorLiveResultsFill:
         assert "Math.max(0.6," not in html
         # Available height is clamped to the visible viewport, not just
         # the container's clientHeight.
-        assert "window.innerHeight" in html.split("function availableHeight")[1][:400]
+        assert "window.innerHeight - rcTop" in html
 
 
 class TestProjectorWelcomePanel:
