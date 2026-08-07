@@ -838,9 +838,14 @@
         var cap = (grid && grid.classList.contains('rotating')) ? 3.4 : 2.2;
 
         function availableHeight() {
-            // Results container minus any non-grid child (e.g. the runoff
-            // banner) above the offices grid.
-            var available = resultsContainer.clientHeight;
+            // Clamp to the visible viewport: on short beamers the container
+            // reports more height than is on screen (Total row clipped off).
+            var rcTop = resultsContainer.getBoundingClientRect().top;
+            var available = Math.min(
+                resultsContainer.clientHeight,
+                window.innerHeight - rcTop - 8);
+            // Then subtract any non-grid child (e.g. the runoff banner)
+            // sharing the container with the offices grid.
             var rcChildren = resultsContainer.children;
             for (var k = 0; k < rcChildren.length; k++) {
                 if (!rcChildren[k].classList.contains('display-offices')) {
@@ -873,7 +878,11 @@
         var available = availableHeight();
         var natural = tallestOffice();           // height at scale 1 (no wrap)
         if (natural < 1 || available < 1) return;
-        var scale = Math.max(0.6, Math.min(cap, (available * 0.95) / natural));
+        // Floor 0.45: the fixed-size summary strip takes its share first, so
+        // the floor must still clear a 10-candidate office plus the
+        // Blank/Spoilt/Total rows on a 720p beamer. At 0.6 the Total row
+        // clipped off the bottom.
+        var scale = Math.max(0.45, Math.min(cap, (available * 0.95) / natural));
         root.style.setProperty('--proj-scale', scale.toFixed(3));
         // Wrap-aware correction: at the applied scale long names may wrap and
         // make the office taller than predicted. Re-measure (still in this
@@ -881,7 +890,9 @@
         // clips off the bottom.
         var actual = tallestOffice();            // height at `scale` (wrapped)
         if (actual > available) {
-            scale = Math.max(0.6, scale * (available * 0.95) / actual);
+            // Same 0.45 floor: a 10-candidate office with wrapped names plus
+            // the Blank/Spoilt/Total rows must still fit a 720p beamer.
+            scale = Math.max(0.45, scale * (available * 0.95) / actual);
             root.style.setProperty('--proj-scale', scale.toFixed(3));
         }
     }

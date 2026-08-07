@@ -68,6 +68,19 @@ class TestProjectorLiveResultsFill:
         # phase 4 so it never advanced to the next office).
         assert "stillProjector" in html
 
+    def test_scaler_floor_and_viewport_clamp(self, election_with_codes):
+        client = election_with_codes
+        _set_phase(1, display_phase=3)
+        resp = client.get("/display")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        # Floor lowered so a 10-candidate office + summary strip fits 720p.
+        assert "Math.max(0.45," in html
+        assert "Math.max(0.6," not in html
+        # Available height is clamped to the visible viewport, not just
+        # the container's clientHeight.
+        assert "window.innerHeight" in html.split("function availableHeight")[1][:400]
+
 
 class TestProjectorWelcomePanel:
     def test_prevote_panel_enlarged(self, election_with_codes):
