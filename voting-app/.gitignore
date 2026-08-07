@@ -42,3 +42,6 @@ docs/how_to_vote_card_*.pdf
 # Seed script output
 backups/
 logs/
+
+# Throwaway output of scripts/check_display_fit.py (screenshots + scratch db)
+display_fit_output/
