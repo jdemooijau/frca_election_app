@@ -595,11 +595,15 @@ def generate_paper_ballot_pdf(election_name, round_number, office_data,
                 text_caps.append((sub_w_mm - 5) / (name_w_mm + 3))
     text_fit_cap = min(text_caps)
 
-    # Page-fit cap (target 6 ballots per A4 — 3 rows of 2 cols, ballot_h<=91mm)
-    # ballot_h ≈ 14 + scale*(6.85 + 5*max_cands_in_office)
-    # 14 + scale*(...)  <= 91  →  scale <= 77 / (6.85 + 5*max_cands)
+    # Page-fit cap (target 6 ballots per A4, 3 rows of 2 cols, ballot_h<=91mm).
+    # Tile height splits into a fixed part and a part that scales with the font:
+    #   header  = 5 (top inset) + (1.85*scale + 3) gap + 5 (EXTRA_ABOVE_BODY_MM)
+    #   body    = 5*n*scale + 4 (tail_mm), for n = max_cands_in_office
+    #   padding = 6
+    # so ballot_h = 23 + scale*(1.85 + 5*n).
+    # Solving 23 + scale*(1.85 + 5*n) <= 91 gives the cap below.
     if max_cands_in_office > 0:
-        page_fit_cap = 77 / (6.85 + 5 * max_cands_in_office)
+        page_fit_cap = 68 / (1.85 + 5 * max_cands_in_office)
     else:
         page_fit_cap = 99.0
 
