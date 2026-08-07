@@ -63,6 +63,13 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.environ.get("FRCA_DB_PATH") or os.path.join(
     DATA_DIR, "frca_election.db")
 
+# Announce the resolved database at import time. Module scope means this
+# prints exactly once under both `python app.py` and `python -m waitress
+# app:app`. Without it, a leftover FRCA_DB_PATH in the shell would silently
+# point the live app at a scratch database on election night.
+print("Database: " + DB_PATH + (" (FRCA_DB_PATH override)"
+                                if os.environ.get("FRCA_DB_PATH") else ""))
+
 # Force production mode — no dev server, no debug
 os.environ.pop("FLASK_ENV", None)
 os.environ.pop("FLASK_DEBUG", None)
