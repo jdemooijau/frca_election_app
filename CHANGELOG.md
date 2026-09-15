@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Voter handout (`7_voter_handout.pdf` / `docs/how_to_vote_card.pdf`)
+  printed as three pages: the front page overflowed A4 by about 9 mm,
+  so the "More information?" QR footer landed on a page of its own.
+  Vertical spacing on the front page is trimmed and the handout is
+  back to two sides, QR footer included on page one. A regression test
+  now asserts the committed PDF is two pages with the QR on page one.
 - Candidates slate screen clipped long slates on the projector: name
   lists now flow into two columns at 6+ names and the auto-scaler can
   shrink below 1 (floor 0.6).

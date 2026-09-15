@@ -780,3 +780,38 @@ def test_dual_sided_ballots_threads_qr_base_url(monkeypatch):
     assert voting_qrs, "no voting QRs captured"
     assert all(u.startswith("http://192.168.8.100/") for u in voting_qrs), voting_qrs
 
+
+
+def test_voter_handout_is_two_pages_with_qr_on_page_one():
+    """Regression: the committed voter handout must be exactly two A4
+    sides, front = how-to-vote (including the "More information?" QR
+    footer) and back = the FAQ.
+
+    The front page used to overflow by a few millimetres, which pushed
+    the QR footer onto a page of its own and turned the duplex handout
+    into a three-page print job. Re-render after editing the HTML:
+
+        python scripts/render_pdf.py \
+            docs/how_to_vote_card.html docs/how_to_vote_card.pdf
+    """
+    from PyPDF2 import PdfReader
+
+    docs_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs")
+    pdf_path = os.path.join(docs_dir, "how_to_vote_card.pdf")
+    assert os.path.isfile(pdf_path), f"handout not checked in: {pdf_path}"
+
+    reader = PdfReader(pdf_path)
+    assert len(reader.pages) == 2, (
+        f"handout is {len(reader.pages)} pages, expected 2 - the front page "
+        "has overflowed; trim the spacing in docs/how_to_vote_card.html and "
+        "re-render"
+    )
+
+    front = reader.pages[0].extract_text()
+    assert "How to Vote" in front
+    assert "More information?" in front, (
+        "the QR footer has moved off the front page"
+    )
+    back = reader.pages[1].extract_text()
+    assert "frequently asked" in back
