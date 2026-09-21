@@ -1635,6 +1635,447 @@ def generate_av_instructions_pdf(election_name, wifi_ssid, wifi_password,
     return buf
 
 
+# ---------------------------------------------------------------------------
+# Voter handout (7_voter_handout.pdf): A4 duplex, one per voter
+# ---------------------------------------------------------------------------
+
+# Target of the "More information?" QR in the front-page footer.
+_HANDOUT_INFO_URL = (
+    "https://github.com/jdemooijau/frca_election_app"
+    "/blob/main/voting-app/docs/FAQ.pdf"
+)
+
+# Illustrative only. Every voter gets the same handout, so a real code
+# printed here would be a code the whole congregation could use.
+_HANDOUT_SAMPLE_CODE = "K7MQ4X"
+
+_HANDOUT_CREAM = HexColor("#FFF8E1")
+_HANDOUT_CREAM_EDGE = HexColor("#FFD980")
+_HANDOUT_CREAM_TEXT = HexColor("#5A3000")
+_HANDOUT_MINT = HexColor("#F4FAF6")
+_HANDOUT_MINT_EDGE = HexColor("#B8E0C8")
+_HANDOUT_PANEL = HexColor("#F7F9FB")
+_HANDOUT_RULE = HexColor("#D4D4D4")
+_HANDOUT_GREY = HexColor("#6C757D")
+_HANDOUT_BODY = HexColor("#333333")
+
+_HANDOUT_REMINDER = (
+    "Reminder: bring your phone, and switch it to silent before the "
+    "worship service."
+)
+
+_HANDOUT_PREAMBLE = [
+    "Sign the attendance register when you arrive.",
+    "Wait for the chairman to open the meeting.",
+    "You'll be handed a single card. One side is a paper ballot; the "
+    "other side is a slip with a six-character code and a QR code for "
+    "voting on your phone.",
+]
+
+_HANDOUT_PICK_ONE = (
+    "You vote one way only - paper or phone, whichever you prefer. If "
+    "anything goes wrong with your phone, just use the paper ballot "
+    "instead."
+)
+
+_HANDOUT_FAQ_INTRO = (
+    "Phone voting is new. Below are the safeguards that make sure no "
+    "brother can vote twice, no vote is lost, and the count always "
+    "reconciles. Voting on paper continues to work exactly as before; "
+    "phone voting is opt-in."
+)
+
+_HANDOUT_FAQ = [
+    ("Can a code be used more than once?",
+     "Once you vote on your phone, that code is marked as used. Trying "
+     "to use it again shows “this code has already been used.” "
+     "Guessing a valid code is also mathematically nearly impossible: "
+     "only the codes pre-generated for this meeting are accepted, out "
+     "of close to a billion possible six-character codes."),
+    ("What if someone votes on both phone and paper?",
+     "This risk has always been there on paper: someone could fill in "
+     "two ballots, and the number of ballots would then exceed the "
+     "number of brothers signed in at the register. If the count does "
+     "not match, the chairman decides how to handle it. He can scan "
+     "every paper ballot against the record of votes already cast on "
+     "phones and set aside any whose code was used twice; or declare "
+     "the round void and have everyone vote again; or, where a single "
+     "extra ballot cannot change the outcome, record it and let the "
+     "result stand."),
+    ("Is my vote anonymous?",
+     "Only the code and the choice are recorded - never who the code was "
+     "given to. Codes are randomly printed and handed out, so no vote "
+     "can be traced back to a specific brother."),
+    ("What if the WiFi or the system fails?",
+     "The WiFi for this election is a small local router set up just for "
+     "the meeting; it has nothing to do with the internet or home "
+     "broadband. It runs off a single power point and is very unlikely "
+     "to fail. Even if it does, paper voting is always available and the "
+     "chairman can switch to paper-only at any time, so the meeting "
+     "continues without disruption."),
+    ("What if my phone won't connect to the WiFi?",
+     "Use the paper side of your card. Paper and phone votes are counted "
+     "together; either way works."),
+    ("What if we need a second round?",
+     "If no candidate is elected, the council calls a second round. "
+     "You'll be given a new card with a new code; the previous code no "
+     "longer works. Vote the same way as before."),
+]
+
+_HANDOUT_FAQ_FOOTER = (
+    "<b>Still have a question?</b> Speak to your office bearers and/or "
+    "scan the QR on the front of this sheet."
+)
+
+
+def _hd_escape(text):
+    """Escape a value that is interpolated into Paragraph markup."""
+    return (str(text).replace("&", "&amp;")
+            .replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def _hd_select_hint(office_data):
+    """Per-office selection limits, e.g. "Elder: up to 5; Deacon: up to 4"."""
+    parts = []
+    for item in office_data:
+        office = item["office"]
+        parts.append("%s: up to %s" % (_hd_escape(office["name"]),
+                                       office["max_selections"]))
+    return "; ".join(parts)
+
+
+def _hd_style(name, font, size, leading, color, align=0, **kwargs):
+    """Build a handout paragraph style. align: 0 left, 1 centre."""
+    return ParagraphStyle(name, fontName=font, fontSize=size,
+                          leading=leading, textColor=color,
+                          alignment=align, **kwargs)
+
+
+def _hd_para_height(c, para, w):
+    """Height the paragraph needs at width w."""
+    return para.wrapOn(c, w, 10000)[1]
+
+
+def _hd_draw_para(c, para, x, y_top, w):
+    """Draw a paragraph with its top edge at y_top; return its bottom y."""
+    height = para.wrapOn(c, w, 10000)[1]
+    para.drawOn(c, x, y_top - height)
+    return y_top - height
+
+
+def _hd_steps(texts, size=10.5):
+    """Numbered step paragraphs with a hanging indent."""
+    style = _hd_style("hd_step", "Times-Roman", size, size + 3.4,
+                      _HANDOUT_BODY, leftIndent=5 * mm, bulletIndent=0,
+                      bulletFontName="Times-Roman", bulletFontSize=size)
+    return [Paragraph(text, style, bulletText="%d." % idx)
+            for idx, text in enumerate(texts, 1)]
+
+
+def _hd_panel(c, x, y_bottom, w, h, fill, edge, radius=3 * mm, line=1.5):
+    """Rounded panel with a fill and a border."""
+    c.setFillColor(fill)
+    c.setStrokeColor(edge)
+    c.setLineWidth(line)
+    c.roundRect(x, y_bottom, w, h, radius, stroke=1, fill=1)
+    c.setLineWidth(1)
+
+
+def _hd_draw_scaled(c, draw_fn, nat_w, nat_h, box_x, box_y_bottom,
+                    box_w, box_h):
+    """Draw a natural-size card scaled to fit a box, centred in it.
+
+    The card generators (_draw_ballot_card, draw_code_slip) lay
+    themselves out for a real card. Drawing them at natural size under a
+    canvas scale gives an exact miniature of the printed article, so the
+    handout thumbnail cannot drift from what the voter is handed.
+    """
+    scale = min(box_w / nat_w, box_h / nat_h)
+    c.saveState()
+    c.translate(box_x + (box_w - nat_w * scale) / 2,
+                box_y_bottom + (box_h - nat_h * scale) / 2)
+    c.scale(scale, scale)
+    draw_fn(nat_w, nat_h)
+    c.restoreState()
+
+
+def _hd_ballot_thumb(c, office_data, election_name, wifi_password,
+                     box_x, box_y_bottom, box_w, box_h):
+    """Miniature of this election's paper ballot, real slate and all."""
+    nat_w, nat_h, sub_w, sub_gap, left, right = _calc_card_dimensions(
+        office_data, wifi_password)
+
+    def _draw(w, h):
+        _draw_ballot_card(c, 0, h, w, h, election_name,
+                          left, right, sub_w, sub_gap)
+
+    _hd_draw_scaled(c, _draw, nat_w, nat_h, box_x, box_y_bottom,
+                    box_w, box_h)
+
+
+def _hd_slip_thumb(c, office_data, wifi_ssid, wifi_password, base_url,
+                   qr_base_url, box_x, box_y_bottom, box_w, box_h):
+    """Miniature of the code slip, with a placeholder code."""
+    nat_w, nat_h, _, _, _, _ = _calc_card_dimensions(
+        office_data, wifi_password)
+
+    def _draw(w, h):
+        draw_code_slip(c, 0, h, w, h, _HANDOUT_SAMPLE_CODE,
+                       wifi_ssid, wifi_password, base_url,
+                       qr_base_url=qr_base_url)
+
+    _hd_draw_scaled(c, _draw, nat_w, nat_h, box_x, box_y_bottom,
+                    box_w, box_h)
+
+
+def _hd_column(c, x, y_top, w, h, title, thumb_h, thumb_fn, steps):
+    """Draw one bordered column: heading, thumbnail strip, numbered steps."""
+    _hd_panel(c, x, y_top - h, w, h, _HANDOUT_PANEL, NAVY)
+
+    pad_x = 5 * mm
+    inner_x = x + pad_x
+    inner_w = w - 2 * pad_x
+    y = y_top - 4 * mm
+
+    c.setFont("Times-Bold", 16)
+    c.setFillColor(NAVY)
+    c.drawCentredString(x + w / 2, y - 5.6 * mm, title)
+    y -= 7.6 * mm
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(2)
+    c.line(inner_x, y, inner_x + inner_w, y)
+    c.setLineWidth(1)
+    y -= 3 * mm
+
+    thumb_fn(inner_x, y - thumb_h, inner_w, thumb_h)
+    y -= thumb_h + 4 * mm
+
+    for step in steps:
+        y = _hd_draw_para(c, step, inner_x, y, inner_w) - 1.8 * mm
+
+
+def _draw_handout_front(c, election_name, office_data, wifi_ssid,
+                        wifi_password, base_url, qr_base_url):
+    """Front page: how to vote, on paper or on a phone."""
+    page_w, page_h = A4
+    margin = 12 * mm
+    content_w = page_w - 2 * margin
+    cx = page_w / 2
+    y = page_h - margin
+
+    c.setFont("Times-Bold", 26)
+    c.setFillColor(NAVY)
+    c.drawCentredString(cx, y - 7.6 * mm, "How to Vote")
+    y -= 9.6 * mm
+
+    c.setFont("Times-Italic", 13)
+    c.setFillColor(_HANDOUT_GREY)
+    c.drawCentredString(cx, y - 4.0 * mm, election_name)
+    y -= 6.5 * mm
+
+    # Reminder strip
+    reminder = Paragraph(
+        _HANDOUT_REMINDER,
+        _hd_style("hd_reminder", "Times-Italic", 11, 15,
+                  _HANDOUT_CREAM_TEXT, align=1))
+    strip_h = _hd_para_height(c, reminder, content_w - 10 * mm) + 5 * mm
+    _hd_panel(c, margin, y - strip_h, content_w, strip_h,
+              _HANDOUT_CREAM, _HANDOUT_CREAM_EDGE, radius=2 * mm, line=1)
+    _hd_draw_para(c, reminder, margin + 5 * mm, y - 2.5 * mm,
+                  content_w - 10 * mm)
+    y -= strip_h + 3 * mm
+
+    # "Before you vote" box
+    heading = Paragraph(
+        "BEFORE YOU VOTE",
+        _hd_style("hd_pre_h", "Times-Bold", 12, 15, NAVY))
+    items = _hd_steps(_HANDOUT_PREAMBLE, size=11)
+    inner_w = content_w - 10 * mm
+    box_h = (_hd_para_height(c, heading, inner_w) + 1.5 * mm
+             + sum(_hd_para_height(c, p, inner_w) + 1 * mm for p in items)
+             + 5 * mm)
+    _hd_panel(c, margin, y - box_h, content_w, box_h,
+              _HANDOUT_MINT, _HANDOUT_MINT_EDGE)
+    inner_y = _hd_draw_para(c, heading, margin + 5 * mm, y - 3 * mm,
+                            inner_w) - 1.5 * mm
+    for item in items:
+        inner_y = _hd_draw_para(c, item, margin + 5 * mm, inner_y,
+                                inner_w) - 1 * mm
+    y -= box_h + 4 * mm
+
+    # "One way only" line
+    pick_one = Paragraph(
+        _HANDOUT_PICK_ONE,
+        _hd_style("hd_pick", "Times-Italic", 12, 16, NAVY, align=1))
+    y = _hd_draw_para(c, pick_one, margin, y, content_w) - 4 * mm
+
+    # The footer sits on the bottom margin; the columns fill what is
+    # left, so the front page is one A4 side whatever the slate size.
+    qr_size = 20 * mm
+    footer_h = qr_size + 4 * mm
+    footer_top = margin + footer_h
+    col_h = y - (footer_top + 4 * mm)
+
+    gutter = 18 * mm
+    col_w = (content_w - gutter) / 2
+    right_x = margin + col_w + gutter
+
+    select_hint = _hd_select_hint(office_data)
+    tick_step = ("Tick the box next to the candidates you choose, up to "
+                 "the number the office allows")
+    if select_hint:
+        tick_step += " (%s)" % select_hint
+    paper_steps = _hd_steps([
+        tick_step + ".",
+        "Fold the card and hand it in for counting.",
+    ])
+    wifi_note = ("the password is on the code slip" if wifi_password
+                 else "no password")
+    phone_steps = _hd_steps([
+        "Connect your phone to the <b>%s</b> WiFi (%s). The network "
+        "name is on the code slip." % (_hd_escape(wifi_ssid), wifi_note),
+        "Scan the QR code on the code slip with your phone camera, or "
+        "type the URL shown into your browser.",
+        "Tick your candidates and tap <b>Cast Your Vote</b>. A check "
+        "screen shows your selection. Confirm it (or change it), and "
+        "your vote is registered.",
+        "<b>Tear up the card.</b> Your phone vote is the one counted; "
+        "do not also submit the paper ballot.",
+    ])
+
+    # Thumbnail strip. Both thumbnails are miniatures of the same card
+    # shape, so the height that makes them exactly as wide as the column
+    # is the largest they can usefully be; anything taller just adds
+    # blank space around them. Clamped by what the steps leave, so a
+    # long SSID or URL cannot push the page over.
+    col_inner_w = col_w - 10 * mm
+    steps_h = max(
+        sum(_hd_para_height(c, p, col_inner_w) + 1.8 * mm
+            for p in paper_steps),
+        sum(_hd_para_height(c, p, col_inner_w) + 1.8 * mm
+            for p in phone_steps),
+    )
+    chrome_h = 4 * mm + 7.6 * mm + 3 * mm + 4 * mm + 4 * mm
+    card_w, card_h = _calc_card_dimensions(office_data, wifi_password)[:2]
+    thumb_h = min(card_h * col_inner_w / card_w,
+                  col_h - chrome_h - steps_h)
+
+    def _paper_thumb(bx, by, bw, bh):
+        _hd_ballot_thumb(c, office_data, election_name, wifi_password,
+                         bx, by, bw, bh)
+
+    def _phone_thumb(bx, by, bw, bh):
+        _hd_slip_thumb(c, office_data, wifi_ssid, wifi_password, base_url,
+                       qr_base_url, bx, by, bw, bh)
+
+    _hd_column(c, margin, y, col_w, col_h, "Paper ballot",
+               thumb_h, _paper_thumb, paper_steps)
+    _hd_column(c, right_x, y, col_w, col_h, "Phone",
+               thumb_h, _phone_thumb, phone_steps)
+
+    c.setFont("Times-Bold", 22)
+    c.setFillColor(HexColor("#000000"))
+    c.drawCentredString(margin + col_w + gutter / 2,
+                        y - col_h / 2 - 3 * mm, "OR")
+
+    # Footer: information line plus the QR to the full FAQ.
+    c.setStrokeColor(_HANDOUT_RULE)
+    c.line(margin, footer_top, margin + content_w, footer_top)
+    c.setFont("Times-Bold", 11)
+    c.setFillColor(NAVY)
+    c.drawString(margin, footer_top - 6 * mm, "More information?")
+    c.setFont("Times-Roman", 10)
+    c.setFillColor(_HANDOUT_BODY)
+    c.drawString(margin, footer_top - 10.5 * mm,
+                 "Speak to your office bearers and/or scan the QR.")
+    c.drawImage(_generate_qr_image(_HANDOUT_INFO_URL),
+                margin + content_w - qr_size, margin,
+                qr_size, qr_size, mask="auto")
+
+
+def _draw_handout_back(c):
+    """Back page: the safeguards FAQ. Nothing here depends on the slate."""
+    page_w, page_h = A4
+    margin = 12 * mm
+    content_w = page_w - 2 * margin
+    y = page_h - margin
+
+    title = Paragraph(
+        "Phone voting: frequently asked questions",
+        _hd_style("hd_faq_title", "Times-Bold", 26, 30, NAVY, align=1))
+    y = _hd_draw_para(c, title, margin, y, content_w) - 6 * mm
+
+    intro = Paragraph(
+        _HANDOUT_FAQ_INTRO,
+        _hd_style("hd_faq_intro", "Times-Roman", 12, 18, NAVY))
+    y = _hd_draw_para(c, intro, margin, y, content_w) - 6 * mm
+
+    bar_x = margin
+    text_x = margin + 4 * mm
+    text_w = content_w - 4 * mm
+    for question, answer in _HANDOUT_FAQ:
+        q_para = Paragraph(
+            question, _hd_style("hd_faq_q", "Times-Bold", 13, 16, NAVY))
+        a_para = Paragraph(
+            answer,
+            _hd_style("hd_faq_a", "Times-Roman", 11, 16.5, _HANDOUT_BODY))
+        block_h = (_hd_para_height(c, q_para, text_w) + 1.5 * mm
+                   + _hd_para_height(c, a_para, text_w))
+        c.setStrokeColor(GOLD)
+        c.setLineWidth(3)
+        c.line(bar_x, y, bar_x, y - block_h)
+        c.setLineWidth(1)
+        inner_y = _hd_draw_para(c, q_para, text_x, y, text_w) - 1.5 * mm
+        _hd_draw_para(c, a_para, text_x, inner_y, text_w)
+        y -= block_h + 5 * mm
+
+    y -= 1 * mm
+    c.setStrokeColor(_HANDOUT_RULE)
+    c.line(margin, y, margin + content_w, y)
+    footer = Paragraph(
+        _HANDOUT_FAQ_FOOTER,
+        _hd_style("hd_faq_foot", "Times-Roman", 10, 15, _HANDOUT_BODY))
+    _hd_draw_para(c, footer, margin, y - 4 * mm, content_w)
+
+
+def generate_voter_handout_pdf(election_name, office_data, wifi_ssid,
+                               wifi_password, base_url, qr_base_url=None):
+    """Generate the 2-page A4 voter handout for this election.
+
+    Front: how to vote on paper or on a phone, with a miniature of this
+    election's actual ballot card and code slip. Back: the safeguards
+    FAQ. Printed duplex (long edge), one sheet per voter.
+
+    Everything naming a candidate, an office, the WiFi or the URL is
+    drawn from the arguments, so the handout cannot show a stale slate.
+
+    Args:
+        election_name: election title, shown under the heading and on
+            the ballot thumbnail.
+        office_data: list of {"office": ..., "candidates": [...]} as
+            passed to the ballot generators.
+        wifi_ssid: SSID of the election WiFi network.
+        wifi_password: password for the election WiFi ("" if open).
+        base_url: voting URL printed on the code slip.
+        qr_base_url: optional alternative URL encoded in the slip QR.
+
+    Returns:
+        BytesIO buffer containing the PDF.
+    """
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+
+    _draw_handout_front(c, election_name, office_data, wifi_ssid,
+                        wifi_password, base_url, qr_base_url)
+    c.showPage()
+    _draw_handout_back(c)
+    c.showPage()
+
+    c.save()
+    buf.seek(0)
+    return buf
+
+
 def generate_printer_pack_zip(election_name, short_name, round_number,
                               office_data, codes, wifi_ssid, wifi_password,
                               base_url, congregation_name, members,
@@ -1690,28 +2131,13 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
     # 5. Attendance register
     attendance_buf = generate_attendance_register_pdf(members)
 
-    # 6. Voter handout: static 2-page A4 (front = how-to-vote on
-    #    paper or phone, back = "How is this kept honest?" FAQ on the
-    #    safeguards against double voting). Rendered from
-    #    docs/how_to_vote_card.html into docs/how_to_vote_card_*.pdf.
-    #    The render is timestamped (e.g. ..._20260507_133200.pdf) so a
-    #    re-render does not need to overwrite an open viewer; the
-    #    printer pack picks up the newest matching file.
-    import glob as _glob
-    docs_dir = os.path.join(os.path.dirname(__file__), "docs")
-    handout_candidates = sorted(
-        _glob.glob(os.path.join(docs_dir, "how_to_vote_card*.pdf")),
-        key=os.path.getmtime,
-        reverse=True,
-    )
-    voter_handout_bytes = None
-    for handout_path in handout_candidates:
-        try:
-            with open(handout_path, "rb") as fp:
-                voter_handout_bytes = fp.read()
-            break
-        except (FileNotFoundError, PermissionError):
-            continue
+    # 6. Voter handout: 2-page A4 (front = how-to-vote on paper or
+    #    phone, back = the safeguards FAQ). Drawn for this election, so
+    #    its ballot and code-slip thumbnails show the slate the voter is
+    #    actually handed.
+    handout_buf = generate_voter_handout_pdf(
+        election_name, office_data, wifi_ssid, wifi_password, base_url,
+        qr_base_url=qr_base_url)
 
     # 7. AV team instructions (handout for the liturgy screen operator)
     av_buf = generate_av_instructions_pdf(
@@ -1862,8 +2288,7 @@ For questions, contact the election administrator.
         zf.writestr("4_dual_sided_ballots.pdf", dual_buf.getvalue())
         zf.writestr("5_counter_sheet.pdf", counter_buf.getvalue())
         zf.writestr("6_attendance_register.pdf", attendance_buf.getvalue())
-        if voter_handout_bytes is not None:
-            zf.writestr("7_voter_handout.pdf", voter_handout_bytes)
+        zf.writestr("7_voter_handout.pdf", handout_buf.getvalue())
         zf.writestr("8_av_instructions.pdf", av_buf.getvalue())
         zf.writestr("0_INSTRUCTIONS.txt", instructions)
 

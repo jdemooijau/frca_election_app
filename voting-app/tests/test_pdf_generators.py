@@ -64,7 +64,7 @@ def _generate_sample_pdf(codes=None, is_demo=False):
 
 
 def test_dual_sided_ballots_pdf_generates():
-    """Basic smoke test — generates without error."""
+    """Basic smoke test â€” generates without error."""
     buf = _generate_sample_pdf()
     assert buf is not None
     assert buf.getbuffer().nbytes > 0
@@ -142,13 +142,13 @@ def test_dual_sided_ballots_pdf_wifi_step_comes_first():
 
 
 def test_dual_sided_ballots_pdf_does_not_burn_codes():
-    """Generator function has no DB access — codes can't be burned."""
+    """Generator function has no DB access â€” codes can't be burned."""
     buf = _generate_sample_pdf()
     assert buf.getbuffer().nbytes > 0
 
 
 # ---------------------------------------------------------------------------
-# Code slips PDF — 6-per-page layout
+# Code slips PDF â€” 6-per-page layout
 # ---------------------------------------------------------------------------
 
 def _generate_code_slips(**kwargs):
@@ -311,7 +311,7 @@ def test_dual_sided_ballot_back_has_warning():
 
 
 # ---------------------------------------------------------------------------
-# Ballot front PDF — single card-sized page
+# Ballot front PDF â€” single card-sized page
 # ---------------------------------------------------------------------------
 
 def test_ballot_front_pdf_generates():
@@ -366,7 +366,7 @@ def test_ballot_front_pdf_not_a4():
 
 
 # ---------------------------------------------------------------------------
-# Code slips back PDF — one card-sized page per code
+# Code slips back PDF â€” one card-sized page per code
 # ---------------------------------------------------------------------------
 
 def test_code_slips_back_pdf_generates():
@@ -504,12 +504,7 @@ def test_printer_pack_zip_contains_all_files():
         "8_av_instructions.pdf",
     }
     assert required <= names, f"missing required files: {required - names}"
-    # 7_voter_handout.pdf is included whenever docs/how_to_vote_card.pdf
-    # is present on disk; tests run in the same checkout so it should be.
-    assert "7_voter_handout.pdf" in names, (
-        "voter handout missing - is voting-app/docs/how_to_vote_card.pdf "
-        "checked in?"
-    )
+    assert "7_voter_handout.pdf" in names, "voter handout missing"
     # Nothing else.
     assert names == required | {"7_voter_handout.pdf"}, (
         f"unexpected entries: {names - (required | {'7_voter_handout.pdf'})}"
@@ -525,7 +520,7 @@ def test_printer_pack_zip_cards_duplex_page_count():
     with zipfile.ZipFile(buf) as zf:
         data = zf.read("3_cards_duplex.pdf")
     reader = PdfReader(io.BytesIO(data))
-    # _generate_sample_zip uses 8 codes, member_count=0, so total_cards=8 → 16 pages
+    # _generate_sample_zip uses 8 codes, member_count=0, so total_cards=8 â†’ 16 pages
     assert len(reader.pages) == 16
 
 
@@ -781,37 +776,140 @@ def test_dual_sided_ballots_threads_qr_base_url(monkeypatch):
     assert all(u.startswith("http://192.168.8.100/") for u in voting_qrs), voting_qrs
 
 
+# ---------------------------------------------------------------------------
+# Voter handout (7_voter_handout.pdf)
+# ---------------------------------------------------------------------------
 
-def test_voter_handout_is_two_pages_with_qr_on_page_one():
-    """Regression: the committed voter handout must be exactly two A4
-    sides, front = how-to-vote (including the "More information?" QR
-    footer) and back = the FAQ.
 
-    The front page used to overflow by a few millimetres, which pushed
-    the QR footer onto a page of its own and turned the duplex handout
-    into a three-page print job. Re-render after editing the HTML:
+def _generate_voter_handout(office_data=None, **kwargs):
+    from pdf_generators import generate_voter_handout_pdf
+    params = dict(
+        election_name="Office Bearer Election 2026",
+        office_data=office_data or SAMPLE_OFFICE_DATA,
+        wifi_ssid="ChurchVote",
+        wifi_password="",
+        base_url="http://church.vote",
+    )
+    params.update(kwargs)
+    return generate_voter_handout_pdf(**params)
 
-        python scripts/render_pdf.py \
-            docs/how_to_vote_card.html docs/how_to_vote_card.pdf
-    """
+
+def test_voter_handout_shows_the_live_slate():
+    """The handout must show this election's candidates on its ballot
+    thumbnail, not a screenshot of a demo slate."""
+    buf = _generate_voter_handout()
+    assert _page_count(buf) == 2
+    front = _extract_text(buf, 0)
+    assert "Pieter van Rijksen" in front
+    assert "Arend Visserman" in front
+
+
+def _flat(text):
+    """Collapse PDF line breaks so a wrapped phrase can be asserted on."""
+    return " ".join(text.split())
+
+
+def test_voter_handout_states_each_office_selection_limit():
+    """The paper step must give this election's real limits, not a
+    hardcoded "select 2" example."""
+    office_data = [
+        {"office": {"name": "Elder", "max_selections": 5, "vacancies": 5},
+         "candidates": [{"name": "H. Brouwerhof"}]},
+        {"office": {"name": "Deacon", "max_selections": 4, "vacancies": 4},
+         "candidates": [{"name": "F. Bosveldt"}]},
+    ]
+    front = _flat(_extract_text(_generate_voter_handout(office_data), 0))
+    assert "Elder: up to 5" in front
+    assert "Deacon: up to 4" in front
+    assert "select 2" not in front
+
+
+def test_voter_handout_names_the_election_wifi_in_the_phone_step():
+    """The phone step must name the configured SSID."""
+    buf = _generate_voter_handout(wifi_ssid="FRCA-Election")
+    front = _flat(_extract_text(buf, 0))
+    assert "Connect your phone to the FRCA-Election WiFi" in front
+
+
+def test_voter_handout_points_at_the_slip_when_the_wifi_has_a_password():
+    """An open network says so; a secured one points at the code slip,
+    which is where draw_code_slip prints the password."""
+    open_front = _flat(_extract_text(
+        _generate_voter_handout(wifi_password=""), 0))
+    assert "(no password)" in open_front
+
+    secured_front = _flat(_extract_text(
+        _generate_voter_handout(wifi_password="Grace2026"), 0))
+    assert "(the password is on the code slip)" in secured_front
+
+
+def test_printer_pack_handout_is_generated_from_the_live_slate():
+    """7_voter_handout.pdf must be drawn for this election, not read
+    from a committed render of a demo slate."""
+    import zipfile
     from PyPDF2 import PdfReader
-
-    docs_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs")
-    pdf_path = os.path.join(docs_dir, "how_to_vote_card.pdf")
-    assert os.path.isfile(pdf_path), f"handout not checked in: {pdf_path}"
-
-    reader = PdfReader(pdf_path)
-    assert len(reader.pages) == 2, (
-        f"handout is {len(reader.pages)} pages, expected 2 - the front page "
-        "has overflowed; trim the spacing in docs/how_to_vote_card.html and "
-        "re-render"
-    )
-
+    buf = _generate_sample_zip()
+    buf.seek(0)
+    with zipfile.ZipFile(buf) as zf:
+        data = zf.read("7_voter_handout.pdf")
+    reader = PdfReader(io.BytesIO(data))
+    assert len(reader.pages) == 2
     front = reader.pages[0].extract_text()
-    assert "How to Vote" in front
-    assert "More information?" in front, (
-        "the QR footer has moved off the front page"
-    )
-    back = reader.pages[1].extract_text()
-    assert "frequently asked" in back
+    assert "Pieter van Rijksen" in front
+    assert "More information?" in front
+
+
+MAX_SLATE = [
+    {"office": {"name": "Elder", "max_selections": 5, "vacancies": 5},
+     "candidates": [{"name": n} for n in [
+         "H. Brouwerhof", "J. Groenevelt", "W. de Kempenaar",
+         "N. ten Heuvel", "G. van Dijkstra", "P. van Rijksen",
+         "S. Veldhoeven", "M. ten Boskamp", "A. Kuiperveld",
+         "T. Zuiderhoek"]]},
+    {"office": {"name": "Deacon", "max_selections": 4, "vacancies": 4},
+     "candidates": [{"name": n} for n in [
+         "F. Bosveldt", "R. Mulderhoek", "D. van Leeuwenburg",
+         "A. Visserman", "C. Molenaarshof", "R. Duinhoven",
+         "I. Westerhoek", "T. Kortenhoeve"]]},
+]
+
+
+def _drawn_bbox(page):
+    """Union of every text block, vector and image drawn on the page."""
+    xs, ys = [], []
+    for block in page.get_text("blocks"):
+        xs += [block[0], block[2]]
+        ys += [block[1], block[3]]
+    for drawing in page.get_drawings():
+        rect = drawing["rect"]
+        xs += [rect.x0, rect.x1]
+        ys += [rect.y0, rect.y1]
+    for image in page.get_images(full=True):
+        for rect in page.get_image_rects(image[0]):
+            xs += [rect.x0, rect.x1]
+            ys += [rect.y0, rect.y1]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def test_voter_handout_fits_its_margins_at_the_supported_maximum():
+    """Regression: the handout is a fixed two-sider, so an overflow
+    cannot spill onto a third page - it prints off the edge instead.
+    Check the drawn extent against the 12 mm margins for the largest
+    slate the app supports (10 elder / 8 deacon candidates)."""
+    fitz = pytest.importorskip("fitz")
+    buf = _generate_voter_handout(MAX_SLATE, wifi_ssid="FRCA-Election")
+    doc = fitz.open(stream=buf.getvalue(), filetype="pdf")
+
+    margin = 12 * mm
+    page_w, page_h = A4
+    for index in range(doc.page_count):
+        x0, y0, x1, y1 = _drawn_bbox(doc[index])
+        # Glyph boxes sit a little above the cap height of the text they
+        # hold, so the top edge gets a small allowance; the other three
+        # are hard limits.
+        assert y0 >= margin - 8, f"page {index + 1} overflows the top"
+        assert x0 >= margin - 1, f"page {index + 1} overflows the left"
+        assert x1 <= page_w - margin + 1, (
+            f"page {index + 1} overflows the right")
+        assert y1 <= page_h - margin + 1, (
+            f"page {index + 1} overflows the bottom")
