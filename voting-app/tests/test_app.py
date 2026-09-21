@@ -1197,3 +1197,45 @@ def test_e2e_double_vote_caught_by_scan(client):
             (eid,)
         ).fetchall()
         assert len(audit) == 1
+
+
+# ---------------------------------------------------------------------------
+# Reconciliation panel: postal voters are counted from the election record
+# and sit outside the attendee gap (postal voters are not in the room).
+# ---------------------------------------------------------------------------
+
+def test_step_count_reconciliation_shows_postal_voters_outside_gap(client):
+    from app import app as flask_app, get_db
+    with flask_app.app_context():
+        db = get_db()
+        info = _seed_count_phase_election(db, used_codes=["KR4T7N", "AB3XY9"],
+                                          unused_codes=[], paper_ballot_count=20)
+        db.execute("UPDATE elections SET postal_voter_count = 3 WHERE id = ?", (info["id"],))
+        db.commit()
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    rv = client.get(f"/admin/election/{info['id']}/step/count")
+    assert rv.status_code == 200
+    body = rv.get_data(as_text=True)
+    assert "Postal:</td><td>3</td>" in body
+    # 50 attendees - (2 online + 20 paper) = 28; the 3 postal must not be subtracted
+    assert "28 (within attendance)" in body
+
+
+def test_set_participants_flash_separates_attendees_from_postal(client):
+    from app import app as flask_app, get_db
+    with flask_app.app_context():
+        db = get_db()
+        info = _seed_count_phase_election(db, used_codes=[], unused_codes=[], paper_ballot_count=30)
+        db.execute("UPDATE elections SET postal_voter_count = 3 WHERE id = ?", (info["id"],))
+        db.commit()
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    rv = client.post(f"/admin/election/{info['id']}/participants",
+                     data={"participants": "100"})
+    assert rv.status_code == 302
+    with client.session_transaction() as sess:
+        messages = [m for _, m in sess.get("_flashes", [])]
+    assert any("Attendees (in person): 100" in m and "3 postal" in m
+               and "103 participants" in m and "Paper ballots: 30" in m
+               for m in messages), messages

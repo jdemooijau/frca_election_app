@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Count step reconciliation panel always showed "Postal: 0". It queried
+  `postal_votes` on a `round_number` column that table does not have, and
+  the swallowed error defaulted to 0. It now reads the election's postal
+  voter count (round 1 only) and keeps postal outside the attendee gap,
+  since postal voters are not in the room.
+- Attendance banner said "Participants: N" for the in-person count while
+  the tally counted N + postal. It now reads "Attendees (in person): N +
+  P postal = N+P participants".
 - Voter handout (`7_voter_handout.pdf` / `docs/how_to_vote_card.pdf`)
   printed as three pages: the front page overflowed A4 by about 9 mm,
   so the "More information?" QR footer landed on a page of its own.

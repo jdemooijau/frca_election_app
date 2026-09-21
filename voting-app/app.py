@@ -2147,15 +2147,13 @@ def _build_manage_view_payload(election_id):
     # abstentions, gap == 0 means full turnout, gap < 0 means more
     # ballots than attendees (double-vote). Digital count must be
     # round-scoped; codes.used is cumulative across rounds.
+    # Postal voters are not in the room, so they are shown for information
+    # but sit outside the attendee gap. The postal voter count lives on the
+    # election record (round 1 only); postal_votes holds per-candidate ticks,
+    # not voters, so it cannot be used to count them.
     in_person_participants_rec, paper_ballot_count_val, used_codes_count = get_round_counts(election_id, current_round)
-    try:
-        postal_voter_count_rec = db.execute(
-            "SELECT COUNT(*) FROM postal_votes WHERE election_id = ? AND round_number = ?",
-            (election_id, current_round)
-        ).fetchone()[0]
-    except Exception:
-        postal_voter_count_rec = 0
-    gap = (in_person_participants_rec or 0) - (used_codes_count + paper_ballot_count_val + postal_voter_count_rec)
+    postal_voter_count_rec = postal_voter_count
+    gap = (in_person_participants_rec or 0) - (used_codes_count + paper_ballot_count_val)
     failed_scans = db.execute(
         "SELECT COUNT(*) FROM voter_audit_log WHERE election_id = ? "
         "AND round_number = ? AND result LIKE 'rejected_%'",
@@ -2245,7 +2243,16 @@ def admin_set_participants(election_id):
         paper_ballot_count = existing_paper
 
     set_round_counts(election_id, current_round, participants, paper_ballot_count)
-    flash(f"Round {current_round} — Participants: {participants}, Paper ballots: {paper_ballot_count}.", "success")
+    # The form field holds in-person attendees only. Article 6b counts postal
+    # voters as participants in round 1, so spell out both figures rather
+    # than labelling the attendee count "Participants".
+    postal_for_flash = (election["postal_voter_count"] or 0) if current_round == 1 else 0
+    if postal_for_flash > 0:
+        participants_text = (f"Attendees (in person): {participants} + {postal_for_flash} postal "
+                             f"= {participants + postal_for_flash} participants")
+    else:
+        participants_text = f"Attendees (in person): {participants}"
+    flash(f"Round {current_round} - {participants_text}, Paper ballots: {paper_ballot_count}.", "success")
     # Route wizard callers back to whichever step they posted from; legacy
     # callers (the old manage page) fall through to admin_election_manage.
     referrer = request.referrer or ""
