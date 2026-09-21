@@ -59,16 +59,10 @@
 <div role="alert" style="margin: 14px 0; padding: 12px 14px;
      background: #ffe6e6; border: 1px solid #c00; border-radius: 8px;">
     <strong>Ballot count exceeds attendance by {{ reconciliation.gap | abs }}.</strong>
-    Scan paper ballots to find duplicates.
-    <div style="margin-top: 8px;">
-        <a href="{{ url_for('admin_scan_ballots', election_id=sidebar_state.election.id) }}"
-           class="btn btn-primary btn-small">Scan paper ballots</a>
-    </div>
-</div>
-{% else %}
-<div style="margin: 8px 0 14px;">
-    <a href="{{ url_for('admin_scan_ballots', election_id=sidebar_state.election.id) }}"
-       class="btn btn-outline btn-small">Scan paper ballots</a>
+    More ballots were cast than brothers signed in. The chairman
+    decides: declare the round void and vote again, or, where the
+    discrepancy is too small to change the outcome, record it here and
+    let the result stand.
 </div>
 {% endif %}
 

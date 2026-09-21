@@ -1692,16 +1692,14 @@ _HANDOUT_FAQ = [
      "Guessing a valid code is also mathematically nearly impossible: "
      "only the codes pre-generated for this meeting are accepted, out "
      "of close to a billion possible six-character codes."),
-    ("What if someone votes on both phone and paper?",
+    ("What if someone votes twice?",
      "This risk has always been there on paper: someone could fill in "
      "two ballots, and the number of ballots would then exceed the "
-     "number of brothers signed in at the register. If the count does "
-     "not match, the chairman decides how to handle it. He can scan "
-     "every paper ballot against the record of votes already cast on "
-     "phones and set aside any whose code was used twice; or declare "
-     "the round void and have everyone vote again; or, where a single "
-     "extra ballot cannot change the outcome, record it and let the "
-     "result stand."),
+     "number of brothers signed in at the register. At the end of each "
+     "round the chairman checks the ballots against the register. If "
+     "the two do not match, he either declares the round void and has "
+     "everyone vote again, or, where the difference is too small to "
+     "change the outcome, records it and lets the result stand."),
     ("Is my vote anonymous?",
      "Only the code and the choice are recorded - never who the code was "
      "given to. Codes are randomly printed and handed out, so no vote "
@@ -1765,9 +1763,9 @@ def _hd_draw_para(c, para, x, y_top, w):
 
 def _hd_steps(texts, size=10.5):
     """Numbered step paragraphs with a hanging indent."""
-    style = _hd_style("hd_step", "Times-Roman", size, size + 3.4,
+    style = _hd_style("hd_step", "Helvetica", size, size + 3.4,
                       _HANDOUT_BODY, leftIndent=5 * mm, bulletIndent=0,
-                      bulletFontName="Times-Roman", bulletFontSize=size)
+                      bulletFontName="Helvetica", bulletFontSize=size)
     return [Paragraph(text, style, bulletText="%d." % idx)
             for idx, text in enumerate(texts, 1)]
 
@@ -1837,7 +1835,7 @@ def _hd_column(c, x, y_top, w, h, title, thumb_h, thumb_fn, steps):
     inner_w = w - 2 * pad_x
     y = y_top - 4 * mm
 
-    c.setFont("Times-Bold", 16)
+    c.setFont("Helvetica-Bold", 16)
     c.setFillColor(NAVY)
     c.drawCentredString(x + w / 2, y - 5.6 * mm, title)
     y -= 7.6 * mm
@@ -1863,12 +1861,12 @@ def _draw_handout_front(c, election_name, office_data, wifi_ssid,
     cx = page_w / 2
     y = page_h - margin
 
-    c.setFont("Times-Bold", 26)
+    c.setFont("Helvetica-Bold", 26)
     c.setFillColor(NAVY)
     c.drawCentredString(cx, y - 7.6 * mm, "How to Vote")
     y -= 9.6 * mm
 
-    c.setFont("Times-Italic", 13)
+    c.setFont("Helvetica-Oblique", 13)
     c.setFillColor(_HANDOUT_GREY)
     c.drawCentredString(cx, y - 4.0 * mm, election_name)
     y -= 6.5 * mm
@@ -1876,7 +1874,7 @@ def _draw_handout_front(c, election_name, office_data, wifi_ssid,
     # Reminder strip
     reminder = Paragraph(
         _HANDOUT_REMINDER,
-        _hd_style("hd_reminder", "Times-Italic", 11, 15,
+        _hd_style("hd_reminder", "Helvetica-Oblique", 11, 15,
                   _HANDOUT_CREAM_TEXT, align=1))
     strip_h = _hd_para_height(c, reminder, content_w - 10 * mm) + 5 * mm
     _hd_panel(c, margin, y - strip_h, content_w, strip_h,
@@ -1888,7 +1886,7 @@ def _draw_handout_front(c, election_name, office_data, wifi_ssid,
     # "Before you vote" box
     heading = Paragraph(
         "BEFORE YOU VOTE",
-        _hd_style("hd_pre_h", "Times-Bold", 12, 15, NAVY))
+        _hd_style("hd_pre_h", "Helvetica-Bold", 12, 15, NAVY))
     items = _hd_steps(_HANDOUT_PREAMBLE, size=11)
     inner_w = content_w - 10 * mm
     box_h = (_hd_para_height(c, heading, inner_w) + 1.5 * mm
@@ -1906,7 +1904,7 @@ def _draw_handout_front(c, election_name, office_data, wifi_ssid,
     # "One way only" line
     pick_one = Paragraph(
         _HANDOUT_PICK_ONE,
-        _hd_style("hd_pick", "Times-Italic", 12, 16, NAVY, align=1))
+        _hd_style("hd_pick", "Helvetica-Oblique", 12, 16, NAVY, align=1))
     y = _hd_draw_para(c, pick_one, margin, y, content_w) - 4 * mm
 
     # The footer sits on the bottom margin; the columns fill what is
@@ -1973,7 +1971,7 @@ def _draw_handout_front(c, election_name, office_data, wifi_ssid,
     _hd_column(c, right_x, y, col_w, col_h, "Phone",
                thumb_h, _phone_thumb, phone_steps)
 
-    c.setFont("Times-Bold", 22)
+    c.setFont("Helvetica-Bold", 22)
     c.setFillColor(HexColor("#000000"))
     c.drawCentredString(margin + col_w + gutter / 2,
                         y - col_h / 2 - 3 * mm, "OR")
@@ -1981,10 +1979,10 @@ def _draw_handout_front(c, election_name, office_data, wifi_ssid,
     # Footer: information line plus the QR to the full FAQ.
     c.setStrokeColor(_HANDOUT_RULE)
     c.line(margin, footer_top, margin + content_w, footer_top)
-    c.setFont("Times-Bold", 11)
+    c.setFont("Helvetica-Bold", 11)
     c.setFillColor(NAVY)
     c.drawString(margin, footer_top - 6 * mm, "More information?")
-    c.setFont("Times-Roman", 10)
+    c.setFont("Helvetica", 10)
     c.setFillColor(_HANDOUT_BODY)
     c.drawString(margin, footer_top - 10.5 * mm,
                  "Speak to your office bearers and/or scan the QR.")
@@ -2002,12 +2000,12 @@ def _draw_handout_back(c):
 
     title = Paragraph(
         "Phone voting: frequently asked questions",
-        _hd_style("hd_faq_title", "Times-Bold", 26, 30, NAVY, align=1))
+        _hd_style("hd_faq_title", "Helvetica-Bold", 26, 30, NAVY, align=1))
     y = _hd_draw_para(c, title, margin, y, content_w) - 6 * mm
 
     intro = Paragraph(
         _HANDOUT_FAQ_INTRO,
-        _hd_style("hd_faq_intro", "Times-Roman", 12, 18, NAVY))
+        _hd_style("hd_faq_intro", "Helvetica", 12, 18, NAVY))
     y = _hd_draw_para(c, intro, margin, y, content_w) - 6 * mm
 
     bar_x = margin
@@ -2015,10 +2013,10 @@ def _draw_handout_back(c):
     text_w = content_w - 4 * mm
     for question, answer in _HANDOUT_FAQ:
         q_para = Paragraph(
-            question, _hd_style("hd_faq_q", "Times-Bold", 13, 16, NAVY))
+            question, _hd_style("hd_faq_q", "Helvetica-Bold", 13, 16, NAVY))
         a_para = Paragraph(
             answer,
-            _hd_style("hd_faq_a", "Times-Roman", 11, 16.5, _HANDOUT_BODY))
+            _hd_style("hd_faq_a", "Helvetica", 11, 16.5, _HANDOUT_BODY))
         block_h = (_hd_para_height(c, q_para, text_w) + 1.5 * mm
                    + _hd_para_height(c, a_para, text_w))
         c.setStrokeColor(GOLD)
@@ -2034,7 +2032,7 @@ def _draw_handout_back(c):
     c.line(margin, y, margin + content_w, y)
     footer = Paragraph(
         _HANDOUT_FAQ_FOOTER,
-        _hd_style("hd_faq_foot", "Times-Roman", 10, 15, _HANDOUT_BODY))
+        _hd_style("hd_faq_foot", "Helvetica", 10, 15, _HANDOUT_BODY))
     _hd_draw_para(c, footer, margin, y - 4 * mm, content_w)
 
 

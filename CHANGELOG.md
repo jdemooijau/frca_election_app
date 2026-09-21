@@ -65,6 +65,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- The chairman's paper-ballot QR scanner. Too cumbersome to use on the
+  day, and it only ever caught the phone-plus-paper case: a second
+  paper ballot carries its own unused code and scans as legitimate.
+  Removed: the `/scanner` shortcut, `admin_scan_ballots` and
+  `admin_scan_ballot_result`, `templates/admin/scan_ballots.html`, the
+  jsQR vendor bundle, `scripts/start_https.py` and `start-https.bat`
+  (which existed only to give the scanner a secure origin for camera
+  access), and `tests/test_paper_scan.py`. The reconciliation panel on
+  the count step stays: it is what detects the discrepancy. Its
+  over-count banner now states the chairman's two remaining options
+  instead of offering a scan. The `paper_set_aside_at_count` audit
+  label is kept so rows already written still render with a name.
 - `7_wifi_handout.pdf` (the 10-copy WiFi-join sheet) is no longer
   produced or included in the printer pack. Its role is taken over
   by the per-voter duplex handout (front: how-to-vote, back: FAQ).
@@ -87,11 +99,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ("Elder: up to 5; Deacon: up to 4") rather than a fixed "select 2"
   example. New generator `generate_voter_handout_pdf` in
   `pdf_generators.py`.
-- Reworded the "votes on both phone and paper" FAQ answer. It now says
-  the risk has always existed on paper and names the three courses
-  open to the chairman when ballots outnumber the register: scan the
-  papers against the phone votes, void the round, or let a result the
-  discrepancy cannot change stand.
+- Reworded the double-voting FAQ answer on the handout, now "What if
+  someone votes twice?". It says the risk has always existed on paper
+  and names the two courses open to the chairman when ballots
+  outnumber the register: void the round, or let a result the
+  difference cannot change stand.
 
 - Step 1 numbered circle on the code slip moved 3 mm down so it no
   longer crowds the "Vote with phone" header rule.
