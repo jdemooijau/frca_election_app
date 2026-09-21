@@ -392,6 +392,21 @@ def init_db():
     _init_db_on(get_db())
 
 
+def get_office_spoilt_count(db, election_id, round_number, office_id):
+    """Spoilt paper ballots recorded for one office in one round.
+
+    A spoilt ballot is wrongly filled (Article 7) and excluded from the
+    valid votes. It is distinct from a blank selection, which is derived
+    (ballots x selections - ticks - spoilt x selections) and never stored.
+    """
+    row = db.execute(
+        "SELECT count FROM office_spoilt_ballots "
+        "WHERE election_id = ? AND round_number = ? AND office_id = ?",
+        (election_id, round_number, office_id),
+    ).fetchone()
+    return row["count"] if row else 0
+
+
 def get_round_counts(election_id, round_number):
     """Get participants, paper_ballot_count, and digital_ballot_count for a round."""
     db = get_db()
@@ -1206,7 +1221,11 @@ def admin_round_results(election_id, round_number):
             "vacancies": vacancies_at_round,
         }
 
-        item = {"office": office_for_view, "candidates": candidate_results}
+        item = {
+            "office": office_for_view,
+            "candidates": candidate_results,
+            "spoilt_count": get_office_spoilt_count(db, election_id, round_number, office["id"]),
+        }
 
         if participants > 0 and vacancies_at_round > 0:
             office_valid_votes = sum(c["total"] for c in candidate_results)
@@ -1969,7 +1988,8 @@ def _build_manage_view_payload(election_id):
 
         results.append({
             "office": office,
-            "candidates": candidate_results
+            "candidates": candidate_results,
+            "spoilt_count": get_office_spoilt_count(db, election_id, current_round, office["id"]),
         })
 
     # Vote counts
@@ -5616,6 +5636,7 @@ def admin_minutes_docx(election_id):
                 "threshold_6a": t6a if participants > 0 else None,
                 "threshold_6b": t6b if participants > 0 else None,
                 "candidates": cand_list,
+                "spoilt_count": get_office_spoilt_count(db, election_id, round_num, office["id"]),
             })
 
         rounds_data.append({

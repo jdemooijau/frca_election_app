@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Blank votes and spoilt ballots are now accounted for on every results
+  surface. The admin tally (count step, voting step, historical round
+  results) and the minutes gain "Blank votes", "Spoilt ballots" and a
+  "Total" row equal to ballots x selections, so every selection on every
+  ballot is a candidate tick, a blank, or on a spoilt ballot. Rows show
+  at zero. Spoilt ballots are shown in both units, for example
+  "1 ballot (3 selections)", on the admin tally, projector and phone
+  display. Blank and spoilt stay outside the Article 6a denominator.
 - Demo election now seeds the supported maximum slate: 10 elder
   candidates (5 vacancies) and 8 deacon candidates (4 vacancies), in
   both `seed_demo.py` and the admin "Load sample candidates" helper.
@@ -63,11 +71,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The supporting helpers `generate_wifi_handout_pdf`,
   `_wifi_qr_payload`, and `_draw_wifi_icon` are deleted.
 - `docs/DOUBLE_VOTING_SAFEGUARDS.md` deleted in favour of the FAQ
-  on the back of `how_to_vote_card.html` (single source of truth
-  for voter-facing safeguard wording; print and email use the same
-  rendered PDF).
+  on the back of the voter handout (single source of truth for
+  voter-facing safeguard wording).
+- `docs/how_to_vote_card.html` and `docs/how_to_vote_card.pdf`. The
+  handout is generated from live election data now, so a committed
+  render is a second source that can only go stale.
 
 ### Changed
+
+- The voter handout (`7_voter_handout.pdf`) is now drawn for the
+  election being printed instead of being read from a committed
+  render. Its paper-ballot and code-slip thumbnails are miniatures of
+  the real cards, so they show this election's candidates, offices and
+  WiFi, and the paper step gives each office's actual selection limit
+  ("Elder: up to 5; Deacon: up to 4") rather than a fixed "select 2"
+  example. New generator `generate_voter_handout_pdf` in
+  `pdf_generators.py`.
+- Reworded the "votes on both phone and paper" FAQ answer. It now says
+  the risk has always existed on paper and names the three courses
+  open to the chairman when ballots outnumber the register: scan the
+  papers against the phone votes, void the round, or let a result the
+  discrepancy cannot change stand.
 
 - Step 1 numbered circle on the code slip moved 3 mm down so it no
   longer crowds the "Vote with phone" header rule.

@@ -2188,6 +2188,44 @@ def generate_minutes_docx(
                             for run in paragraph.runs:
                                 run.bold = True
 
+            # Accountability rows. Every selection on every ballot is
+            # accounted for: a tick for a candidate, a blank (unused)
+            # selection, or a selection on a spoilt ballot. Neither blank
+            # nor spoilt counts toward the Article 6a denominator.
+            office_max = o.get("max_selections") or 1
+            possible = rd.get("total_ballots", 0) * office_max
+            spoilt = o.get("spoilt_count", 0) or 0
+            spoilt_slots = spoilt * office_max
+            ticks = sum(c["total"] for c in cands)
+            blank = max(possible - ticks - spoilt_slots, 0)
+            for label, value, bold in (
+                ("Blank votes", str(blank), False),
+                ("Spoilt ballots", f"{spoilt} ({spoilt_slots})", False),
+                ("Total", str(possible), True),
+            ):
+                row = table.add_row()
+                for ci, width in enumerate(col_widths):
+                    row.cells[ci].width = width
+                row.cells[0].text = label
+                row.cells[col_count - 1].text = value
+                for paragraph in row.cells[col_count - 1].paragraphs:
+                    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for ci in range(col_count):
+                    for paragraph in row.cells[ci].paragraphs:
+                        for run in paragraph.runs:
+                            run.font.size = Pt(10)
+                            run.italic = not bold
+                            run.bold = bold
+            _para(
+                f"For the office of {o['name']}, "
+                f"{blank} selection{'' if blank == 1 else 's'} "
+                f"{'was' if blank == 1 else 'were'} left blank and "
+                f"{spoilt} ballot{'' if spoilt == 1 else 's'} "
+                f"{'was' if spoilt == 1 else 'were'} spoilt. "
+                f"Spoilt ballots are shown as ballots, with the number of "
+                f"selections they carried in brackets."
+            )
+
         # Declaration sentence
         elected_clauses = []
         remaining_offices = []

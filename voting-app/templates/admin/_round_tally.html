@@ -74,19 +74,46 @@
         {% set office_max = item.office.max_selections or 1 %}
         {% set office_possible = total_ballots * office_max %}
         {% set office_sum = item.candidates | selectattr('active') | sum(attribute='total') %}
+        {% set spoilt_count = item.spoilt_count or 0 %}
+        {% set spoilt_slots = spoilt_count * office_max %}
+        {% set blank_slots = office_possible - office_sum - spoilt_slots %}
         {% if office_possible > 0 %}
+        {# Accountability rows: every selection is a candidate tick, a blank
+           (unused) selection, or sits on a spoilt ballot. Blank and spoilt
+           stay outside the Article 6a denominator. #}
+        <tr style="color: #666; font-style: italic;">
+            <td>Blank votes <span style="font-size: 12px;">(unused selections)</span></td>
+            <td></td>
+            <td></td>
+            {% if postal_voter_count > 0 %}<td></td>{% endif %}
+            <td style="text-align: right;">{{ blank_slots if blank_slots > 0 else 0 }}</td>
+            {% if has_thresholds %}<td></td><td></td>{% endif %}
+            {% if show_elected %}<td></td>{% endif %}
+        </tr>
+        <tr style="color: #C0392B; font-style: italic;">
+            <td>Spoilt ballots</td>
+            <td></td>
+            <td></td>
+            {% if postal_voter_count > 0 %}<td></td>{% endif %}
+            <td style="text-align: right; white-space: nowrap;">
+                {% if spoilt_count > 0 %}{{ spoilt_count }} ballot{{ '' if spoilt_count == 1 else 's' }} ({{ spoilt_slots }} selections){% else %}0{% endif %}
+            </td>
+            {% if has_thresholds %}<td></td><td></td>{% endif %}
+            {% if show_elected %}<td></td>{% endif %}
+        </tr>
         <tr style="border-top: 2px solid var(--gold);">
             <td style="font-weight: 700;">Total</td>
             <td></td>
             <td></td>
             {% if postal_voter_count > 0 %}<td></td>{% endif %}
-            <td style="text-align: right; font-weight: 700;">
+            <td style="text-align: right; font-weight: 700; white-space: nowrap;">
                 {% if office_sum > office_possible %}
                 <span style="color: var(--red);">{{ office_sum }}</span>
                 <span style="font-size: 0.85em; color: var(--grey-dark);"> / {{ office_possible }} max</span>
                 <span style="color: var(--red); margin-left: 4px;">&#10007;</span>
                 {% else %}
-                {{ office_sum }} <span style="color: var(--green);">&#10003;</span>
+                {{ office_possible }} <span style="font-size: 0.85em; color: var(--grey-dark); font-weight: 400;">= {{ total_ballots }} ballots × {{ office_max }} selection{{ '' if office_max == 1 else 's' }}</span>
+                <span style="color: var(--green); margin-left: 4px;">&#10003;</span>
                 {% endif %}
             </td>
             {% if has_thresholds %}<td></td><td></td>{% endif %}

@@ -422,7 +422,7 @@
                 {% if (office.spoilt_count or 0) > 0 %}
                 <div class="display-candidate" style="opacity: 0.7; color: #C0392B;">
                     <span class="name" style="font-style: italic;">Spoilt ballots</span>
-                    <span class="votes">{{ office.spoilt_count }}</span>
+                    <span class="votes">{{ office.spoilt_count }} ballot{{ '' if office.spoilt_count == 1 else 's' }} ({{ spoilt_slots }} selections)</span>
                 </div>
                 {% endif %}
                 {% if possible > 0 %}
@@ -472,7 +472,7 @@
                 {% if (office.spoilt_count or 0) > 0 %}
                 <div class="display-candidate" style="opacity: 0.7; color: #C0392B;">
                     <span class="name" style="font-style: italic;">Spoilt ballots</span>
-                    <span class="votes">{{ office.spoilt_count }}</span>
+                    <span class="votes">{{ office.spoilt_count }} ballot{{ '' if office.spoilt_count == 1 else 's' }} ({{ spoilt_slots }} selections)</span>
                 </div>
                 {% endif %}
                 {% if possible > 0 %}

@@ -301,7 +301,7 @@
             {% if (office.spoilt_count or 0) > 0 %}
             <div class="cand-row blank-row" style="color: #C0392B;">
                 <span class="name">Spoilt ballots</span>
-                <span class="votes">{{ office.spoilt_count }}</span>
+                <span class="votes">{{ office.spoilt_count }} ballot{{ '' if office.spoilt_count == 1 else 's' }} ({{ spoilt_slots }} selections)</span>
             </div>
             {% endif %}
             {% endif %}
@@ -417,7 +417,7 @@
                             html += '<div class="cand-row blank-row"><span class="name">Blank votes</span><span class="votes">' + blank + '</span></div>';
                         }
                         if (spoilt > 0) {
-                            html += '<div class="cand-row blank-row" style="color:#C0392B"><span class="name">Spoilt ballots</span><span class="votes">' + spoilt + '</span></div>';
+                            html += '<div class="cand-row blank-row" style="color:#C0392B"><span class="name">Spoilt ballots</span><span class="votes">' + spoilt + (spoilt === 1 ? ' ballot (' : ' ballots (') + spoiltSlots + ' selections)</span></div>';
                         }
                     }
                     html += '</div>';
