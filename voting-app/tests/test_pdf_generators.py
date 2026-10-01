@@ -16,8 +16,6 @@ from reportlab.pdfgen import canvas as rl_canvas
 from pdf_generators import (
     generate_code_slips_pdf,
     generate_dual_sided_ballots_pdf,
-    generate_ballot_front_pdf,
-    generate_code_slips_back_pdf,
     generate_attendance_register_pdf,
     generate_printer_pack_zip,
     draw_code_slip,
@@ -314,121 +312,6 @@ def test_dual_sided_ballot_back_has_warning():
 # Ballot front PDF â€” single card-sized page
 # ---------------------------------------------------------------------------
 
-def test_ballot_front_pdf_generates():
-    """Ballot front PDF should generate without error."""
-    buf = generate_ballot_front_pdf(
-        election_name="Office Bearer Election 2026",
-        office_data=SAMPLE_OFFICE_DATA,
-        wifi_password="",
-    )
-    assert buf is not None
-    assert buf.getbuffer().nbytes > 0
-
-
-def test_ballot_front_pdf_single_page():
-    """Ballot front PDF should have exactly 1 page."""
-    buf = generate_ballot_front_pdf(
-        election_name="Office Bearer Election 2026",
-        office_data=SAMPLE_OFFICE_DATA,
-        wifi_password="",
-    )
-    assert _page_count(buf) == 1
-
-
-def test_ballot_front_pdf_has_candidates():
-    """Ballot front should contain all candidate names."""
-    buf = generate_ballot_front_pdf(
-        election_name="Office Bearer Election 2026",
-        office_data=SAMPLE_OFFICE_DATA,
-        wifi_password="",
-    )
-    text = _extract_text(buf, 0)
-    for item in SAMPLE_OFFICE_DATA:
-        for cand in item["candidates"]:
-            assert cand["name"] in text, f"Missing: {cand['name']}"
-
-
-def test_ballot_front_pdf_not_a4():
-    """Ballot front should use a custom card page size, not A4."""
-    from PyPDF2 import PdfReader
-    buf = generate_ballot_front_pdf(
-        election_name="Office Bearer Election 2026",
-        office_data=SAMPLE_OFFICE_DATA,
-        wifi_password="",
-    )
-    buf.seek(0)
-    reader = PdfReader(buf)
-    page = reader.pages[0]
-    w = float(page.mediabox.width)
-    h = float(page.mediabox.height)
-    a4_w, a4_h = A4
-    assert w < a4_w and h < a4_h, "Page should be smaller than A4"
-
-
-# ---------------------------------------------------------------------------
-# Code slips back PDF â€” one card-sized page per code
-# ---------------------------------------------------------------------------
-
-def test_code_slips_back_pdf_generates():
-    """Code slips back PDF should generate without error."""
-    buf = generate_code_slips_back_pdf(
-        codes=SAMPLE_CODES,
-        wifi_ssid="ChurchVote",
-        wifi_password="",
-        base_url="http://192.168.8.100:5000",
-        office_data=SAMPLE_OFFICE_DATA,
-    )
-    assert buf is not None
-    assert buf.getbuffer().nbytes > 0
-
-
-def test_code_slips_back_pdf_page_count_matches_codes():
-    """Back PDF should have one page per code."""
-    codes = SAMPLE_CODES[:4]
-    buf = generate_code_slips_back_pdf(
-        codes=codes,
-        wifi_ssid="ChurchVote",
-        wifi_password="",
-        base_url="http://192.168.8.100:5000",
-        office_data=SAMPLE_OFFICE_DATA,
-    )
-    assert _page_count(buf) == len(codes)
-
-
-def test_code_slips_back_pdf_contains_codes():
-    """Each back page should contain its voting code."""
-    buf = generate_code_slips_back_pdf(
-        codes=["KR4T7N"],
-        wifi_ssid="ChurchVote",
-        wifi_password="",
-        base_url="http://192.168.8.100:5000",
-        office_data=SAMPLE_OFFICE_DATA,
-    )
-    text = _extract_text(buf, 0)
-    assert "KR4" in text and "T7N" in text
-
-
-def test_code_slips_back_pdf_not_a4():
-    """Back PDF should use a custom card page size, not A4."""
-    from PyPDF2 import PdfReader
-    buf = generate_code_slips_back_pdf(
-        codes=SAMPLE_CODES[:1],
-        wifi_ssid="ChurchVote",
-        wifi_password="",
-        base_url="http://192.168.8.100:5000",
-        office_data=SAMPLE_OFFICE_DATA,
-    )
-    buf.seek(0)
-    reader = PdfReader(buf)
-    page = reader.pages[0]
-    w = float(page.mediabox.width)
-    h = float(page.mediabox.height)
-    a4_w, a4_h = A4
-    assert w < a4_w and h < a4_h, "Page should be smaller than A4"
-
-
-# ---------------------------------------------------------------------------
-# Attendance register PDF
 # ---------------------------------------------------------------------------
 
 SAMPLE_MEMBERS = [
@@ -495,20 +378,17 @@ def test_printer_pack_zip_contains_all_files():
         names = set(zf.namelist())
     required = {
         "0_INSTRUCTIONS.txt",
-        "1_ballot_front.pdf",
-        "2_code_slips_back.pdf",
-        "3_cards_duplex.pdf",
-        "4_dual_sided_ballots.pdf",
-        "5_counter_sheet.pdf",
-        "6_attendance_register.pdf",
-        "8_av_instructions.pdf",
+        "1_cards_duplex.pdf",
+        "2_dual_sided_ballots.pdf",
+        "3_counter_sheet.pdf",
+        "4_attendance_register.pdf",
+        "5_voter_handout.pdf",
+        "6_av_instructions.pdf",
     }
     assert required <= names, f"missing required files: {required - names}"
-    assert "7_voter_handout.pdf" in names, "voter handout missing"
-    # Nothing else.
-    assert names == required | {"7_voter_handout.pdf"}, (
-        f"unexpected entries: {names - (required | {'7_voter_handout.pdf'})}"
-    )
+    # Nothing else. The separate ballot-front and code-slips-back files
+    # were dropped; cards_duplex and dual_sided_ballots cover both.
+    assert names == required, f"unexpected entries: {names - required}"
 
 
 def test_printer_pack_zip_cards_duplex_page_count():
@@ -518,34 +398,10 @@ def test_printer_pack_zip_cards_duplex_page_count():
     buf = _generate_sample_zip()
     buf.seek(0)
     with zipfile.ZipFile(buf) as zf:
-        data = zf.read("3_cards_duplex.pdf")
+        data = zf.read("1_cards_duplex.pdf")
     reader = PdfReader(io.BytesIO(data))
     # _generate_sample_zip uses 8 codes, member_count=0, so total_cards=8 â†’ 16 pages
     assert len(reader.pages) == 16
-
-
-def test_printer_pack_zip_front_is_single_page():
-    """ballot_front.pdf inside the ZIP should be 1 page."""
-    import zipfile
-    from PyPDF2 import PdfReader
-    buf = _generate_sample_zip()
-    buf.seek(0)
-    with zipfile.ZipFile(buf) as zf:
-        front_data = zf.read("1_ballot_front.pdf")
-    reader = PdfReader(io.BytesIO(front_data))
-    assert len(reader.pages) == 1
-
-
-def test_printer_pack_zip_back_page_count():
-    """code_slips_back.pdf should have one page per code."""
-    import zipfile
-    from PyPDF2 import PdfReader
-    buf = _generate_sample_zip()
-    buf.seek(0)
-    with zipfile.ZipFile(buf) as zf:
-        back_data = zf.read("2_code_slips_back.pdf")
-    reader = PdfReader(io.BytesIO(back_data))
-    assert len(reader.pages) == len(SAMPLE_CODES)
 
 
 def test_printer_pack_zip_instructions_content():
@@ -555,13 +411,14 @@ def test_printer_pack_zip_instructions_content():
     buf.seek(0)
     with zipfile.ZipFile(buf) as zf:
         instructions = zf.read("0_INSTRUCTIONS.txt").decode("utf-8")
-    assert "1_ballot_front.pdf" in instructions
-    assert "2_code_slips_back.pdf" in instructions
-    assert "4_dual_sided_ballots.pdf" in instructions
-    assert "5_counter_sheet.pdf" in instructions
-    assert "6_attendance_register.pdf" in instructions
-    assert "7_voter_handout.pdf" in instructions
-    assert "8_av_instructions.pdf" in instructions
+    assert "1_cards_duplex.pdf" in instructions
+    assert "2_dual_sided_ballots.pdf" in instructions
+    assert "3_counter_sheet.pdf" in instructions
+    assert "4_attendance_register.pdf" in instructions
+    assert "5_voter_handout.pdf" in instructions
+    assert "6_av_instructions.pdf" in instructions
+    assert "ballot_front" not in instructions
+    assert "code_slips_back" not in instructions
 
 
 def test_code_slip_voting_qr_meets_minimum_size():
@@ -851,7 +708,7 @@ def test_printer_pack_handout_is_generated_from_the_live_slate():
     buf = _generate_sample_zip()
     buf.seek(0)
     with zipfile.ZipFile(buf) as zf:
-        data = zf.read("7_voter_handout.pdf")
+        data = zf.read("5_voter_handout.pdf")
     reader = PdfReader(io.BytesIO(data))
     assert len(reader.pages) == 2
     front = reader.pages[0].extract_text()
@@ -913,3 +770,36 @@ def test_voter_handout_fits_its_margins_at_the_supported_maximum():
             f"page {index + 1} overflows the right")
         assert y1 <= page_h - margin + 1, (
             f"page {index + 1} overflows the bottom")
+
+
+def test_counter_sheet_group_labels_do_not_sit_on_the_boxes():
+    """Regression: the every-5 counter was drawn 2.5 mm below its row,
+    which is where the next row of tick boxes starts, so every label
+    except the last row's printed on top of the boxes. The label must
+    clear the grid."""
+    fitz = pytest.importorskip("fitz")
+    from pdf_generators import generate_counter_sheet_pdf
+    buf = generate_counter_sheet_pdf(
+        "Annual Election 2026", "FRC Darling Downs", MAX_SLATE,
+        member_count=110)
+    doc = fitz.open(stream=buf.getvalue(), filetype="pdf")
+    page = doc[0]
+
+    box_side = 3.5 * mm
+    boxes = [d["rect"] for d in page.get_drawings()
+             if abs(d["rect"].width - box_side) < 1
+             and abs(d["rect"].height - box_side) < 1]
+    assert len(boxes) > 100, f"expected a tick grid, found {len(boxes)} boxes"
+
+    labels = []
+    for block in page.get_text("dict")["blocks"]:
+        for line in block.get("lines", []):
+            for span in line["spans"]:
+                if span["text"].strip().isdigit():
+                    labels.append((span["text"].strip(),
+                                   fitz.Rect(span["bbox"])))
+    assert labels, "no group labels found"
+
+    collisions = [text for text, rect in labels
+                  if any((rect & box).get_area() > 0 for box in boxes)]
+    assert not collisions, f"labels printed over tick boxes: {collisions}"

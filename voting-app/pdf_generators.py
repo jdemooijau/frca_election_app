@@ -412,7 +412,10 @@ def generate_counter_sheet_pdf(election_name, congregation_name, offices_data,
     margin = 8 * mm
     box_size = 3.5 * mm
     box_gap = 0.8 * mm
-    group_gap = 2.5 * mm  # wider gap between groups of 5
+    # Wide enough between groups of 5 to hold the running counter,
+    # which sits beside its group rather than under it: a label
+    # below the row lands on the next row of boxes.
+    group_gap = 4.2 * mm
     group_size = 5
     tally_start = 55 * mm
     total_col = width - 25 * mm
@@ -503,12 +506,15 @@ def generate_counter_sheet_pdf(election_name, congregation_name, offices_data,
                         boxes_drawn += 1
                         col_in_row += 1
 
-                    # Group number label under the group
+                    # Running counter, centred in the gap that follows
+                    # the group and vertically centred on the row.
                     if boxes_drawn > 0 and boxes_drawn % group_size == 0:
                         c.setFont("Helvetica", 4.5)
                         c.setFillColor(HexColor("#BBBBBB"))
-                        label_x = gx + (group_size * (box_size + box_gap) - box_gap) / 2
-                        c.drawCentredString(label_x, by - 2.5 * mm, str(boxes_drawn))
+                        group_span = group_size * (box_size + box_gap) - box_gap
+                        label_x = gx + group_span + group_gap / 2
+                        c.drawCentredString(label_x, by + 1.2 * mm,
+                                            str(boxes_drawn))
                         c.setFillColor(NAVY)
                         c.setStrokeColor(HexColor("#CCCCCC"))
 
@@ -1319,59 +1325,6 @@ def _calc_card_dimensions(office_data, wifi_password):
     return col_w, cell_h, sub_w, sub_gap, left_offices, right_offices
 
 
-def generate_ballot_front_pdf(election_name, office_data, wifi_password,
-                              is_demo=False):
-    """Generate a single-page card-sized PDF with one paper ballot.
-
-    The front is identical for all cards — the printer duplicates it.
-
-    Returns:
-        BytesIO buffer containing the PDF.
-    """
-    col_w, cell_h, sub_w, sub_gap, left, right = _calc_card_dimensions(
-        office_data, wifi_password)
-
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=(col_w, cell_h))
-
-    _draw_ballot_card(c, 0, cell_h, col_w, cell_h, election_name,
-                      left, right, sub_w, sub_gap)
-    c.showPage()
-    c.save()
-    buf.seek(0)
-    return buf
-
-
-def generate_code_slips_back_pdf(codes, wifi_ssid, wifi_password, base_url,
-                                 office_data, member_count=0, is_demo=False,
-                                 qr_base_url=None):
-    """Generate card-sized PDF with one code slip per page.
-
-    Each page has a unique voting code + QR. The printer cannot duplicate
-    these — each page is different.
-
-    Returns:
-        BytesIO buffer containing the PDF.
-    """
-    col_w, cell_h, _, _, _, _ = _calc_card_dimensions(office_data,
-                                                       wifi_password)
-
-    total_cards = len(codes)
-
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=(col_w, cell_h))
-
-    for code_str in codes:
-        draw_code_slip(c, 0, cell_h, col_w, cell_h, code_str,
-                       wifi_ssid, wifi_password, base_url,
-                       qr_base_url=qr_base_url)
-        c.showPage()
-
-    c.save()
-    buf.seek(0)
-    return buf
-
-
 def generate_cards_duplex_pdf(election_name, office_data, codes, wifi_ssid,
                               wifi_password, base_url, member_count=0,
                               is_demo=False, qr_base_url=None):
@@ -2085,51 +2038,39 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
     in 0_INSTRUCTIONS.txt — read that first):
 
         0_INSTRUCTIONS.txt        — explanation of each file (read first)
-        1_ballot_front.pdf        — card-sized paper ballot (duplicate this)
-        2_code_slips_back.pdf     — N pages, card-sized unique code slips
-        3_cards_duplex.pdf        — 2N pages, card-sized, interleaved front/back
-        4_dual_sided_ballots.pdf  — grid layout for home duplex printing
-        5_counter_sheet.pdf       — tally sheet for counting paper ballots
-        6_attendance_register.pdf — sign-in sheet for election day
-        7_voter_handout.pdf       — A4 duplex (how-to-vote / safeguards FAQ); 1 per voter
-        8_av_instructions.pdf     — handout for the AV team
+        1_cards_duplex.pdf        — 2N pages, card-sized, interleaved front/back
+        2_dual_sided_ballots.pdf  — grid layout for home duplex printing
+        3_counter_sheet.pdf       — tally sheet for counting paper ballots
+        4_attendance_register.pdf — sign-in sheet for election day
+        5_voter_handout.pdf       — A4 duplex (how-to-vote / safeguards FAQ); 1 per voter
+        6_av_instructions.pdf     — handout for the AV team
 
     Returns:
         BytesIO buffer containing the ZIP.
     """
-    # 1. Ballot front (1 page, card-sized)
-    front_buf = generate_ballot_front_pdf(
-        election_name, office_data, wifi_password, is_demo=is_demo)
-
-    # 2. Code slips back (N pages, card-sized)
-    back_buf = generate_code_slips_back_pdf(
-        codes, wifi_ssid, wifi_password, base_url, office_data,
-        member_count=member_count, is_demo=is_demo,
-        qr_base_url=qr_base_url)
-
-    # 3. Cards duplex (interleaved front/back, card-sized, 2N pages)
+    # 1. Cards duplex (interleaved front/back, card-sized, 2N pages)
     cards_duplex_buf = generate_cards_duplex_pdf(
         election_name, office_data, codes,
         wifi_ssid, wifi_password, base_url,
         member_count=member_count, is_demo=is_demo,
         qr_base_url=qr_base_url)
 
-    # 4. Dual-sided grid layout (for home A4 printing fallback)
+    # 2. Dual-sided grid layout (for home A4 printing fallback)
     dual_buf = generate_dual_sided_ballots_pdf(
         election_name, short_name, round_number, office_data, codes,
         wifi_ssid, wifi_password, base_url,
         member_count=member_count, is_demo=is_demo,
         qr_base_url=qr_base_url)
 
-    # 4. Counter sheet
+    # 3. Counter sheet
     counter_buf = generate_counter_sheet_pdf(
         election_name, congregation_name, office_data,
         member_count=member_count, is_demo=is_demo)
 
-    # 5. Attendance register
+    # 4. Attendance register
     attendance_buf = generate_attendance_register_pdf(members)
 
-    # 6. Voter handout: 2-page A4 (front = how-to-vote on paper or
+    # 5. Voter handout: 2-page A4 (front = how-to-vote on paper or
     #    phone, back = the safeguards FAQ). Drawn for this election, so
     #    its ballot and code-slip thumbnails show the slate the voter is
     #    actually handed.
@@ -2137,12 +2078,12 @@ def generate_printer_pack_zip(election_name, short_name, round_number,
         election_name, office_data, wifi_ssid, wifi_password, base_url,
         qr_base_url=qr_base_url)
 
-    # 7. AV team instructions (handout for the liturgy screen operator)
+    # 6. AV team instructions (handout for the liturgy screen operator)
     av_buf = generate_av_instructions_pdf(
         election_name, wifi_ssid, wifi_password, base_url,
         qr_base_url=qr_base_url)
 
-    # 8. Instructions
+    # 7. Instructions
     # One card per generated code. Multi-round elections generate codes
     # for all rounds at once (members x max_rounds), so the printer pack
     # produces all the cards needed for the whole election.
@@ -2173,75 +2114,51 @@ church office bearer election. Below is a description of each file.
 
 CHOOSING A FORMAT
 ─────────────────
-Three printing workflows are provided. Pick ONE based on your equipment:
+Two printing workflows are provided. Pick ONE based on your equipment:
 
-  • Pro print shop with imposition software:    use #1 + #2
-  • Card-size duplex printer, no imposition:    use #3
-  • A4 home/office printer, no card media:      use #4
+  • Card-size duplex printer:              use #1
+  • A4 home/office printer, no card media: use #2
 
 
-1. 1_ballot_front.pdf  (1 page)
+1. 1_cards_duplex.pdf  ({total_cards_x2} pages)
    ─────────────────────────────
-   The FRONT side of the voting card. Shows the election name,
-   offices, and candidate checkboxes.
+   The voting cards, card-sized, with front and back interleaved on
+   consecutive pages: page 1 is the front of card 1, page 2 is the
+   back of card 1, page 3 is the front of card 2, and so on.
 
-   This page is IDENTICAL for all cards. Your imposition software
-   should duplicate it to produce {total_cards} copies, arranged on
-   sheets for cutting. Card size: ~94 x 88 mm.
-
-   Use this WITH file #2. Skip if using #3 or #4.
-
-
-2. 2_code_slips_back.pdf  ({total_cards} pages)
-   ─────────────────────────────
-   The BACK side of the voting card. Each page has a UNIQUE voting
-   code and QR code — one per card. Do NOT duplicate these pages.
-
-   Page 1 pairs with copy 1 of the front, page 2 with copy 2, etc.
-   Same card size as the front (~94 x 88 mm).
-
-   Print these duplex with the front, matching page order:
-   Front copy 1 + Back page 1, Front copy 2 + Back page 2, etc.
-
-   Use this WITH file #1. Skip if using #3 or #4.
-
-
-3. 3_cards_duplex.pdf  ({total_cards_x2} pages)
-   ─────────────────────────────
-   ALL-IN-ONE alternative to #1 + #2. Card-sized, with front and back
-   interleaved on consecutive pages: page 1 is the front of card 1,
-   page 2 is the back of card 1, page 3 is the front of card 2, etc.
+   The front shows the election name, offices and candidate
+   checkboxes, and is the same on every card. Each back carries a
+   UNIQUE voting code and QR code, so these pages must not be
+   duplicated or reordered. Card size: ~94 x 88 mm.
 
    No imposition setup needed: send to a duplex printer that accepts
    card-size media and you get {total_cards} finished cards.
 
-   Use INSTEAD of #1 + #2 if your printer can do card-size duplex.
 
-
-4. 4_dual_sided_ballots.pdf
+2. 2_dual_sided_ballots.pdf
    ─────────────────────────────
    A4 FALLBACK for home/office printing without card media. Contains
-   the same ballots in a 6-per-page grid layout, ready for duplex
+   the same cards in a 6-per-page grid layout, ready for duplex
    printing on A4 with long-edge binding. Cut along the dashed lines
    after printing.
 
-   Use INSTEAD of #1 + #2 or #3 if you only have an A4 printer.
+   Use INSTEAD of #1 if you only have an A4 printer.
 
 
-5. 5_counter_sheet.pdf
+3. 3_counter_sheet.pdf
    ─────────────────────────────
    Tally sheet for counting paper ballots by hand. One page per
    office, with tick boxes for each candidate. Print on A4.
 
 
-6. 6_attendance_register.pdf
+4. 4_attendance_register.pdf
    ─────────────────────────────
    Sign-in sheet listing all members. Each attendee signs next to
    their name upon arrival. Required per Article 4 of the church
    order. Print on A4.{attendance_split_note}
 
 
-7. 7_voter_handout.pdf  (2 pages, duplex)
+5. 5_voter_handout.pdf  (2 pages, duplex)
    ─────────────────────────────
    A4 voter handout. Front: how to vote on paper or on the phone.
    Back: "Phone voting: frequently asked questions" answering the
@@ -2252,7 +2169,7 @@ Three printing workflows are provided. Pick ONE based on your equipment:
    binding).
 
 
-8. 8_av_instructions.pdf  (1 page)
+6. 6_av_instructions.pdf  (1 page)
    ─────────────────────────────
    One-page handout for the AV team running the liturgy screen.
    The election admin gives this to the AV operator on the day.
@@ -2264,30 +2181,26 @@ PRINTING SUMMARY
 
   File                        Size        Print     Yields              Paper
   ──────────────────────────  ──────────  ───────   ──────────────────  ──────
-  1_ballot_front.pdf          Card-sized  x1        duplicated to {total_cards:<5}  Duplex (with #2)
-  2_code_slips_back.pdf       Card-sized  x1        {total_cards} unique cards   Duplex (with #1)
-  3_cards_duplex.pdf          Card-sized  x1        {total_cards} cards          Duplex (replaces #1+#2)
-  4_dual_sided_ballots.pdf    A4          x1        {total_cards} cards (cut)    Duplex (A4 fallback)
-  5_counter_sheet.pdf         A4          x2-3      tally sheet         Simplex
-  6_attendance_register.pdf   A4          x1-2      sign-in sheet       Simplex
-  7_voter_handout.pdf         A4          x{member_count_for_print:<3}      voter handout       Duplex
-  8_av_instructions.pdf       A4          x1-2      AV handout          Simplex
+  1_cards_duplex.pdf          Card-sized  x1        {total_cards} cards          Duplex
+  2_dual_sided_ballots.pdf    A4          x1        {total_cards} cards (cut)    Duplex (A4 fallback)
+  3_counter_sheet.pdf         A4          x2-3      tally sheet         Simplex
+  4_attendance_register.pdf   A4          x1-2      sign-in sheet       Simplex
+  5_voter_handout.pdf         A4          x{member_count_for_print:<3}      voter handout       Duplex
+  6_av_instructions.pdf       A4          x1-2      AV handout          Simplex
 
 For questions, contact the election administrator.
 """
 
-    # Assemble ZIP. Filenames are prefixed 1_..8_ so they sort in the
+    # Assemble ZIP. Filenames are prefixed 1_..6_ so they sort in the
     # order described in INSTRUCTIONS.txt when extracted.
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("1_ballot_front.pdf", front_buf.getvalue())
-        zf.writestr("2_code_slips_back.pdf", back_buf.getvalue())
-        zf.writestr("3_cards_duplex.pdf", cards_duplex_buf.getvalue())
-        zf.writestr("4_dual_sided_ballots.pdf", dual_buf.getvalue())
-        zf.writestr("5_counter_sheet.pdf", counter_buf.getvalue())
-        zf.writestr("6_attendance_register.pdf", attendance_buf.getvalue())
-        zf.writestr("7_voter_handout.pdf", handout_buf.getvalue())
-        zf.writestr("8_av_instructions.pdf", av_buf.getvalue())
+        zf.writestr("1_cards_duplex.pdf", cards_duplex_buf.getvalue())
+        zf.writestr("2_dual_sided_ballots.pdf", dual_buf.getvalue())
+        zf.writestr("3_counter_sheet.pdf", counter_buf.getvalue())
+        zf.writestr("4_attendance_register.pdf", attendance_buf.getvalue())
+        zf.writestr("5_voter_handout.pdf", handout_buf.getvalue())
+        zf.writestr("6_av_instructions.pdf", av_buf.getvalue())
         zf.writestr("0_INSTRUCTIONS.txt", instructions)
 
     zip_buf.seek(0)

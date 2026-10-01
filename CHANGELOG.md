@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Counter sheet running totals were unreadable. The every-5 counter was
+  drawn 2.5 mm below its row, which is where the next row of tick boxes
+  starts, so every label except the last row's printed on top of the
+  boxes. The counter now sits in the gap just after its group of five,
+  on the same line. The gap widened from 2.5 mm to 4.2 mm to hold it,
+  which still leaves five groups (25 boxes) per row, so the sheet keeps
+  its shape.
 - Count step reconciliation panel always showed "Postal: 0". It queried
   `postal_votes` on a `round_number` column that table does not have, and
   the swallowed error defaulted to 0. It now reads the election's postal
@@ -65,6 +72,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `1_ballot_front.pdf` and `2_code_slips_back.pdf` are no longer in the
+  printer pack, along with the `generate_ballot_front_pdf` and
+  `generate_code_slips_back_pdf` generators that produced them. They
+  served the pro-print-shop imposition workflow; the card-duplex and A4
+  grid files cover every press we actually use. The remaining files are
+  renumbered 1 to 6 (`1_cards_duplex.pdf`, `2_dual_sided_ballots.pdf`,
+  `3_counter_sheet.pdf`, `4_attendance_register.pdf`,
+  `5_voter_handout.pdf`, `6_av_instructions.pdf`) and
+  `0_INSTRUCTIONS.txt` now describes two printing workflows instead of
+  three.
 - The chairman's paper-ballot QR scanner. Too cumbersome to use on the
   day, and it only ever caught the phone-plus-paper case: a second
   paper ballot carries its own unused code and scans as legitimate.
