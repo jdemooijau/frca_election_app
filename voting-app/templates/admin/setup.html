@@ -103,6 +103,35 @@
             </p>
         </div>
 
+        <h2 style="font-size: 18px; margin: 24px 0 8px;">SMS reminders (SMSGlobal)</h2>
+        <p style="font-size: 14px; color: #666; margin-bottom: 8px;">
+            Optional. Used by the SMS reminder step to text members before the
+            election. Create the key in your SMSGlobal MXT account under API keys.
+        </p>
+
+        <div class="form-group">
+            <label for="smsglobal_key">API Key</label>
+            <input type="text" id="smsglobal_key" name="smsglobal_key"
+                   value="{{ smsglobal_key }}" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="smsglobal_secret">API Secret</label>
+            <input type="password" id="smsglobal_secret" name="smsglobal_secret"
+                   placeholder="{{ 'Saved. Leave blank to keep it' if smsglobal_secret_saved else '' }}"
+                   autocomplete="new-password">
+        </div>
+
+        <div class="form-group">
+            <label for="smsglobal_origin">Sender ID (optional)</label>
+            <input type="text" id="smsglobal_origin" name="smsglobal_origin"
+                   value="{{ smsglobal_origin }}" autocomplete="off">
+            <p style="font-size: 14px; color: #666; margin-top: 4px;">
+                Leave blank to send from an SMSGlobal number. A name only works
+                once it is registered as a sender ID in MXT.
+            </p>
+        </div>
+
         <div class="form-group">
             <label for="new_password">{{ 'Change Admin Password' if setup_complete else 'New Admin Password' }}</label>
             <input type="password" id="new_password" name="new_password"

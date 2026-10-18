@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- SMS reminder step (Setup group, after Members). Schedules one text per
+  member with a mobile number through SMSGlobal, for a chosen date and
+  time in the laptop's time zone. Defaults to the last message sent and
+  to 6 pm the day before the election. Shows the recipient count, who is
+  skipped (no mobile, not an Australian mobile, duplicate number) and
+  the SMSGlobal credit. A second send for the same election needs a
+  tick to confirm. Each send is recorded in the new `sms_sends` table
+  with the SMSGlobal id per member. API key, secret and optional sender
+  ID are entered on the Settings page.
 - Blank votes and spoilt ballots are now accounted for on every results
   surface. The admin tally (count step, voting step, historical round
   results) and the minutes gain "Blank votes", "Spoilt ballots" and a

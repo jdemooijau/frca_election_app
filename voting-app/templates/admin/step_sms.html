@@ -1,0 +1,81 @@
+{% extends "admin/_step_base.html" %}
+{% block title %}SMS reminder - {{ sidebar_state.election.name }}{% endblock %}
+{% block step_tag %}SMS reminder{% endblock %}
+{% block step_heading %}Text a reminder to all members{% endblock %}
+{% block step_content %}
+{% if not configured %}
+<div class="card">
+    <div class="card-header">SMSGlobal not set up</div>
+    <p>Enter the SMSGlobal API key and secret in
+        <a href="{{ url_for('admin_setup') }}">Settings</a> first.</p>
+</div>
+{% endif %}
+
+{% if previous_sends %}
+<div class="card">
+    <div class="card-header">Already scheduled for this election</div>
+    <table style="width: 100%;">
+        {% for send in previous_sends %}
+        <tr>
+            <td>{{ send.scheduled_for }}</td>
+            <td>{{ send.accepted }} of {{ send.recipients }} accepted</td>
+            <td style="font-size: 13px; color: #666;">created {{ send.created_at }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <p style="font-size: 13px; color: #666; margin-top: 8px;">
+        To cancel a scheduled message, use the SMSGlobal MXT website.
+    </p>
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('admin_sms_schedule', election_id=sidebar_state.election.id) }}"
+      onsubmit="return confirm('Schedule this message to {{ recipients|length }} members?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="form-group">
+        <label for="message">Message</label>
+        <textarea id="message" name="message" rows="4" required style="width: 100%;"
+                  oninput="document.getElementById('sms-length').textContent = this.value.length;">{{ message }}</textarea>
+        <p style="font-size: 13px; color: #666; margin-top: 4px;">
+            <span id="sms-length">{{ message|length }}</span> characters. Up to 160 is one SMS;
+            longer messages cost more per member.
+        </p>
+    </div>
+
+    <div class="form-group">
+        <label for="send_at">Send at</label>
+        <input type="datetime-local" id="send_at" name="send_at" value="{{ send_at }}" required>
+        <p style="font-size: 13px; color: #666; margin-top: 4px;">
+            In this laptop's time zone. Defaults to the day before the election at 6 pm.
+        </p>
+    </div>
+
+    <p>
+        <strong>{{ recipients|length }}</strong> members will get this message.
+        {% if balance %}SMSGlobal credit: {{ balance }}.{% elif configured %}SMSGlobal credit could not be read (no internet?).{% endif %}
+    </p>
+    {% if skipped %}
+    <p style="font-size: 13px; color: #666;">
+        Not sent to {{ skipped|length }}:
+        {% for name, why in skipped %}{{ name }} ({{ why }}){% if not loop.last %}, {% endif %}{% endfor %}.
+    </p>
+    {% endif %}
+
+    {% if previous_sends %}
+    <div class="form-group">
+        <label style="display: flex; align-items: flex-start; gap: 10px;">
+            <input type="checkbox" name="confirm_resend" value="1" style="margin-top: 4px;">
+            <span>Schedule another reminder for this election anyway</span>
+        </label>
+    </div>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary" {% if not configured or not recipients %}disabled{% endif %}>
+        Schedule SMS
+    </button>
+    <p style="font-size: 13px; color: #666; margin-top: 8px;">
+        Sending takes up to a minute for the whole list. Keep this page open until it finishes.
+    </p>
+</form>
+{% endblock %}

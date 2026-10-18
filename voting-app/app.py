@@ -18,7 +18,7 @@ import secrets
 import string
 import hashlib
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from urllib.parse import urlparse
 
@@ -45,6 +45,7 @@ from pdf_generators import (
     NAVY, GOLD, _generate_qr_image,
 )
 from demo_names import generate_demo_names, load_member_names_from_external
+import sms_gateway
 from election_rules import (
     calculate_thresholds, check_candidate_elected, resolve_elected_status,
 )
@@ -365,6 +366,18 @@ def _init_db_on(db):
         CREATE INDEX IF NOT EXISTS idx_count_sessions_election ON count_sessions(election_id, round_no);
         CREATE INDEX IF NOT EXISTS idx_count_session_helpers_session ON count_session_helpers(session_id);
         CREATE INDEX IF NOT EXISTS idx_count_session_tallies_session ON count_session_tallies(session_id);
+
+        CREATE TABLE IF NOT EXISTS sms_sends (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            election_id INTEGER NOT NULL,
+            scheduled_for TEXT NOT NULL,
+            message TEXT NOT NULL,
+            recipients INTEGER NOT NULL,
+            accepted INTEGER NOT NULL,
+            details TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (election_id) REFERENCES elections(id)
+        );
     """)
     db.commit()
 
@@ -432,6 +445,7 @@ WIZARD_STEPS = [
     # (slug, label, group)
     ("details",    "Election details",      "Setup"),
     ("members",    "Members",               "Setup"),
+    ("sms",        "SMS reminder",          "Setup"),
     ("offices",    "Offices & Candidates",  "Setup"),
     ("settings",   "Election settings",     "Setup"),
     ("codes",      "Codes & printing",      "Setup"),
@@ -457,6 +471,10 @@ def _step_done(db, election, slug, round_no):
     if slug == "members":
         # Members are app-global; the same imported list is reused across elections.
         return db.execute("SELECT COUNT(*) FROM members").fetchone()[0] > 0
+    if slug == "sms":
+        return db.execute(
+            "SELECT COUNT(*) FROM sms_sends WHERE election_id = ? AND accepted > 0", (eid,)
+        ).fetchone()[0] > 0
     if slug == "offices":
         return db.execute(
             """
@@ -513,6 +531,8 @@ def _step_prerequisites_met(db, election, slug, round_no):
     """Return True if the step's prerequisites are satisfied (i.e. it is reachable)."""
     if slug in ("details", "members"):
         return True
+    if slug == "sms":
+        return _step_done(db, election, "members", round_no)
     if slug == "offices":
         return _step_done(db, election, "details", round_no)
     if slug == "settings":
@@ -571,13 +591,13 @@ def compute_sidebar_state(election_id):
 
     # Current step = lowest-numbered reachable, not-done step. If all done,
     # fall back to the last step in WIZARD_STEPS (currently "minutes").
-    # Members is app-global; don't auto-land the user there. They can still
-    # navigate to it from the sidebar; it just shouldn't be the default
+    # Members is app-global and the SMS reminder is optional; don't auto-land
+    # the user on either. They can still navigate to them from the sidebar; it just shouldn't be the default
     # landing step from /admin/election/<id>/manage redirects or
     # admin_election_open.
     current_step = next(
         (slug for slug, _label, _group in WIZARD_STEPS
-         if slug != "members" and status[slug][1] and not status[slug][0]),
+         if slug not in ("members", "sms") and status[slug][1] and not status[slug][0]),
         WIZARD_STEPS[-1][0],
     )
 
@@ -780,6 +800,18 @@ def _migrate_db_on(db):
             CREATE INDEX IF NOT EXISTS idx_count_session_helpers_session ON count_session_helpers(session_id);
             CREATE INDEX IF NOT EXISTS idx_count_session_tallies_session ON count_session_tallies(session_id);
 
+            CREATE TABLE IF NOT EXISTS sms_sends (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                election_id INTEGER NOT NULL,
+                scheduled_for TEXT NOT NULL,
+                message TEXT NOT NULL,
+                recipients INTEGER NOT NULL,
+                accepted INTEGER NOT NULL,
+                details TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                FOREIGN KEY (election_id) REFERENCES elections(id)
+            );
+
             CREATE TABLE IF NOT EXISTS attendance_checkins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 election_id INTEGER NOT NULL,
@@ -897,6 +929,161 @@ def admin_step_members(election_id):
         sidebar_state=sidebar_state,
         parent_template="admin/_step_base.html",
     )
+
+
+DEFAULT_SMS_MESSAGE = (
+    "FRCDD: Reminder: Office Bearer Election this Sunday, DV. Please bring phone and "
+    "switch to silent before the worship service. Voting is done by phone or paper."
+)
+SMS_TIME_INPUT_FORMAT = "%Y-%m-%dT%H:%M"
+
+
+def _parse_election_date(text):
+    """Election dates are free text; read the common forms, else None."""
+    for fmt in ("%d %B %Y", "%d %b %Y", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime((text or "").strip(), fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _default_sms_time(election):
+    """The day before the election at 6 pm, as a datetime-local value."""
+    election_day = _parse_election_date(election["election_date"])
+    if not election_day:
+        return ""
+    reminder = (election_day - timedelta(days=1)).replace(hour=18, minute=0)
+    return reminder.strftime(SMS_TIME_INPUT_FORMAT)
+
+
+def _sms_recipients(db):
+    """Members with a usable mobile, one per number; the rest with a reason."""
+    recipients, skipped, seen = [], [], {}
+    members = db.execute(
+        "SELECT id, first_name, last_name, mobile_phone FROM members "
+        "ORDER BY surname_sort_key(last_name || ' ' || first_name)"
+    ).fetchall()
+    for member in members:
+        name = f"{member['first_name']} {member['last_name']}"
+        mobile = (member["mobile_phone"] or "").strip()
+        number = sms_gateway.to_international(mobile)
+        if not mobile:
+            skipped.append((name, "no mobile"))
+        elif not number:
+            skipped.append((name, f"not an Australian mobile: {mobile}"))
+        elif number in seen:
+            skipped.append((name, f"same number as {seen[number]}"))
+        else:
+            seen[number] = name
+            recipients.append({"member_id": member["id"], "name": name, "number": number})
+    return recipients, skipped
+
+
+@app.route("/admin/election/<int:election_id>/step/sms", methods=["GET"], endpoint="admin_step_sms")
+@admin_required
+def admin_step_sms(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    recipients, skipped = _sms_recipients(db)
+    key = get_setting("smsglobal_key", "")
+    secret = get_setting("smsglobal_secret", "")
+    configured = bool(key and secret)
+    previous_sends = db.execute(
+        "SELECT * FROM sms_sends WHERE election_id = ? ORDER BY id", (election_id,)
+    ).fetchall()
+    last_message = db.execute(
+        "SELECT message FROM sms_sends ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    return render_template(
+        "admin/step_sms.html",
+        election=election,
+        sidebar_state=compute_sidebar_state(election_id),
+        configured=configured,
+        balance=sms_gateway.credit_balance(key, secret) if configured else None,
+        recipients=recipients,
+        skipped=skipped,
+        message=request.args.get("message")
+                or (last_message["message"] if last_message else DEFAULT_SMS_MESSAGE),
+        send_at=request.args.get("send_at") or _default_sms_time(election),
+        previous_sends=previous_sends,
+    )
+
+
+@app.route("/admin/election/<int:election_id>/sms/schedule", methods=["POST"])
+@admin_required
+def admin_sms_schedule(election_id):
+    db = get_db()
+    election = db.execute(
+        "SELECT * FROM elections WHERE id = ?", (election_id,)
+    ).fetchone()
+    if not election:
+        abort(404)
+    message = request.form.get("message", "").strip()
+    send_at_text = request.form.get("send_at", "").strip()
+
+    def back(error):
+        flash(error, "error")
+        return redirect(url_for("admin_step_sms", election_id=election_id,
+                                message=message, send_at=send_at_text))
+
+    key = get_setting("smsglobal_key", "")
+    secret = get_setting("smsglobal_secret", "")
+    if not (key and secret):
+        return back("Enter the SMSGlobal API key and secret in Settings first.")
+    if not message:
+        return back("The message is empty.")
+    try:
+        send_at = datetime.strptime(send_at_text, SMS_TIME_INPUT_FORMAT)
+    except ValueError:
+        return back("Choose a date and time to send.")
+    if send_at <= datetime.now() + timedelta(minutes=1):
+        return back("The send time must be in the future.")
+    already_sent = db.execute(
+        "SELECT COUNT(*) FROM sms_sends WHERE election_id = ? AND accepted > 0", (election_id,)
+    ).fetchone()[0]
+    if already_sent and not request.form.get("confirm_resend"):
+        return back("A reminder was already scheduled for this election. "
+                    "Tick the box to schedule another one.")
+    recipients, _skipped = _sms_recipients(db)
+    if not recipients:
+        return back("No members with a mobile number. Import the member list first.")
+
+    # The laptop's own time zone, e.g. "2026-10-17 18:00:00 +0800".
+    scheduled = send_at.astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+    origin = get_setting("smsglobal_origin", "")
+    details = []
+    for index, recipient in enumerate(recipients):
+        ok, status, result = sms_gateway.send_sms(
+            key, secret, recipient["number"], message, scheduled, origin)
+        details.append({**recipient, "ok": ok, "http": status, "result": result})
+        # A failure on the first message, or an account-level error, will
+        # fail every message; stop rather than repeat it 100 times.
+        if not ok and (index == 0 or status in sms_gateway.ACCOUNT_ERRORS):
+            break
+    accepted = sum(1 for entry in details if entry["ok"])
+    db.execute(
+        "INSERT INTO sms_sends (election_id, scheduled_for, message, recipients, accepted, details) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (election_id, scheduled, message, len(recipients), accepted, json.dumps(details)),
+    )
+    db.commit()
+
+    failed = [entry for entry in details if not entry["ok"]]
+    not_tried = len(recipients) - len(details)
+    if not failed:
+        flash(f"Scheduled {accepted} messages for {send_at.strftime('%A %d %B %Y, %I:%M %p')}.",
+              "success")
+    else:
+        names = ", ".join(entry["name"] for entry in failed[:5])
+        flash(f"Scheduled {accepted} of {len(recipients)}. Failed: {names} "
+              f"({failed[0]['http']}: {failed[0]['result'][:200]})"
+              + (f". {not_tried} not tried." if not_tried else "."), "error")
+    return redirect(url_for("admin_step_sms", election_id=election_id))
 
 
 @app.route("/admin/election/<int:election_id>/step/offices", methods=["GET"], endpoint="admin_step_offices")
@@ -1455,6 +1642,12 @@ def admin_setup():
             set_setting("vote_confirm_seconds", max(3, min(60, confirm_secs)))
         except ValueError:
             pass
+        set_setting("smsglobal_key", request.form.get("smsglobal_key", "").strip())
+        set_setting("smsglobal_origin", request.form.get("smsglobal_origin", "").strip())
+        smsglobal_secret = request.form.get("smsglobal_secret", "").strip()
+        if smsglobal_secret:
+            # Blank keeps the saved secret, like the admin password.
+            set_setting("smsglobal_secret", smsglobal_secret)
         if password_to_save is not None:
             set_setting("admin_password", password_to_save)
         set_setting("setup_complete", "1")
@@ -1481,6 +1674,9 @@ def _render_setup_form():
         voting_qr_url=get_setting("voting_qr_url", "http://10.0.0.2"),
         display_rotate_seconds=get_display_rotate_seconds(),
         vote_confirm_seconds=get_vote_confirm_seconds(),
+        smsglobal_key=get_setting("smsglobal_key", ""),
+        smsglobal_secret_saved=bool(get_setting("smsglobal_secret", "")),
+        smsglobal_origin=get_setting("smsglobal_origin", ""),
     )
 
 
