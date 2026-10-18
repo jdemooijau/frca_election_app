@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Network check — Office Bearer Election{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>Network check</h1>
+    <div class="subtitle">Run this before printing code slips</div>
+</div>
+
+<div class="container">
+    <h2 style="font-size: 18px; margin: 16px 0 8px;">This laptop's addresses</h2>
+    {% if addresses %}
+    <ul>
+        {% for address in addresses %}<li>{{ address }}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p>No network address found. Is the laptop connected to the router?</p>
+    {% endif %}
+
+    <h2 style="font-size: 18px; margin: 24px 0 8px;">Voting URL</h2>
+    {% for item in urls %}
+    <p>
+        <strong>{{ item.label }}:</strong> {{ item.url }}<br>
+        {% if item.match is none %}
+        This is a hostname, so it cannot be checked here. Test it with a phone below.
+        {% elif item.match %}
+        Matches this laptop.
+        {% else %}
+        <span class="flash flash-error" style="display: inline-block;">Code slips printed now will not work on this network.</span>
+        {% endif %}
+    </p>
+    {% endfor %}
+
+    <h2 style="font-size: 18px; margin: 24px 0 8px;">Port 80</h2>
+    {% if port80_ok %}
+    <p>The app is answering on port 80.</p>
+    {% else %}
+    <p><span class="flash flash-error" style="display: inline-block;">The app is not answering on port 80, so http://10.0.0.2 will not reach the app.</span></p>
+    <p style="font-size: 14px; color: #666;">
+        The installed app listens on port 80 itself; check the launcher window
+        for a warning. Running from source, port 80 works only after
+        <code>captive-portal-on.bat</code>.
+    </p>
+    {% endif %}
+
+    <h2 style="font-size: 18px; margin: 24px 0 8px;">Test with a phone</h2>
+    <p>Join the voting WiFi on a phone and scan this code. It opens {{ reach_url }}.</p>
+    <img src="{{ reach_qr }}" alt="QR code for {{ reach_url }}" width="200" height="200">
+
+    <p style="margin-top: 24px;"><a href="{{ url_for('admin_setup') }}">&lsaquo; Back to settings</a></p>
+</div>
+{% endblock %}

@@ -47,6 +47,7 @@ from pdf_generators import (
 )
 from demo_names import generate_demo_names, load_member_names_from_external
 import sms_gateway
+import network_check
 from app_paths import resolve_data_dir, resolve_bundle_dir
 from version import __version__
 from upgrade_backup import backup_before_upgrade
@@ -105,6 +106,10 @@ app.config["TESTING"] = False
 app.config["WTF_CSRF_TIME_LIMIT"] = None  # No CSRF token expiry for slow voters
 
 csrf = CSRFProtect(app)
+
+# Random per process. /api/instance returns it so the network check can tell
+# whether port 80 is answered by this running app or by something else.
+INSTANCE_ID = secrets.token_hex(8)
 
 # Default admin password — must be changed on first login
 DEFAULT_ADMIN_PASSWORD = "admin"
@@ -1694,6 +1699,41 @@ def _render_setup_form():
         smsglobal_origin=get_setting("smsglobal_origin", ""),
         data_dir=DATA_DIR,
     )
+
+
+@app.route("/admin/network-check")
+@admin_required
+def admin_network_check():
+    """Read-only check that printed code slips will work on this network."""
+    addresses = network_check.local_ipv4_addresses()
+    base_url = get_setting("voting_base_url", "http://10.0.0.2")
+    qr_url = get_setting("voting_qr_url", base_url) or base_url
+    urls = [{"label": "Printed URL", "url": base_url,
+             "match": network_check.host_matches(base_url, addresses)}]
+    if qr_url != base_url:
+        urls.append({"label": "QR code URL", "url": qr_url,
+                     "match": network_check.host_matches(qr_url, addresses)})
+    reach_url = qr_url.rstrip("/") + "/reach-test"
+    return render_template(
+        "admin/network_check.html",
+        addresses=addresses,
+        urls=urls,
+        port80_ok=network_check.port80_serves_this_app(INSTANCE_ID),
+        reach_url=reach_url,
+        reach_qr=_qr_data_uri(reach_url),
+    )
+
+
+@app.route("/reach-test")
+def reach_test():
+    return render_template("voter/reach_test.html")
+
+
+@app.route("/api/instance")
+def api_instance():
+    resp = make_response(INSTANCE_ID)
+    resp.headers["Content-Type"] = "text/plain"
+    return resp
 
 
 @app.route("/admin")
