@@ -80,7 +80,7 @@ def _wait_for_enter():
         pass
 
 
-def main():
+def _run():
     import waitress
     import app as app_module
 
@@ -107,6 +107,20 @@ def main():
     except KeyboardInterrupt:
         pass
     return 0
+
+
+def main():
+    """Run the app; on any startup error keep the window open so the
+    operator can read what went wrong."""
+    try:
+        return _run()
+    except Exception:
+        import traceback
+        traceback.print_exc(file=sys.stdout)
+        print()
+        print("The app could not start. The error is shown above.")
+        _wait_for_enter()
+        return 1
 
 
 if __name__ == "__main__":

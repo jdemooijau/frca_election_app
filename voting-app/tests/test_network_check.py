@@ -117,3 +117,30 @@ def test_network_check_requires_admin(client):
 def test_setup_links_to_network_check(admin_client):
     body = admin_client.get("/admin/setup").get_data(as_text=True)
     assert 'href="/admin/network-check"' in body
+
+
+def test_port80_probe_ignores_system_proxy(monkeypatch):
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"abc123")
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        monkeypatch.setattr(network_check, "PROBE_PORT", server.server_address[1])
+        # A work-laptop proxy that does not exist: the probe must not use it.
+        monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+        monkeypatch.setenv("http_proxy", "http://127.0.0.1:9")
+        monkeypatch.delenv("NO_PROXY", raising=False)
+        monkeypatch.delenv("no_proxy", raising=False)
+        assert port80_serves_this_app("abc123", timeout=2) is True
+    finally:
+        server.shutdown()

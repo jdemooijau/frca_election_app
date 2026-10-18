@@ -96,8 +96,10 @@ port 5000 and says so, so the two cannot run side by side by accident.
 Backup before upgrade (my call): when the launcher sees that the database was
 last opened by a different app version, it copies the database to
 `data\backups\frca_election.db.<old version>_<timestamp>` before
-`migrate_db` runs. This needs the last-run version stored in the data folder
-(a small text file or a setting).
+`migrate_db` runs. The last-run version is stored in the database itself
+(settings key `app_version`), so a database copied in from elsewhere carries
+its own version, or none (decided in the final review: a side file in the
+data folder could say "same version" for a copied-in database).
 
 Helper scripts (my call): `scripts/` (reset, seed demo, random vote/count,
 display fit) are not shipped in the installer. They are developer and test

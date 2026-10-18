@@ -245,8 +245,9 @@ port 80 must be forwarded to 5000: right-click `captive-portal-on.bat` and
 
 The port forwarding is stored by Windows and **survives reboots**. Run
 `captive-portal-off.bat` as administrator when you are done, especially on
-a shared or work laptop. Installing the app also removes it, because it
-would block the installed app from port 80.
+a shared or work laptop. Installing the app also removes it (and the
+three firewall rules the batch file adds), because it would block the
+installed app from port 80.
 
 Do not run the installed app and a source copy at the same time; the
 second one finds port 5000 in use and stops.

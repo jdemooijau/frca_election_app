@@ -61,3 +61,19 @@ def test_port_is_free_on_unused_port():
     port = sock.getsockname()[1]
     sock.close()
     assert port_is_free(port) is True
+
+
+def test_main_keeps_window_open_on_startup_error(monkeypatch, capsys):
+    import launcher
+
+    def boom():
+        raise PermissionError("data folder not writable")
+
+    waited = []
+    monkeypatch.setattr(launcher, "_run", boom)
+    monkeypatch.setattr(launcher, "_wait_for_enter", lambda: waited.append(True))
+    assert launcher.main() == 1
+    out = capsys.readouterr().out
+    assert "The app could not start" in out
+    assert "data folder not writable" in out
+    assert waited == [True]

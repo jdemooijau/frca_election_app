@@ -66,7 +66,7 @@ def run(exe_path):
         proposal = s.get(BASE + "/admin/council-proposal")
         assert proposal.status_code == 200 and "<h1" in proposal.text, "council proposal missing"
 
-        for name in ("frca_election.db", "last_version.txt", ".secret_key"):
+        for name in ("frca_election.db", ".secret_key"):
             assert os.path.exists(os.path.join(data_dir, name)), name + " not in data folder"
         print("PASS")
         return 0

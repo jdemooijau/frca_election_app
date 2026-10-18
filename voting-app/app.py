@@ -6041,6 +6041,9 @@ if not os.environ.get("FRCA_DB_PATH"):
 with app.app_context():
     init_db()
     migrate_db()
+    # Recorded in the database itself, so a database copied in from
+    # elsewhere carries its own version (or none) into the next start.
+    set_setting("app_version", __version__)
 
 if __name__ == "__main__":
     print("Do not run this file directly. Use start.bat (Windows) or run.sh (Linux/Mac).")

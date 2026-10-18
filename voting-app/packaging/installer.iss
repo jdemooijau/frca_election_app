@@ -65,6 +65,14 @@ begin
     RemovedPortProxy := Netsh('interface portproxy delete v4tov4 listenport=80 listenaddress=0.0.0.0');
     if Netsh('interface portproxy delete v4tov4 listenport=443 listenaddress=0.0.0.0') then
       RemovedPortProxy := True;
+    { captive-portal-on.bat also opened 80/443/5000 to any address. Remove those
+      rules so only our 10.0.0.0/24 rule remains. }
+    if Netsh('advfirewall firewall delete rule name="FRCA Election Port 80"') then
+      RemovedPortProxy := True;
+    if Netsh('advfirewall firewall delete rule name="FRCA Election Port 443"') then
+      RemovedPortProxy := True;
+    if Netsh('advfirewall firewall delete rule name="FRCA Election Port 5000"') then
+      RemovedPortProxy := True;
 
     { Replace, never duplicate, our own rule. The delete fails harmlessly on a first install. }
     Netsh('advfirewall firewall delete rule name="{#RuleName}"');
@@ -86,8 +94,8 @@ begin
              ExpandConstant('{commonappdata}\{#AppName}\data') + #13#10 +
              'Uninstalling the app does not delete it.';
     if RemovedPortProxy then
-      Extra := Extra + #13#10#13#10 + 'Old port forwarding from captive-portal-on.bat ' +
-               'was removed. The app now listens on port 80 itself.';
+      Extra := Extra + #13#10#13#10 + 'Old port forwarding and firewall rules from ' +
+               'captive-portal-on.bat were removed. The app now listens on port 80 itself.';
     WizardForm.FinishedLabel.Caption := WizardForm.FinishedLabel.Caption + Extra;
   end;
 end;

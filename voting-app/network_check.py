@@ -45,8 +45,11 @@ def port80_serves_this_app(instance_id, timeout=1.0):
     """True only if port 80 on this machine answers /api/instance with
     instance_id, i.e. it is this running app and not something else."""
     url = "http://127.0.0.1:%d/api/instance" % PROBE_PORT
+    # No proxy: a work-laptop proxy setting would otherwise be used even for
+    # 127.0.0.1 and make a working port 80 look dead.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
+        with opener.open(url, timeout=timeout) as resp:
             return resp.read().decode("utf-8", "replace").strip() == instance_id
     except Exception:
         return False
