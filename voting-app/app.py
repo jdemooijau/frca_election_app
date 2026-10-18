@@ -16,6 +16,7 @@ import shutil
 import sqlite3
 import secrets
 import string
+import sys
 import hashlib
 import time
 from datetime import datetime, timedelta, timezone
@@ -46,6 +47,8 @@ from pdf_generators import (
 )
 from demo_names import generate_demo_names, load_member_names_from_external
 import sms_gateway
+from app_paths import resolve_data_dir, resolve_bundle_dir
+from version import __version__
 from election_rules import (
     calculate_thresholds, check_candidate_elected, resolve_elected_status,
 )
@@ -54,8 +57,16 @@ from election_rules import (
 # App configuration
 # ---------------------------------------------------------------------------
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+# Source runs keep everything in the app folder. The installed (frozen)
+# program reads templates/static from its bundle and keeps data under
+# %ProgramData%; FRCA_DATA_DIR overrides the data folder either way.
+_MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+_FROZEN = getattr(sys, "frozen", False)
+BASE_DIR = resolve_bundle_dir(_FROZEN, getattr(sys, "_MEIPASS", None), _MODULE_DIR)
+DATA_DIR = resolve_data_dir(os.environ, _FROZEN, _MODULE_DIR)
+# Parent of the data folder: member-name files are looked up under
+# <DATA_ROOT>/data and <DATA_ROOT>/config.
+DATA_ROOT = os.path.dirname(DATA_DIR)
 # FRCA_DB_PATH redirects the whole app at a scratch database. It must be
 # honoured here, at import time, because init_db()/migrate_db() run at
 # module scope (bottom of this file): a caller that only reassigns
@@ -68,6 +79,8 @@ DB_PATH = os.environ.get("FRCA_DB_PATH") or os.path.join(
 # prints exactly once under both `python app.py` and `python -m waitress
 # app:app`. Without it, a leftover FRCA_DB_PATH in the shell would silently
 # point the live app at a scratch database on election night.
+print("FRCA Election " + __version__)
+print("Data folder: " + DATA_DIR)
 print("Database: " + DB_PATH + (" (FRCA_DB_PATH override)"
                                 if os.environ.get("FRCA_DB_PATH") else ""))
 
@@ -1555,6 +1568,7 @@ def inject_globals():
         "wifi_ssid": get_setting("wifi_ssid", "ChurchVote"),
         "wifi_password": get_setting("wifi_password", ""),
         "voting_base_url": get_setting("voting_base_url", "http://10.0.0.2"),
+        "app_version": __version__,
     }
 
 
@@ -1677,6 +1691,7 @@ def _render_setup_form():
         smsglobal_key=get_setting("smsglobal_key", ""),
         smsglobal_secret_saved=bool(get_setting("smsglobal_secret", "")),
         smsglobal_origin=get_setting("smsglobal_origin", ""),
+        data_dir=DATA_DIR,
     )
 
 
@@ -3209,7 +3224,7 @@ def _load_member_names(db):
             return names
     except Exception:
         pass
-    names = load_member_names_from_external(BASE_DIR)
+    names = load_member_names_from_external(DATA_ROOT)
     if names:
         return names
     return []

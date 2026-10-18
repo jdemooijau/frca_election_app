@@ -354,3 +354,18 @@ def test_admin_election_open_redirects_to_current_step(election_with_codes):
     rv = election_with_codes.get("/admin/election/1", follow_redirects=False)
     assert rv.status_code in (301, 302, 308)
     assert "/step/" in rv.location
+
+
+def test_sidebar_shows_app_version(admin_client):
+    from version import __version__
+    admin_client.post("/admin/election/new", data={"name": "Version Test", "max_rounds": "2"})
+    body = admin_client.get("/admin/election/1/step/details").get_data(as_text=True)
+    assert 'class="wizard-sidebar-version">v' + __version__ in body
+
+
+def test_setup_page_shows_data_folder_and_version(admin_client):
+    import app as app_module
+    from version import __version__
+    body = admin_client.get("/admin/setup").get_data(as_text=True)
+    assert "Data folder: " + app_module.DATA_DIR in body
+    assert "Version " + __version__ in body

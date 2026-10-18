@@ -1536,6 +1536,9 @@ tr:nth-child(even) {
 }
 .wizard-sidebar-item.current .ico { color: var(--gold); }
 .wizard-sidebar-item.locked { color: #adb5bd; cursor: not-allowed; }
+.wizard-sidebar-version {
+    color: #6c757d; font-size: 11px; padding: 12px 8px 0;
+}
 .wizard-sidebar-collapsed {
     color: #6c757d; font-size: 11px; padding: 4px 8px; font-style: italic;
 }
