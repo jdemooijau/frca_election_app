@@ -8,3 +8,6 @@
 /voting-app/data/frca_election.db.*_backup
 /voting-app/data/frca_election.db.before_*
 /voting-app/ballot_test_output/
+/voting-app/packaging/build/
+/voting-app/packaging/dist/
+/voting-app/packaging/.venv-build/
