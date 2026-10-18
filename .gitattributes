@@ -1,0 +1,2 @@
+# Shell scripts run on the router (OpenWrt) and must keep LF endings.
+*.sh text eol=lf
