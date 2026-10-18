@@ -49,6 +49,7 @@ from demo_names import generate_demo_names, load_member_names_from_external
 import sms_gateway
 from app_paths import resolve_data_dir, resolve_bundle_dir
 from version import __version__
+from upgrade_backup import backup_before_upgrade
 from election_rules import (
     calculate_thresholds, check_candidate_elected, resolve_elected_status,
 )
@@ -5987,6 +5988,15 @@ def catch_all(path):
 # ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
+
+# Back up the database before a different version migrates it. Skipped
+# under FRCA_DB_PATH so tests and scratch runs never write a version file
+# next to the real data.
+if not os.environ.get("FRCA_DB_PATH"):
+    _upgrade_backup = backup_before_upgrade(
+        DB_PATH, DATA_DIR, __version__, datetime.now())
+    if _upgrade_backup:
+        print("Backup before upgrade: " + _upgrade_backup)
 
 with app.app_context():
     init_db()
