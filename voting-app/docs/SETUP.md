@@ -2,135 +2,225 @@
 
 > **Before following these instructions, please read the disclaimer in the main README. You are fully responsible for the correct setup and operation of this software.**
 
-This document explains how to set up the laptop and WiFi router for the election, and how to test at home beforehand.
+This document explains how to install the app, set up the laptop and WiFi router for the election, and test at home beforehand.
 
 ## What You Need
 
 | Item | Notes |
 |------|-------|
-| Laptop | Windows 10/11 with Python 3.11+ installed |
-| Portable WiFi router | e.g. TP-Link Archer AX55 or similar. No internet connection needed. |
-| Ethernet cable | Cat5e or Cat6, 1-2 metres |
+| Laptop | Windows 10/11, 64-bit. No Python needed when you use the installer. |
+| WiFi router | GL.iNet GL-MT6000 "Flint 2". Other routers may work but are not tested. No internet connection needed. |
+| Ethernet cable | Cat5e or Cat6, 1-2 metres (USB-C to Ethernet adapter if the laptop has no port) |
 | Power board | For laptop and router |
 | Extension lead | Depending on hall layout |
 | Projector + HDMI cable | For displaying live results (optional) |
 
-## Setting Up the Network
+The setup below gives a fixed network: router at `10.0.0.1`, laptop always at `10.0.0.2`, voting URL `http://10.0.0.2`. Code slips printed in advance depend on that address, so keep it the same from printing to election night.
 
-The voting app needs a predictable network environment so that QR codes can be printed in advance with a known URL. Follow these steps carefully.
+## Step 1: Install the app
 
-### Step 1: Set up the router
+1. Download `FRCA-Election-Setup-<version>.exe` from the
+   [Releases page](https://github.com/jdemooijau/frca_election_app/releases).
+2. Run it. Windows SmartScreen may say "Windows protected your PC" because
+   the installer is not code-signed. Click **More info**, then **Run anyway**.
+3. Accept the administrator prompt. The installer needs it to add the
+   firewall rule.
 
-1. Plug in the router and power it on.
-2. Connect your laptop to the router via ethernet cable.
-3. Open a browser and go to `http://tplinkwifi.net` or `http://192.168.8.1`.
-4. Log in using the default admin password (on the label on the bottom of the router).
-5. Set a new admin password and remember it.
-6. Go through the setup wizard:
-   - Skip the internet connection step (or select "Don't connect to the internet")
-   - Set the WiFi network name (e.g. `ChurchVote`)
-   - Set a simple WiFi password (e.g. `vote2026`)
-   - Save and let the router reboot
+The installer:
 
-### Step 2: Configure the DHCP reservation
+- installs the app to `C:\Program Files\FRCA Election\`,
+- keeps all election data in `C:\ProgramData\FRCA Election\data`,
+- adds one firewall rule, **FRCA Election**, that lets devices on the
+  `10.0.0.x` network reach the app on ports 80 and 5000 (and nothing else),
+- adds two Start menu entries: **FRCA Election** (starts the app) and
+  **FRCA Election data folder**.
 
-This ensures the laptop always gets the same IP address, so the QR codes printed in advance will work on election day.
+Start the app from the Start menu. A console window opens and shows the
+version, the data folder and the URLs, and the admin page opens in your
+browser. Closing the console window stops the app. On first launch the setup
+page asks for your congregation name, WiFi details and a new admin password
+(the default is `admin`).
 
-1. Log back into the router admin page.
-2. Navigate to **Advanced > Network > DHCP Server > Address Reservation**.
-3. Click **Add**.
-4. Select your laptop from the list of connected devices.
-5. Set the reserved IP address to `192.168.8.100`.
-6. Save.
+**Upgrading:** run the newer installer. Your data stays where it is. The
+first time the new version starts it copies the database to
+`data\backups\` before updating it.
 
-From now on, whenever your laptop connects to this router, it will always receive the IP address `192.168.8.100`.
+**Uninstalling:** use Windows **Settings > Apps**. The data folder is kept;
+delete it yourself if you no longer need it.
 
-### Step 3: Verify the reservation
+**Moving from a source checkout:** close both copies of the app, then copy
+the contents of your old `voting-app\data` folder into
+`C:\ProgramData\FRCA Election\data`.
 
-1. Disconnect the laptop from the router.
-2. Wait 10 seconds, then reconnect.
-3. Check your IP address:
-   - **Windows:** Open Command Prompt and type `ipconfig`
-   - **Mac:** Open Terminal and type `ifconfig | grep inet`
-   - **Linux:** Open Terminal and type `ip addr`
-4. Confirm your IP is `192.168.8.100`.
+## Step 2: Set up the router
 
-### Step 4: Configure the app
+### 2a. First-time router setup
 
-1. Start the app: `python app.py`
-2. Log in to the admin panel and go to Setup.
-3. Set the **WiFi Network Name** to match your router (e.g. `ChurchVote`).
-4. Set the **WiFi Password** (e.g. `vote2026`).
-5. Set the **Voting Base URL**. The app defaults to `http://church.vote`,
-   which only works if you set up the dnsmasq wildcard described later
-   in this document. If you skip the wildcard, use the literal IP
-   instead: `http://192.168.8.100:5000`.
-6. Save.
+1. Plug in the Flint 2 and connect the laptop to one of its LAN ports with
+   the ethernet cable.
+2. Open `http://192.168.8.1` and complete the setup wizard:
+   - set an admin password (remember it),
+   - set the WiFi name, e.g. `ChurchVote`, and a simple password such as
+     `vote2026` (or leave it open),
+   - **skip the internet connection step**.
+3. Turn on SSH if it is not on already: **System > Advanced Settings** (or
+   **System > Security**, depending on firmware) and enable SSH access.
 
-### Step 5: Verify from a phone
+### 2b. Find the laptop's ethernet MAC address
 
-1. On your phone, connect to the WiFi network (e.g. `ChurchVote`).
-2. Open a browser and go to `http://192.168.8.100:5000`.
-3. You should see the voting code entry page.
-4. If the phone shows "no internet" — that's expected. The router has no internet connection. The voting app still works.
+In Command Prompt, run `getmac /v`. Use the **Physical Address** on the
+line for the ethernet adapter (not WiFi), e.g. `A0-B1-C2-D3-E4-F5`.
+Write it with colons: `A0:B1:C2:D3:E4:F5`.
 
-### Step 6: Generate and print code slips
+### 2c. Run the setup script
 
-Now that the network is verified, generate the voting codes in the admin panel. The code slip PDF will include QR codes encoding the full URL (e.g. `http://192.168.8.100:5000/v/KR4T7N`), the WiFi name and password, and the fallback URL.
+The script is in the app's source under `voting-app/router/flint2-setup.sh`
+(also attached to each release). From Command Prompt on the laptop:
 
-Brothers scan the QR code with their phone camera — the browser opens automatically with the code pre-filled.
+```cmd
+scp flint2-setup.sh root@192.168.8.1:/tmp/
+ssh root@192.168.8.1 sh /tmp/flint2-setup.sh A0:B1:C2:D3:E4:F5
+```
+
+Log in with the router admin password. The script:
+
+- moves the router's network to `10.0.0.1/24`,
+- reserves `10.0.0.2` for the laptop's MAC address,
+- with `--captive-portal` at the end, also sets up the optional auto-popup
+  (see below); without it, it removes those settings again.
+
+It prints each change, saves, and restarts the router's network, so the
+SSH session drops at the end. That is expected. The script is safe to run
+again, e.g. with a different laptop. From now on the router is at
+`10.0.0.1` (use `root@10.0.0.1` next time).
+
+### 2d. Check the laptop's address
+
+Unplug the ethernet cable, wait 10 seconds, plug it back in. Run `ipconfig`
+and confirm the ethernet adapter has IPv4 address `10.0.0.2`.
+
+## Step 3: Configure the app
+
+1. In the admin page, open **Setup** (or **Settings**).
+2. Set the **WiFi Network Name** and **WiFi Password** to match the router.
+3. Leave the **Voting Base URL** at `http://10.0.0.2` unless you have a
+   reason to change it.
+4. Save.
+
+## Step 4: Check the network
+
+Do this before printing code slips, with the laptop connected to the
+router.
+
+1. On the Setup page, click **Check the network**.
+2. The page shows the laptop's addresses and checks them against the voting
+   URL. If it says **"Code slips printed now will not work on this
+   network"**, fix the address (Step 2d) before printing.
+3. It also checks that the app answers on port 80, which `http://10.0.0.2`
+   uses. If it warns that the app is not answering on port 80, look at the
+   console window: it says what is holding port 80.
+4. Join the voting WiFi on a phone and scan the QR code on the page. The
+   phone should show **"This phone can reach the voting app."** A phone
+   that shows "no internet" is normal: the router has no internet, and the
+   app still works.
+
+## Step 5: Generate and print code slips
+
+Generate the voting codes in the admin panel. The code slip PDF includes QR
+codes with the full URL (e.g. `http://10.0.0.2/v/KR4T7N`), the WiFi name
+and password, and the URL to type if a phone cannot scan.
+
+Voters scan the QR code with the phone camera, and the browser opens with
+the code filled in.
 
 ## Projector Setup
 
 1. Connect the projector to the laptop via HDMI.
 2. Open `http://localhost:5000/display` in full-screen (F11).
-3. The display auto-refreshes every second.
+3. The display refreshes every second.
+
+## Optional: Captive Portal Auto-Popup
+
+A captive portal is the popup some phones show when they join a WiFi
+network with no internet ("Sign in to network"). With it set up, some
+phones that join `ChurchVote` open the voting app by themselves.
+
+**Reality check:** this is a bonus, not a feature to promise.
+
+- iOS phones tend to show the popup. Many Android phones do not, even when
+  everything is set up correctly.
+- Phones with "Private DNS" turned on bypass the router's DNS, so the popup
+  never fires.
+- Android phones with mobile data on may keep using mobile DNS, which is
+  why the voting URL is the literal address `http://10.0.0.2`, not a name.
+
+The QR code on the code slip stays the way in for voters.
+
+To turn it on, run the router script with the flag:
+
+```cmd
+ssh root@10.0.0.1 sh /tmp/flint2-setup.sh A0:B1:C2:D3:E4:F5 --captive-portal
+```
+
+This points every website name at the laptop (DNS wildcard) and tells
+phones where the portal is (DHCP option 114). Nothing is needed on the
+laptop: the installed app already listens on port 80. Run the script
+again without `--captive-portal` to turn it off.
+
+Test: on a phone, forget the network, join `ChurchVote` again, and wait a
+few seconds for the popup. If none appears, open `http://example.com` in
+the browser; you should land on the voting page.
 
 ## Testing at Home
 
-### Phone Hotspot
+QR codes on test slips point at `10.0.0.2`. At home without the Flint 2,
+type the URL by hand instead.
 
-1. Turn on the phone's hotspot, connect the laptop.
-2. Find the laptop's IP (`ipconfig` on Windows).
-3. Start the app, browse from other phones on the same hotspot.
-4. Note: QR codes won't work (they encode the church router IP), but you can type the URL manually.
+- **Phone hotspot or home WiFi:** connect the laptop, find its address with
+  `ipconfig`, start the app, and browse to `http://<laptop-address>:5000`
+  from a phone on the same network.
+- The firewall rule only allows `10.0.0.x` devices. On another network,
+  Windows may block phones; see **Firewall** below.
+- The best home test is the real setup: Flint 2, laptop on ethernet, and the
+  network check page (Step 4).
 
-### Home WiFi
+## Firewall
 
-1. Connect the laptop to home WiFi, find the IP, start the app.
-2. Browse from any phone on the same WiFi.
-3. Again, QR codes will point to the church router IP — use the URL manually for home testing.
+The installer adds the **FRCA Election** rule. To check it:
 
-### Windows Firewall
+```cmd
+netsh advfirewall firewall show rule name="FRCA Election"
+```
 
-If phones can't reach the app, add a firewall exception for port 5000:
-
-1. **Windows Defender Firewall** > **Advanced settings** > **Inbound Rules** > **New Rule**
-2. **Port** > TCP > `5000` > **Allow** > All profiles > Name: `FRCA Election`
+It should list local ports `80,5000` and remote IP `10.0.0.0/24`. Reinstall
+to restore it if it is missing.
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
 | Phone can't connect to WiFi | Check the WiFi password. Move closer to the router. |
-| Phone connects but page doesn't load | Check the laptop's IP matches the voting base URL. Check Windows Firewall. |
-| "Connection refused" error | Make sure `python app.py` is running. Check the port number. |
-| Laptop got a different IP | Check that the DHCP reservation is configured and the MAC address matches. |
-| Phone shows "no internet" | Expected — the router has no internet. The voting app still works. |
+| Phone connects but page doesn't load | Run the network check (Step 4). Check the laptop has `10.0.0.2` and the firewall rule exists. |
+| Console says port 80 is in use | Another program holds port 80. Find it with `netstat -ano \| findstr :80`. If you used `captive-portal-on.bat` before, run `captive-portal-off.bat` as administrator, then restart the app. |
+| Console says port 5000 is in use | Another copy of the app is running (installed or from source). Close it. |
+| Laptop got a different address | Rerun the router script with the laptop's ethernet MAC (Step 2b and 2c). |
+| Phone shows "no internet" | Expected. The router has no internet. The voting app still works. |
+| SmartScreen blocks the installer | Click **More info**, then **Run anyway**. |
 
-## Changing the IP After Printing
+## Changing the Address After Printing
 
-If you need to change the Voting Base URL after code slips have been printed:
+If you change the Voting Base URL after code slips have been printed:
 
-1. Update the URL in the admin Setup page.
-2. **Delete all codes** and regenerate them.
-3. **Reprint all code slips** — the old QR codes encode the old URL and will not work.
+1. Update the URL on the admin Setup page.
+2. **Delete all codes** and generate them again.
+3. **Reprint all code slips.** The old QR codes hold the old URL and will
+   not work.
 
 ## Packing List for Election Day
 
 - [ ] Laptop (charged) + charger
 - [ ] WiFi router + power adapter
-- [ ] Ethernet cable
+- [ ] Ethernet cable (and USB-C adapter if needed)
 - [ ] Power board + extension lead
 - [ ] Projector + HDMI cable (if using)
 - [ ] Printed code slips (enough for all rounds)
@@ -138,168 +228,31 @@ If you need to change the Voting Base URL after code slips have been printed:
 - [ ] Attendance register + pen
 - [ ] This setup guide (printed)
 
-## Optional Bonus: Captive Portal Auto-Popup
+## For Developers: Running from Source
 
-> **This section is optional.** The reliable entry path for voters is the QR
-> code on the printed code slip — it works on every phone and does not depend
-> on any of the configuration described below. Skip this section entirely
-> unless you want to experiment with the auto-popup as a bonus convenience.
+Running from source still works as before and needs Python 3.11+:
 
-A captive portal is the popup that some phones show automatically when you
-join a WiFi network with no internet ("Login to network"). If you configure
-the GL.iNet Flint 2 router and the laptop as described below, phones that
-join `ChurchVote` *may* open the voting app automatically without the voter
-having to scan a QR code or type a URL.
-
-**Reality check before you invest time in this:**
-
-- Behaviour varies wildly by phone manufacturer and OS version.
-- iOS phones tend to trigger the popup reliably.
-- Many Android phones will not show the popup even when everything is
-  configured correctly — this is a known quirk of Android's captive-portal
-  detection and there is no way to force it from the router side.
-- Phones with "Private DNS" enabled will bypass the router's DNS entirely
-  and the popup will never fire.
-
-Because of this variance, **do not promise the auto-popup as a feature**.
-Treat any phones where it works as a small bonus. The QR code remains the
-entry path to rely on.
-
-### Prerequisites
-
-- GL.iNet GL-MT6000 "Flint 2" router
-- Laptop connected to the router via Ethernet (use a USB-C to Ethernet
-  adapter if your laptop does not have a built-in Ethernet port)
-- A static IP assigned to the laptop (e.g. `192.168.8.100`) — configure this
-  via the router's DHCP reservation feature, or by setting a static IP on the
-  laptop's network adapter
-
-### Step 1 — Initial router setup
-
-1. Unbox the Flint 2 and plug in power
-2. Connect your laptop to the Flint 2 via Ethernet (LAN port)
-3. Open a browser and navigate to `http://192.168.8.1`
-4. Complete the initial setup wizard:
-   - Set an admin password (remember this)
-   - Set the WiFi network name (SSID) to `ChurchVote`
-   - Leave the WiFi password blank (open network) OR set a simple password
-     such as `vote2026` if you prefer
-   - **Skip the internet connection step** — the router will NOT be connected
-     to the internet
-5. Save and wait for the router to apply the settings
-
-### Step 2 — Verify laptop IP
-
-1. Make sure your laptop is connected to the Flint 2 via Ethernet
-2. On the laptop, check the IP address:
-   - **Windows:** open Command Prompt, type `ipconfig`, look for the Ethernet
-     adapter's IPv4 address
-   - **Mac:** open Terminal, type `ifconfig | grep inet`
-   - **Linux:** type `ip addr`
-3. The laptop should have an IP in the `192.168.8.x` range
-4. Configure a DHCP reservation in the Flint 2 admin panel so the laptop
-   always receives `192.168.8.100`:
-   - Go to `Network` > `LAN` > `Address Reservation`
-   - Add a reservation for the laptop's MAC address pointing to
-     `192.168.8.100`
-   - Save
-
-### Step 3 — Enable captive portal DNS hijacking
-
-This step configures the router's DNS server (dnsmasq) to resolve ALL domain
-names to the laptop's IP. Without this, phones that join the WiFi will not
-trigger the captive portal auto-popup.
-
-1. In the Flint 2 admin panel, go to `System` > `Advanced Settings` (this
-   opens the LuCI interface — the underlying OpenWRT admin)
-2. Log in with the same admin password
-3. Go to `Network` > `DHCP and DNS`
-4. Scroll to the `Resolv and Hosts Files` section
-5. Find the `Additional DNS` or `Advanced Settings` section
-6. Add a custom dnsmasq option:
-
-   ```
-   address=/#/192.168.8.100
-   ```
-
-   This tells dnsmasq to resolve every domain name (`#` is the wildcard) to
-   the laptop's IP address.
-7. Save and apply
-
-**Alternative via SSH (faster if you are comfortable with SSH):**
-
-```bash
-ssh root@192.168.8.1
-uci add_list dhcp.@dnsmasq[0].address='/#/192.168.8.100'
-uci commit dhcp
-service dnsmasq restart
-exit
+```cmd
+cd voting-app
+pip install -r requirements.txt
+start.bat
 ```
 
-### Step 4 — Enable captive portal on the laptop (Windows)
+`start.bat` serves on port 5000 only, and the data stays in
+`voting-app\data`. For phones to reach the plain `http://10.0.0.2` URL,
+port 80 must be forwarded to 5000: right-click `captive-portal-on.bat` and
+**Run as administrator**.
 
-The laptop needs port forwarding and firewall rules so that phones' captive
-portal probes (ports 80 and 443) reach the Flask app on port 5000.
+The port forwarding is stored by Windows and **survives reboots**. Run
+`captive-portal-off.bat` as administrator when you are done, especially on
+a shared or work laptop. Installing the app also removes it, because it
+would block the installed app from port 80.
 
-1. Right-click `captive-portal-on.bat` → **Run as administrator**
-2. This is a one-time step per session — the rules survive until you reboot
-   or run `captive-portal-off.bat`
+Do not run the installed app and a source copy at the same time; the
+second one finds port 5000 in use and stops.
 
-### Step 5 — Configure DHCP option 114 (Captive Portal API)
-
-This tells phones explicitly that the network has a captive portal, which is
-more reliable than relying on HTTP probe detection alone.
-
-Via SSH:
-
-```bash
-ssh root@192.168.8.1
-uci add_list dhcp.lan.dhcp_option='114,http://192.168.8.100/api/captive-portal'
-uci commit dhcp
-service dnsmasq restart
-exit
-```
-
-This is a one-time configuration — the setting persists across router reboots.
-
-### Step 6 — Test the captive portal
-
-1. Make sure the Flask app is running on the laptop:
-   ```bash
-   start.bat      # Windows
-   ```
-2. On your phone, disconnect from any other WiFi
-3. Connect to the `ChurchVote` network
-4. Within a few seconds, the phone should automatically open a popup browser
-   showing the voting app's code entry page
-5. If the popup does not appear:
-   - Open your phone's browser manually and navigate to any website (e.g.
-     `http://example.com`) — you should be redirected to the voting app
-   - If even this fails, check that the dnsmasq wildcard is applied correctly
-     and that the Flask app is running
-
-### Cleaning up after the demo
-
-Run `captive-portal-off.bat` as administrator to remove the port forwarding
-and firewall rules from the laptop. This is important on a shared or work
-laptop — do not leave ports open when the election app is not in use.
-
-### Fallback behaviour
-
-Even with the captive portal configured correctly, many phones will not
-trigger the auto-popup (especially Android devices, and any phone with
-Private DNS / DNS-over-HTTPS enabled). This is expected. The printed code
-slip carries a QR code and a fallback URL, and that is the path voters
-should be directed to in the first place. The auto-popup is only ever a
-bonus convenience for the phones on which it happens to work.
-
-### Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| Popup appears but shows a blank page | The dnsmasq wildcard is working, but the Flask app is not responding. Verify the laptop has IP `192.168.8.100` and the app is listening on `0.0.0.0:5000`. |
-| Popup does not appear at all on iOS | iOS 18+ may have changed its CPD behaviour. Fall back to the QR code on the code slip. |
-| Popup does not appear on Android | Common — Android captive-portal detection is unreliable across manufacturers and OS versions. Use the QR code; do not spend time trying to force the popup. |
-| Android shows "no internet" notification | This is normal. The voting app still works. Scan the QR code on the code slip. |
-| Laptop keeps disconnecting from router | Check the Ethernet cable and adapter. Try a different USB-C port if using an adapter. |
-| `captive-portal-on.bat` fails | Make sure you right-clicked → Run as administrator. |
+To build the installer yourself: install
+[Inno Setup 6](https://jrsoftware.org/isinfo.php), then run
+`powershell -File voting-app\packaging\build.ps1`. It runs the tests and
+the display-fit release gate, builds the program with PyInstaller, smoke
+tests it, and writes the installer to `voting-app\packaging\dist\`.

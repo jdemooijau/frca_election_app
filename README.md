@@ -28,7 +28,7 @@ A few things to keep in mind:
 - **You are responsible for your own use.** Test thoroughly in your environment. Verify rule interpretations match your council's. Run a dry-run election before the real one.
 - **Elections are serious.** Responsibility for running an election correctly rests with the church council, not with the authors of any tool used in the process.
 
-This app works best when your congregation has someone comfortable with Python, basic networking, and the command line, willing to set things up, run a few dry runs, and be on hand on election day.
+This app works best when your congregation has someone comfortable with basic networking, a router admin page and the command line, willing to set things up, run a few dry runs, and be on hand on election day.
 
 If you would prefer a fully supported solution, consider a commercial voting platform such as ElectionBuddy, or continue with traditional paper ballots. Both are perfectly good options.
 
@@ -46,6 +46,15 @@ A typical election cycle:
 6. Results display on a projector with full Article 6 threshold transparency. Multi-round elections carry candidates forward; per-round participants, ballots, and remaining vacancies are tracked automatically.
 
 ## Quick start
+
+### Install (Windows, recommended)
+
+Download `FRCA-Election-Setup-<version>.exe` from the
+[Releases page](https://github.com/jdemooijau/frca_election_app/releases) and run it. No Python
+needed. Then start **FRCA Election** from the Start menu. Router setup, the network check and
+upgrades are in [`voting-app/docs/SETUP.md`](voting-app/docs/SETUP.md).
+
+### Run from source
 
 **Prerequisites:** Python 3.11 or later.
 
@@ -99,6 +108,7 @@ Procedural articles (1, 3, 8, 9, 12) are outside the app's scope — the chairma
 ```
 voting-app/
 ├── app.py                  # Flask application
+├── launcher.py             # Entry point of the installed program (ports 80 + 5000)
 ├── election_rules.py       # Rule arithmetic (fork point for other congregations)
 ├── templates/              # Jinja2 HTML templates
 ├── static/                 # CSS (all bundled, no CDNs)
@@ -107,6 +117,8 @@ voting-app/
 │   ├── seed_demo.py        # Seed a demo election for dry runs
 │   └── random_vote.py      # Cast random ballots (dry-run / load test)
 ├── tests/                  # pytest test suite
+├── packaging/              # PyInstaller + Inno Setup installer build (build.ps1)
+├── router/                 # flint2-setup.sh: GL.iNet Flint 2 network setup
 ├── docs/
 │   ├── ELECTION_RULES.md   # Verbatim rules + app interpretation + provenance
 │   ├── ADMIN_GUIDE.md      # How to run an election

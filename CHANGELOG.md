@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Windows installer (`FRCA-Election-Setup-<version>.exe`). Bundles Python and
+  all libraries, installs to Program Files, adds Start menu entries and one
+  firewall rule (`FRCA Election`: TCP 80 and 5000, `10.0.0.0/24` only). Built
+  with `voting-app/packaging/build.ps1` (tests, display-fit gate,
+  PyInstaller, smoke test, Inno Setup).
+- The installed app keeps its data in `C:\ProgramData\FRCA Election\data`.
+  New `FRCA_DATA_DIR` setting overrides the data folder; source runs still
+  use `voting-app/data`.
+- Database backup before upgrade: when a different version opens the
+  database, it is first copied to `data/backups/`.
+- Launcher for the installed app serves on ports 80 and 5000, so the plain
+  `http://10.0.0.2` voting URL works without the port proxy. Reports clearly
+  when port 80 or 5000 is held by something else.
+- Admin network check page (linked from Setup): laptop addresses against the
+  voting URL, port 80 status, and a QR code for a phone reach test.
+- `voting-app/router/flint2-setup.sh`: sets the Flint 2 LAN to `10.0.0.1/24`,
+  reserves `10.0.0.2` for the laptop, and with `--captive-portal` adds the DNS
+  wildcard and DHCP option 114.
+- App version shown on the Setup page and in the election sidebar.
 - SMS reminder step (Setup group, after Members). Schedules one text per
   member with a mobile number through SMSGlobal, for a chosen date and
   time in the laptop's time zone. Defaults to the last message sent and
@@ -39,6 +58,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- SETUP.md said the `captive-portal-on.bat` port forwarding lasts until a
+  reboot. It survives reboots; the docs now say to run
+  `captive-portal-off.bat`. SETUP.md also moves from the old
+  `192.168.8.100` / `church.vote` instructions to `10.0.0.2`.
 - Counter sheet running totals were unreadable. The every-5 counter was
   drawn 2.5 mm below its row, which is where the next row of tick boxes
   starts, so every label except the last row's printed on top of the
