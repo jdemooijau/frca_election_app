@@ -936,7 +936,7 @@ def admin_step_members(election_id):
     if not election:
         abort(404)
     members = db.execute(
-        "SELECT * FROM members ORDER BY surname_sort_key(last_name || ' ' || first_name)"
+        "SELECT * FROM members ORDER BY lower(last_name), lower(first_name)"
     ).fetchall()
     member_count = len(members)
     sidebar_state = compute_sidebar_state(election_id)
@@ -981,7 +981,7 @@ def _sms_recipients(db):
     recipients, skipped, seen = [], [], {}
     members = db.execute(
         "SELECT id, first_name, last_name, mobile_phone FROM members "
-        "ORDER BY surname_sort_key(last_name || ' ' || first_name)"
+        "ORDER BY lower(last_name), lower(first_name)"
     ).fetchall()
     for member in members:
         name = f"{member['first_name']} {member['last_name']}"
@@ -3388,7 +3388,7 @@ def admin_members():
 
     # GET: show current members
     members = db.execute(
-        "SELECT * FROM members ORDER BY surname_sort_key(last_name || ' ' || first_name)"
+        "SELECT * FROM members ORDER BY lower(last_name), lower(first_name)"
     ).fetchall()
     member_count = len(members)
 
@@ -3403,7 +3403,7 @@ def admin_attendance_pdf():
     """Generate a printable attendance register PDF from the member list."""
     db = get_db()
     members = db.execute(
-        "SELECT * FROM members ORDER BY last_name, first_name"
+        "SELECT * FROM members ORDER BY lower(last_name), lower(first_name)"
     ).fetchall()
 
     if not members:
@@ -3563,7 +3563,7 @@ def api_members_search():
            WHERE lower(first_name || ' ' || last_name) LIKE ?
               OR lower(last_name || ', ' || first_name) LIKE ?
               OR lower(last_name || ' ' || first_name) LIKE ?
-           ORDER BY last_name, first_name
+           ORDER BY lower(last_name), lower(first_name)
            LIMIT 10""",
         (f"%{q}%", f"%{q}%", f"%{q}%")
     ).fetchall()
@@ -5519,7 +5519,7 @@ def admin_printer_pack_zip(election_id):
         office_data.append({"office": dict(office), "candidates": [dict(c) for c in candidates]})
 
     members = db.execute(
-        "SELECT * FROM members ORDER BY last_name, first_name"
+        "SELECT * FROM members ORDER BY lower(last_name), lower(first_name)"
     ).fetchall()
 
     cong_name = get_setting("congregation_name", "Free Reformed Church")

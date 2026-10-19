@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Member lists sorted by first name instead of surname on the Members page,
+  the Members wizard step and the SMS recipient list. All member lists now
+  sort by surname, then first name, ignoring case (so "van Dijk" sorts
+  under V).
+
 ## [1.4.0] - 2026-10-19
 
 ### Added
