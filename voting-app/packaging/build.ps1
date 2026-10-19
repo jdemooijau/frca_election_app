@@ -47,11 +47,12 @@ if (-not (Test-Path $Iss)) {
     Write-Host "No installer.iss yet; stopping after the smoke test."
     exit 0
 }
-$Iscc = @(
-    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
-    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $Iscc) { throw "Inno Setup 6 (ISCC.exe) not found. Install it from https://jrsoftware.org/isinfo.php" }
+$Iscc = foreach ($ver in "7", "6") {
+    "$env:ProgramFiles\Inno Setup $ver\ISCC.exe"
+    "${env:ProgramFiles(x86)}\Inno Setup $ver\ISCC.exe"
+    "$env:LOCALAPPDATA\Programs\Inno Setup $ver\ISCC.exe"
+}
+$Iscc = $Iscc | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $Iscc) { throw "Inno Setup 6.3+ or 7 (ISCC.exe) not found. Install it from https://jrsoftware.org/isinfo.php" }
 Step "Inno Setup" { & $Iscc /Q "/DAppVersion=$Version" $Iss }
 Write-Host "Built $Packaging\dist\FRCA-Election-Setup-$Version.exe"
